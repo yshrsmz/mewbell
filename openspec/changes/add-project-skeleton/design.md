@@ -44,6 +44,7 @@ Xcode 27.2 で macOS App テンプレートからプロジェクトを作り、J
 | `SWIFT_STRICT_CONCURRENCY` | `complete` |
 | `SWIFT_DEFAULT_ACTOR_ISOLATION` | 指定しない（`nonisolated` 既定のまま。`@MainActor` は明示する方針のため） |
 | `ENABLE_APP_SANDBOX` | `NO`（entitlements ファイルも作らない） |
+| `ENABLE_HARDENED_RUNTIME` | `YES`（緩める entitlement は付けない） |
 | `INFOPLIST_KEY_LSUIElement` | `YES` |
 | `GENERATE_INFOPLIST_FILE` | `YES`（Info.plist ファイルは置かない） |
 | `CODE_SIGN_IDENTITY` | `-`（ad-hoc。M5 まで署名しない） |
@@ -91,10 +92,20 @@ M1 以降の方針としてここに書いておく: gh の実行は `GhCommandR
 - ジョブの流れ: checkout → mise のセットアップ → `bash scripts/lint.sh` → `xcodebuild build` → `xcodebuild test`
 - Action はタグではなくコミット SHA で固定する（`actions/checkout` v7.0.1、`jdx/mise-action` は公開から 7 日以上たった版）。SHA は実装時に確かめる
 - 署名は `CODE_SIGNING_ALLOWED=NO` で無効にする
+- ワークフローに `permissions: contents: read` を明示する。トリガーは `pull_request` と `push` だけにし、`pull_request_target` は使わない。シークレットは渡さない
 
 ### D7. ビルド出力の置き場所
 
 CLAUDE.md の `open build/Debug/Mewbell.app` に合わせるため、`scripts/build.sh` では `-derivedDataPath build/DerivedData` を渡し、ビルドが終わったら `build/Debug/Mewbell.app` にコピーする。`build/` は `.gitignore` に入れる。
+
+## セキュリティ
+
+M0 ではトークンを取得も保持も送信もしない。gh サブプロセスもネットワーク通信もないので、トークンの流れはまだない（取得は M1、送信は M2 で設計する）。それでも、後から変えると影響が大きい土台の設定はここで決めておく（`.claude/rules/security.md` の「アプリとビルドの設定」「依存とサプライチェーン」に対応）。
+
+- Hardened Runtime を最初から有効にし、緩める entitlement を付けない（D1）。App Sandbox が無効な分、コード注入への耐性は Hardened Runtime で確保する
+- Info.plist に ATS の例外を入れない。`GENERATE_INFOPLIST_FILE` で生成される内容に `NSAppTransportSecurity` が含まれないことを確かめる
+- CI は読み取り権限だけで動かし、Action はコミット SHA で固定する（D6）
+- アプリのランタイム依存は追加しない。開発ツール（swiftlint、OpenSpec CLI）はバージョンを固定し、`mise.lock` / `package-lock.json` をコミットする
 
 ## Risks / Trade-offs
 

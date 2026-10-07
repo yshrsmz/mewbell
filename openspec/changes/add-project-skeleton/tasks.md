@@ -8,7 +8,7 @@
 ## 2. Xcode プロジェクトとアプリ本体
 
 - [ ] 2.1 Xcode 27.2 で macOS App（SwiftUI）テンプレートから `Mewbell` プロジェクトを repo 直下に作り、テストターゲット `MewbellTests`（Swift Testing）を付ける。`project.pbxproj` ではなく `Mewbell.xcodeproj/project.xcproj`（JSON）になっていることを確かめる。確認: `ls Mewbell.xcodeproj` に `project.xcproj` があり、`xcodebuild -list -project Mewbell.xcodeproj` がターゲット `Mewbell` / `MewbellTests` とスキーム `Mewbell` を表示する
-- [ ] 2.2 `project.xcproj` のビルド設定を design.md D1 の表どおりにする（Bundle ID、macOS 26.0、Swift 6、strict concurrency `complete`、App Sandbox 無効、`LSUIElement=YES`、ad-hoc 署名）。テンプレートが作った entitlements と不要なアセットを消す。確認: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -showBuildSettings | grep -E 'PRODUCT_BUNDLE_IDENTIFIER|MACOSX_DEPLOYMENT_TARGET|SWIFT_VERSION|SWIFT_STRICT_CONCURRENCY|ENABLE_APP_SANDBOX|INFOPLIST_KEY_LSUIElement'` の値が表どおり
+- [ ] 2.2 `project.xcproj` のビルド設定を design.md D1 の表どおりにする（Bundle ID、macOS 26.0、Swift 6、strict concurrency `complete`、App Sandbox 無効、Hardened Runtime 有効、`LSUIElement=YES`、ad-hoc 署名）。テンプレートが作った entitlements と不要なアセットを消す。確認: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -showBuildSettings | grep -E 'PRODUCT_BUNDLE_IDENTIFIER|MACOSX_DEPLOYMENT_TARGET|SWIFT_VERSION|SWIFT_STRICT_CONCURRENCY|ENABLE_APP_SANDBOX|ENABLE_HARDENED_RUNTIME|INFOPLIST_KEY_LSUIElement'` の値が表どおり。ビルドした `.app` で `codesign -d --entitlements - build/Debug/Mewbell.app` に緩める entitlement がなく、`plutil -p build/Debug/Mewbell.app/Contents/Info.plist` に `NSAppTransportSecurity` がないことも確かめる
 - [ ] 2.3 ソースを `Mewbell/App/` に置く（`MewbellApp.swift` と `MenuBarContentView.swift`）。`MenuBarExtra("Mewbell", systemImage: "cat.fill")` と `.menuBarExtraStyle(.window)`、「Mewbell」の `Text`、⌘Q 付きの Quit ボタン（`NSApplication.shared.terminate(nil)`）を実装する。確認: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug build` が警告なしで通る
 - [ ] 2.4 `MewbellTests` に Swift Testing のダミーテストを 1 つ置く（例: `#expect(Bundle.main.bundleIdentifier != nil)` のように、ホストアプリが読み込まれていることを確かめるもの）。確認: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が成功し、テストが 1 件実行されている
 
@@ -26,7 +26,7 @@
 
 ## 5. CI
 
-- [ ] 5.1 `.github/workflows/ci.yml` を design.md D6 のとおりに作る（`runs-on: xcode-27`、`sudo xcode-select -s /Applications/Xcode_27.2_beta.app`、mise のセットアップ、lint、build、test）。`actions/checkout` と `jdx/mise-action` はコミット SHA で固定し、横にタグをコメントで書く（公開から 7 日以上たった版を選ぶ）。確認: ブランチを push して PR を作り、ワークフローが緑になる
+- [ ] 5.1 `.github/workflows/ci.yml` を design.md D6 のとおりに作る（`runs-on: xcode-27`、`sudo xcode-select -s /Applications/Xcode_27.2_beta.app`、mise のセットアップ、lint、build、test）。`actions/checkout` と `jdx/mise-action` はコミット SHA で固定し、横にタグをコメントで書く（公開から 7 日以上たった版を選ぶ）。`permissions: contents: read` を明示し、トリガーは `pull_request` と `push` だけにする。確認: ブランチを push して PR を作り、ワークフローが緑になる
 - [ ] 5.2 ランナーイメージの Xcode 一覧（`actions/runner-images` の `images/macos/xcode-27-arm64-Readme.md`）を見て、`Xcode_27.2_beta.app` のパスがまだ有効かを確かめる。正式版の `Xcode_27.2.app` が入っていればそちらを指定する。確認: CI のログで `xcodebuild -version` が 27.2 系を表示している
 
 ## 6. 最終確認

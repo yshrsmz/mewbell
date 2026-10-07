@@ -23,16 +23,20 @@ rules:
   proposal:
     - どのマイルストーン (M0〜M5) に属する change かを明記する
     - トークンの扱いに触れる変更は、永続化しない方針を守っていることを書く
+    - トークン・gh サブプロセス・ネットワーク・URL を開く処理に触れるかどうかを Impact に明記する（.claude/rules/security.md が適用される）
     - 既存の spec（openspec/specs/）と矛盾しないかを確認し、矛盾する場合は MODIFIED として扱う
   specs:
     - Requirement は SHALL / MUST で書き、各 Requirement に少なくとも 1 つの Scenario を Given/When/Then で付ける
     - capability は gh-cli, accounts, github-api, polling, notifications, ui, diagnostics のいずれかに揃える（新設は proposal で理由を書く）
     - 外部 API のエンドポイントとステータスコード (200 / 304 / 401 / 403 / 422) を明示する
+    - トークンを扱う capability では、トークンが漏れない・意図しないホストへ送られないことを Requirement と Scenario で明示する
   design:
     - actor / @MainActor の境界と、どのスレッドで何が動くかを書く
     - ネットワークと gh サブプロセスをテストでどう差し替えるか（プロトコルで抽象化）を書く
     - 外部依存を追加する場合は理由と代替案を書く
+    - 「セキュリティ」の節を必ず設ける。トークンの流れ（どこで取得し、どこに保持し、どこへ送り、いつ破棄するか）と、.claude/rules/security.md の各項目への対応を書く。該当しない場合はその理由を書く
   tasks:
     - 1 タスクは 1〜2 時間で終わる粒度に分ける
     - 各タスクにテスト（ユニットまたは手動確認手順）を含める
+    - セキュリティ上の約束（伏せ字・環境変数の除去・オリジン検査など）を確かめるテストを、その実装と同じタスクグループに入れる
     - 最後に「ビルドが通る・テストが通る・手元で起動して確認した」を必ず含める
