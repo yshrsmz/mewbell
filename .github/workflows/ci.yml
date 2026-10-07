@@ -10,7 +10,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # main への push は 1 コミットずつ結果を残すため、キャンセルするのは PR だけにする
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-and-test:
@@ -37,16 +38,23 @@ jobs:
       - name: Lint
         run: bash scripts/lint.sh
 
-      - name: Build
+      - name: Build for testing (Debug)
         run: >-
           xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug
           -derivedDataPath build/DerivedData
           CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
-          build
+          build-for-testing
 
       - name: Test
         run: >-
-          xcodebuild -project Mewbell.xcodeproj -scheme Mewbell
+          xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug
+          -derivedDataPath build/DerivedData
+          CODE_SIGNING_ALLOWED=NO
+          test-without-building
+
+      - name: Build (Release)
+        run: >-
+          xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release
           -derivedDataPath build/DerivedData
           CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
-          test
+          build

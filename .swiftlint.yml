@@ -14,10 +14,10 @@ disabled_rules:
   - comma
   - statement_position
   - closure_parameter_position
+  - sorted_imports  # import の並びは swift-format の OrderedImports に任せる
 
 opt_in_rules:
   - force_unwrapping
   - implicitly_unwrapped_optional
   - empty_count
   - first_where
-  - sorted_imports
