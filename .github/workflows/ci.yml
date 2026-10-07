@@ -48,5 +48,5 @@ jobs:
         run: >-
           xcodebuild -project Mewbell.xcodeproj -scheme Mewbell
           -derivedDataPath build/DerivedData
-          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
           test

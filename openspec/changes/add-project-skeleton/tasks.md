@@ -26,16 +26,16 @@
 
 ## 5. CI
 
-- [ ] 5.1 `.github/workflows/ci.yml` を design.md D6 のとおりに作る（`runs-on: xcode-27`、`sudo xcode-select -s /Applications/Xcode_27.2_beta.app`、mise のセットアップ、lint、build、test）。`actions/checkout` と `jdx/mise-action` はコミット SHA で固定し、横にタグをコメントで書く（公開から 7 日以上たった版を選ぶ）。`permissions: contents: read` を明示し、トリガーは `pull_request` と `push` だけにする。確認: ブランチを push して PR を作り、ワークフローが緑になる
-- [ ] 5.2 ランナーイメージの Xcode 一覧（`actions/runner-images` の `images/macos/xcode-27-arm64-Readme.md`）を見て、`Xcode_27.2_beta.app` のパスがまだ有効かを確かめる。正式版の `Xcode_27.2.app` が入っていればそちらを指定する。確認: CI のログで `xcodebuild -version` が 27.2 系を表示している
+- [x] 5.1 `.github/workflows/ci.yml` を design.md D6 のとおりに作る（`runs-on: xcode-27`、`sudo xcode-select -s /Applications/Xcode_27.2_beta.app`、mise のセットアップ、lint、build、test）。`actions/checkout` と `jdx/mise-action` はコミット SHA で固定し、横にタグをコメントで書く（公開から 7 日以上たった版を選ぶ）。`permissions: contents: read` を明示し、トリガーは `pull_request` と `push` だけにする。確認: ブランチを push して PR を作り、ワークフローが緑になる
+- [x] 5.2 ランナーイメージの Xcode 一覧（`actions/runner-images` の `images/macos/xcode-27-arm64-Readme.md`）を見て、`Xcode_27.2_beta.app` のパスがまだ有効かを確かめる。正式版の `Xcode_27.2.app` が入っていればそちらを指定する。確認: CI のログで `xcodebuild -version` が 27.2 系を表示している
 
 ## 6. 最終確認
 
-- [ ] 6.1 ビルドが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug build` が成功する
-- [ ] 6.2 テストが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が成功し、`bash scripts/lint.sh` も通る
+- [x] 6.1 ビルドが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug build` が成功する
+- [x] 6.2 テストが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が成功し、`bash scripts/lint.sh` も通る
 - [ ] 6.3 手元で起動して確認した: `bash scripts/run.sh` で起動し、spec のシナリオを手で確かめる。メニューバーに猫アイコンが出ること、Dock に出ないこと、クリックでポップオーバーに「Mewbell」と Quit が出ること、外側のクリックで閉じること、ライトとダークの両方でアイコンが見えること、Quit と ⌘Q で終了してアイコンが消えること
 
 ## 7. 別コンテキストでのレビュー
 
-- [ ] 7.1 新しいコンテキストの opus サブエージェントで `simplify` スキルを実行し、作業ツリーに入った変更を確かめる。確認: `bash scripts/lint.sh` と `xcodebuild test` が引き続き通る
+- [x] 7.1 新しいコンテキストの opus サブエージェントで `simplify` スキルを実行し、作業ツリーに入った変更を確かめる。確認: `bash scripts/lint.sh` と `xcodebuild test` が引き続き通る
 - [ ] 7.2 別の新しいコンテキストの opus サブエージェントで `code-review` スキルを effort `medium` で実行し、指摘ごとに「直した / 直さない（理由）」を決めて対応する。ロジックに手を入れたら 7.2 をやり直す。確認: 指摘の件数と対応結果を PR 本文の Test plan に書いた
