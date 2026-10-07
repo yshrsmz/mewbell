@@ -1,0 +1,25 @@
+# 整形は swift-format に任せ、swiftlint はそれ以外の静的チェックだけを行う。
+included:
+  - Mewbell
+  - MewbellTests
+
+disabled_rules:
+  # swift-format と重なる整形系のルール
+  - trailing_whitespace
+  - trailing_comma
+  - opening_brace
+  - line_length
+  - vertical_whitespace
+  - colon
+  - comma
+  - statement_position
+  - closure_parameter_position
+
+opt_in_rules:
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - empty_count
+  - first_where
+  - sorted_imports
+
+reporter: xcode

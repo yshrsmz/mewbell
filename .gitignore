@@ -66,3 +66,7 @@ node_modules/
 
 # macOS
 .DS_Store
+
+# Build output
+build/
+DerivedData/

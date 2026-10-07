@@ -27,11 +27,13 @@
 
 ## Decisions
 
-### D1. `project.xcproj` は Xcode 27.2 の GUI で新規作成し、その後は直接編集する
+### D1. `project.xcproj` は Xcode 27.2 のテンプレートから作り、設定は CLI で変える
 
-Xcode 27.2 で macOS App テンプレートからプロジェクトを作り、JSON 形式になっていることを確かめてからビルド設定を直接編集する。
+Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプロジェクトを作り、リポジトリに移す。その後のビルド設定の変更・ターゲットの削除は、Xcode 同梱の `xcrun xcodeproj`（`setting set` / `setting unset` / `target remove` / `group remove`）で行い、変更のたびに `xcrun xcprojformatter --update Mewbell.xcodeproj` で正規の形に整える。テンプレートとの差分が下の表の項目だけになっていることを `git diff --no-index` で確かめる。
 
-- 代替案: JSON を一から手書きする → スキーマ（`XCSchema`）を正しく満たすのが難しく、Xcode が開けないファイルを作りやすい。採らない
+- テンプレートが作る UI テストのターゲット、App Sandbox の設定、`ContentView.swift` は使わないので消す。`Assets.xcassets`（AppIcon / AccentColor）は残す
+- テンプレートの警告設定（`CLANG_WARN_*` など）や `SWIFT_APPROACHABLE_CONCURRENCY=YES` はそのまま使う
+- 代替案: Xcode 同梱の CLI だけで一から作る → 試したところビルドは通ったが、テンプレートが既定で入れる設定と同じになっている保証がない。採らない
 - 代替案: XcodeGen / Tuist で生成する → 外部依存が増え、「`project.xcproj` を正本としてコミットする」方針とも合わない。採らない
 
 主なビルド設定:
@@ -42,12 +44,14 @@ Xcode 27.2 で macOS App テンプレートからプロジェクトを作り、J
 | `MACOSX_DEPLOYMENT_TARGET` | `26.0` |
 | `SWIFT_VERSION` | `6` |
 | `SWIFT_STRICT_CONCURRENCY` | `complete` |
-| `SWIFT_DEFAULT_ACTOR_ISOLATION` | 指定しない（`nonisolated` 既定のまま。`@MainActor` は明示する方針のため） |
+| `SWIFT_DEFAULT_ACTOR_ISOLATION` | 指定しない（テンプレートの `MainActor` を消し、`nonisolated` 既定に戻す。`@MainActor` は明示する方針のため） |
+| `SWIFT_APPROACHABLE_CONCURRENCY` | `YES`（テンプレートの既定を維持） |
 | `ENABLE_APP_SANDBOX` | `NO`（entitlements ファイルも作らない） |
-| `ENABLE_HARDENED_RUNTIME` | `YES`（緩める entitlement は付けない） |
+| `ENABLE_HARDENED_RUNTIME` | `YES`（緩める entitlement は付けない）。ただし Debug は `ENABLE_PREVIEWS=YES` のため Xcode が自動で `NO` にする。Release は `YES` |
 | `INFOPLIST_KEY_LSUIElement` | `YES` |
 | `GENERATE_INFOPLIST_FILE` | `YES`（Info.plist ファイルは置かない） |
-| `CODE_SIGN_IDENTITY` | `-`（ad-hoc。M5 まで署名しない） |
+| `CODE_SIGN_IDENTITY` | `-`（ad-hoc。M5 まで署名しない）。`CODE_SIGN_STYLE` は `Manual` |
+| `CODE_SIGN_INJECT_BASE_ENTITLEMENTS` | Release だけ `NO`（Release に `get-task-allow` を入れず、デバッガからのアタッチを防ぐ） |
 | `SWIFT_TREAT_WARNINGS_AS_ERRORS` | Debug は `NO`、CI では `xcodebuild` 引数で `YES` を渡す |
 
 ### D2. UI は `MenuBarExtra(.window)` の 1 シーンだけ

@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    env:
+      # Xcode 27.2 の正式版がランナーに入ったら /Applications/Xcode_27.2.app に変える
+      XCODE_PATH: /Applications/Xcode_27.2_beta.app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+          xcodebuild -version
+
+      - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          version: 2026.9.16
+          sha256: 86cda8dde0fa9181706e825323dd8e26e96721a1b3cf37cbc610dd1680fecfda # mise-v2026.9.16-macos-arm64
+
+      - name: Lint
+        run: bash scripts/lint.sh
+
+      - name: Build
+        run: >-
+          xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug
+          -derivedDataPath build/DerivedData
+          CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
+          build
+
+      - name: Test
+        run: >-
+          xcodebuild -project Mewbell.xcodeproj -scheme Mewbell
+          -derivedDataPath build/DerivedData
+          CODE_SIGNING_ALLOWED=NO
+          test
