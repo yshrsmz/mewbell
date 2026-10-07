@@ -52,7 +52,7 @@ Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプ�
 | `GENERATE_INFOPLIST_FILE` | `YES`（Info.plist ファイルは置かない） |
 | `CODE_SIGN_IDENTITY` | `-`（ad-hoc。M5 まで署名しない）。`CODE_SIGN_STYLE` は `Manual` |
 | `CODE_SIGN_INJECT_BASE_ENTITLEMENTS` | Release だけ `NO`（Release に `get-task-allow` を入れず、デバッガからのアタッチを防ぐ） |
-| `SWIFT_TREAT_WARNINGS_AS_ERRORS` | Debug は `NO`、CI では `xcodebuild` 引数で `YES` を渡す |
+| `SWIFT_TREAT_WARNINGS_AS_ERRORS` | Debug は `NO`。push 前の最終確認で `xcodebuild` の引数に `YES` を渡す（CI では xcodebuild を回さないため） |
 
 ### D2. UI は `MenuBarExtra(.window)` の 1 シーンだけ
 
@@ -65,12 +65,14 @@ Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプ�
 
 ### D2a. 二重起動の防止
 
-`MewbellApp.init()` で、同じ Bundle ID の `NSRunningApplication` を調べる。自分より先に起動したものがあれば、それを前面に出して `exit` する。シーンを作る前に確かめるので、アイコンが一瞬出てから消えることもない。
+`MewbellApp.init()` で、`~/Library/Application Support/com.codingfeline.mewbell/instance.lock` にファイルロック（`flock(LOCK_EX | LOCK_NB)`）を取る。取れなければほかの Mewbell が動いているので、そのまま `exit` する。シーンを作る前に確かめるので、アイコンが一瞬出てから消えることもない。ロックはプロセスが終わるまで持ち続ける。
 
-- 先に起動した方を判定する部分は、`SingleInstance.shouldTerminate(current:others:)` という純粋な関数に切り出してユニットテストする。起動時刻を比べ、同じか不明なときは PID の小さい方を先とみなす。同時に起動しても片方だけが残る
-- テストのホストとして起動されたとき（環境変数 `XCTestConfigurationFilePath` があるとき）は判定しない。起動中の Mewbell があってもテストを走らせられるようにするため
+- ロックは OS がまとめて取得するので、同時に起動しても片方しか取れない。プロセスが終われば（クラッシュしても）ロックは自動で外れ、ロックファイルは次の起動で使い回すので後片付けも要らない
+- ロックの取得と解放は `SingleInstanceLock` に切り出し、一時ディレクトリのロックファイルを使ってユニットテストする（`flock` はファイルを開いた単位で効くので、同じプロセスの中でも 2 つ目の取得が失敗することを確かめられる）
+- テストのホストとして起動されたとき（環境変数 `XCTestConfigurationFilePath` があるとき）はロックを取らない。起動中の Mewbell があってもテストを走らせられ、テスト中に普段使いの Mewbell を起動しても終了しないようにするため
+- 先に動いている方を前面に出す処理はしない。`LSUIElement` のアプリを前面に出しても表示されるものがないため
+- 代替案: `NSRunningApplication` で同じ Bundle ID のアプリを探し、起動時刻と PID で先後を決める → 最初はこの方式にしたが、起動時刻が取れないと PID の大小に頼ることになる。PID は一周すると小さい値に戻るので後から起動した方が残ることがあり、3 つ以上が同時に起動すると全部が終了することもあった。採らない
 - 代替案: `LSMultipleInstancesProhibited` → 同じ `.app` を開き直す場合しか防げず、別の場所にあるコピー（`build/` と DerivedData の 2 か所や、配布後のコピー）は防げない。採らない
-- 代替案: ロックファイル（`flock`）→ 確実だが、ファイルの置き場所と後片付けが必要になる。Bundle ID で十分なので採らない
 - M1 以降、二重起動するとポーリングと通知が重複するため、M0 のうちに入れておく
 
 ### D3. 並行性の境界

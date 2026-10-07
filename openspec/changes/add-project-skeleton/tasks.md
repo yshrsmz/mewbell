@@ -12,7 +12,7 @@
 - [x] 2.3 ソースを `Mewbell/App/` に置く（`MewbellApp.swift` と `MenuBarContentView.swift`）。`MenuBarExtra("Mewbell", systemImage: "cat.fill")` と `.menuBarExtraStyle(.window)`、「Mewbell」の `Text`、⌘Q 付きの Quit ボタン（`NSApplication.shared.terminate(nil)`）を実装する。確認: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug build` が警告なしで通る
 - [x] 2.4 `MewbellTests` に Swift Testing のダミーテストを 1 つ置く（例: `#expect(Bundle.main.bundleIdentifier != nil)` のように、ホストアプリが読み込まれていることを確かめるもの）。確認: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が成功し、テストが 1 件実行されている
 
-- [x] 2.5 二重起動を防ぐ（design.md D2a）。判定の関数 `SingleInstance.shouldTerminate` のユニットテスト（先に起動したものがある・ない、起動時刻が同じ、起動時刻が不明、自分自身を無視）を書く。確認: `xcodebuild test` でテストが通り、起動中に `open -n` で別のコピーを起動してもプロセスが 1 つのまま
+- [x] 2.5 二重起動を防ぐ（design.md D2a）。`SingleInstanceLock` のユニットテスト（誰も持っていなければ取れる、持たれていれば取れない、解放や破棄の後は取れる、同じ持ち主の 2 回目は成功する）を書く。確認: `xcodebuild test` でテストが通り、起動中に別のコピーを同時に 2 つ起動してもプロセスが 1 つのまま
 
 ## 3. スクリプトと lint 設定
 
@@ -33,10 +33,10 @@
 
 ## 6. 最終確認
 
-- [x] 6.1 ビルドが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug build` が成功する
+- [x] 6.1 ビルドが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build` と、同じく `-configuration Release` のビルドが成功する（CI では回らないので手元で確かめる）
 - [x] 6.2 テストが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が成功し、`bash scripts/lint.sh` も通る
 - [x] 6.3 手元で起動して確認した: `bash scripts/run.sh` で起動し、spec のシナリオを手で確かめる。メニューバーに猫アイコンが出ること、Dock に出ないこと、クリックでポップオーバーに「Mewbell」と Quit が出ること、外側のクリックで閉じること、ライトとダークの両方でアイコンが見えること、Quit と ⌘Q で終了してアイコンが消えること
-- [x] 6.4 二重起動しないことを手元で確かめた: 起動中に `open -n build/DerivedData/Build/Products/Debug/Mewbell.app` と `open -n build/Debug/Mewbell.app` を実行しても、`pgrep -fl 'MacOS/Mewbell$'` が 1 件のまま
+- [x] 6.4 二重起動しないことを手元で確かめた: 起動中に `open -n build/DerivedData/Build/Products/Debug/Mewbell.app` と `open -n build/Debug/Mewbell.app` を同時に実行しても、何も動いていない状態で同時に実行しても、`pgrep -fl 'MacOS/Mewbell$'` が 1 件になる
 
 ## 7. 別コンテキストでのレビュー
 
