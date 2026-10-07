@@ -28,7 +28,7 @@ Claude Code を repo 直下で開き、まず探索せずに change を起こす
 
 説明として次を渡す（そのまま貼ってよい）：
 
-> M0「土台」。Xcode 27.2 以降の JSON プロジェクト形式（project.xcproj）で、SwiftUI の `MenuBarExtra`（window スタイル）を持つ `LSUIElement` なアプリを作る。Bundle ID `com.codingfeline.mewbell`、Deployment target macOS 26、Swift 6 strict concurrency、App Sandbox 無効。MIT の LICENSE、README、`.gitignore`（DerivedData・build・xcuserdata。xcodeproj はコミットする）、swift-format と swiftlint の設定、GitHub Actions（Xcode 27.2 以降が入ったランナーを `xcode-select` で指定し、lint・ビルド・テスト）。メニューバーに猫アイコンが出て、ポップオーバーに「Mewbell」と Quit ボタンがあり、終了できる。テストターゲット MewbellTests にダミーテストを 1 つ。
+> M0「土台」。Xcode 27.2 以降の JSON プロジェクト形式（project.xcproj）で、SwiftUI の `MenuBarExtra`（window スタイル）を持つ `LSUIElement` なアプリを作る。Bundle ID `com.codingfeline.mewbell`、Deployment target macOS 26、Swift 6 strict concurrency、App Sandbox 無効。MIT の LICENSE、README、`.gitignore`（DerivedData・build・xcuserdata。xcodeproj はコミットする）、swift-format と swiftlint の設定、GitHub Actions（macOS ランナーは高価なので ubuntu だけを使い、lint と OpenSpec の検証。ビルドとテストは手元）。メニューバーに猫アイコンが出て、ポップオーバーに「Mewbell」と Quit ボタンがあり、終了できる。テストターゲット MewbellTests にダミーテストを 1 つ。
 
 生成された `proposal.md` / `specs/` / `design.md` / `tasks.md` を読み、違和感があれば直してから：
 

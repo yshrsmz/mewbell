@@ -58,11 +58,13 @@ enum SingleInstance {
     /// ほかの Mewbell がロックを持っていれば、このプロセスを終了する。
     /// ロックファイルを開けないなどのエラーでは終了せず、記録したうえで起動を続ける
     /// （誤って起動できなくなるよりは、二重起動を防げない方が被害が小さい）。
-    /// テストのホストとして起動されたときはロックを取らない（起動中の Mewbell があってもテストを走らせられるように、
-    /// また、テスト中に普段使いの Mewbell を起動しても終了しないように）。
+    /// テストのホストや SwiftUI プレビューとして起動されたときはロックを取らない（起動中の Mewbell があっても
+    /// テストやプレビューを動かせるように、また、その間に普段使いの Mewbell を起動しても終了しないように）。
     @MainActor
     static func terminateIfAnotherInstanceIsRunning() {
-        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil,
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["XCTestConfigurationFilePath"] == nil,
+            environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1",
             let bundleIdentifier = Bundle.main.bundleIdentifier,
             let applicationSupport = FileManager.default.urls(
                 for: .applicationSupportDirectory, in: .userDomainMask

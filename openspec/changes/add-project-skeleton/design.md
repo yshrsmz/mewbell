@@ -15,7 +15,7 @@
 
 **Goals:**
 
-- `xcodebuild build` / `xcodebuild test` / lint を手元で同じコマンドで回せる。lint は CI（ubuntu）でも同じスクリプトで回せる
+- `xcodebuild build` / `xcodebuild test` / lint を手元で同じコマンドで回せる。lint は CI（ubuntu）でも同じツール・同じ引数で回す（手元は `scripts/lint.sh`、CI は Docker イメージ）
 - M1 以降で `CLAUDE.md` の目標構成（`Mewbell/App/`, `Mewbell/GhCLI/` …）にファイルを足していけるディレクトリとグループ構成にする
 - Swift 6 の strict concurrency を最初から有効にし、後から警告を潰す作業を発生させない
 
@@ -70,7 +70,7 @@ Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプ�
 - ロックは OS がまとめて取得するので、同時に起動しても片方しか取れない。プロセスが終われば（クラッシュしても）ロックは自動で外れ、ロックファイルは次の起動で使い回すので後片付けも要らない
 - ロックの取得と解放は `SingleInstanceLock` に切り出し、一時ディレクトリのロックファイルを使ってユニットテストする（`flock` はファイルを開いた単位で効くので、同じプロセスの中でも 2 つ目の取得が失敗することを確かめられる）
 - ロックの結果は「取れた」「ほかが持っている」「エラー（ファイルを開けないなど）」の 3 つに分ける。エラーのときは終了せず、os_log に記録して起動を続ける（ロックファイルの置き場所が壊れているだけで、アプリが毎回黙って終了するのを避けるため。二重起動を防げない方がまだ被害が小さい）
-- テストのホストとして起動されたとき（環境変数 `XCTestConfigurationFilePath` があるとき）はロックを取らない。起動中の Mewbell があってもテストを走らせられ、テスト中に普段使いの Mewbell を起動しても終了しないようにするため
+- テストのホストや SwiftUI プレビューとして起動されたとき（環境変数 `XCTestConfigurationFilePath` がある、または `XCODE_RUNNING_FOR_PREVIEWS=1` のとき）はロックを取らない。起動中の Mewbell があってもテストやプレビューを動かせ、その間に普段使いの Mewbell を起動しても終了しないようにするため
 - 先に動いている方を前面に出す処理はしない。`LSUIElement` のアプリを前面に出しても表示されるものがないため
 - 代替案: `NSRunningApplication` で同じ Bundle ID のアプリを探し、起動時刻と PID で先後を決める → 最初はこの方式にしたが、起動時刻が取れないと PID の大小に頼ることになる。PID は一周すると小さい値に戻るので後から起動した方が残ることがあり、3 つ以上が同時に起動すると全部が終了することもあった。採らない
 - 代替案: `LSMultipleInstancesProhibited` → 同じ `.app` を開き直す場合しか防げず、別の場所にあるコピー（`build/` と DerivedData の 2 か所や、配布後のコピー）は防げない。採らない

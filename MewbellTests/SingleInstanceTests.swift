@@ -3,10 +3,13 @@ import Testing
 
 @testable import Mewbell
 
-struct SingleInstanceLockTests {
-    private let lockURL = FileManager.default.temporaryDirectory
-        .appending(path: "MewbellTests-\(UUID().uuidString)")
-        .appending(path: "instance.lock")
+final class SingleInstanceLockTests {
+    private let directory = FileManager.default.temporaryDirectory.appending(path: "MewbellTests-\(UUID().uuidString)")
+    private var lockURL: URL { directory.appending(path: "instance.lock") }
+
+    deinit {
+        try? FileManager.default.removeItem(at: directory)
+    }
 
     @Test func acquiresWhenNobodyHoldsTheLock() {
         let lock = SingleInstanceLock(fileURL: lockURL)
