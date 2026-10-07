@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// ファイルロック（flock）で、Mewbell がユーザーごとに 1 つだけ動くようにする。
 ///
@@ -16,19 +17,28 @@ final class SingleInstanceLock {
         release()
     }
 
-    /// ロックを取れたら `true`。ほかのプロセス（または別の `SingleInstanceLock`）が持っていれば `false`。
-    func tryAcquire() -> Bool {
-        guard fileDescriptor < 0 else { return true }
+    enum AcquireResult: Equatable {
+        /// ロックを取れた
+        case acquired
+        /// ほかのプロセス（または別の `SingleInstanceLock`）がロックを持っている
+        case heldByAnotherInstance
+        /// ロックファイルを開けない・ロックを取れないなどのエラー（`errno` を持つ）
+        case failed(errno: Int32)
+    }
+
+    func tryAcquire() -> AcquireResult {
+        guard fileDescriptor < 0 else { return .acquired }
         try? FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let descriptor = open(fileURL.path, O_RDWR | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR)
-        guard descriptor >= 0 else { return false }
+        guard descriptor >= 0 else { return .failed(errno: errno) }
         guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            let error = errno
             close(descriptor)
-            return false
+            return error == EWOULDBLOCK ? .heldByAnotherInstance : .failed(errno: error)
         }
         fileDescriptor = descriptor
-        return true
+        return .acquired
     }
 
     func release() {
@@ -43,7 +53,11 @@ enum SingleInstance {
     /// プロセスが終わるまでロックを持ち続けるために保持しておく。
     @MainActor private static var lock: SingleInstanceLock?
 
-    /// ロックを取れなければ、ほかの Mewbell が動いているのでこのプロセスを終了する。
+    private static let logger = Logger(subsystem: "com.codingfeline.mewbell", category: "SingleInstance")
+
+    /// ほかの Mewbell がロックを持っていれば、このプロセスを終了する。
+    /// ロックファイルを開けないなどのエラーでは終了せず、記録したうえで起動を続ける
+    /// （誤って起動できなくなるよりは、二重起動を防げない方が被害が小さい）。
     /// テストのホストとして起動されたときはロックを取らない（起動中の Mewbell があってもテストを走らせられるように、
     /// また、テスト中に普段使いの Mewbell を起動しても終了しないように）。
     @MainActor
@@ -57,7 +71,13 @@ enum SingleInstance {
 
         let lockURL = applicationSupport.appending(path: bundleIdentifier).appending(path: "instance.lock")
         let lock = SingleInstanceLock(fileURL: lockURL)
-        guard lock.tryAcquire() else { exit(EXIT_SUCCESS) }
-        self.lock = lock
+        switch lock.tryAcquire() {
+        case .acquired:
+            self.lock = lock
+        case .heldByAnotherInstance:
+            exit(EXIT_SUCCESS)
+        case .failed(let error):
+            logger.error("Could not lock \(lockURL.path): errno \(error)")
+        }
     }
 }

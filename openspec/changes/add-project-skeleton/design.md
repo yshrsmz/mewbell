@@ -69,6 +69,7 @@ Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプ�
 
 - ロックは OS がまとめて取得するので、同時に起動しても片方しか取れない。プロセスが終われば（クラッシュしても）ロックは自動で外れ、ロックファイルは次の起動で使い回すので後片付けも要らない
 - ロックの取得と解放は `SingleInstanceLock` に切り出し、一時ディレクトリのロックファイルを使ってユニットテストする（`flock` はファイルを開いた単位で効くので、同じプロセスの中でも 2 つ目の取得が失敗することを確かめられる）
+- ロックの結果は「取れた」「ほかが持っている」「エラー（ファイルを開けないなど）」の 3 つに分ける。エラーのときは終了せず、os_log に記録して起動を続ける（ロックファイルの置き場所が壊れているだけで、アプリが毎回黙って終了するのを避けるため。二重起動を防げない方がまだ被害が小さい）
 - テストのホストとして起動されたとき（環境変数 `XCTestConfigurationFilePath` があるとき）はロックを取らない。起動中の Mewbell があってもテストを走らせられ、テスト中に普段使いの Mewbell を起動しても終了しないようにするため
 - 先に動いている方を前面に出す処理はしない。`LSUIElement` のアプリを前面に出しても表示されるものがないため
 - 代替案: `NSRunningApplication` で同じ Bundle ID のアプリを探し、起動時刻と PID で先後を決める → 最初はこの方式にしたが、起動時刻が取れないと PID の大小に頼ることになる。PID は一周すると小さい値に戻るので後から起動した方が残ることがあり、3 つ以上が同時に起動すると全部が終了することもあった。採らない
@@ -91,22 +92,23 @@ M1 以降の方針としてここに書いておく: gh の実行は `GhCommandR
 
 ### D5. lint / format ツールの入手方法
 
-- **swift-format**: 手元では Xcode 27 に同梱されている `xcrun swift-format` を使う。CI（Linux）では Swift の公式 Docker イメージに同梱の `swift-format` を使う。`scripts/lint.sh` は `xcrun` があるかどうかで切り替える
-  - CI のイメージは `swift:6.3.2-noble` を digest で固定する。手元（Swift 6.4）とバージョンがずれるのは、6.4 のイメージが公開から 7 日の下限を満たしていなかったため。両方で同じ結果になることを確かめた。ずれが出たら 6.4 のイメージに上げる
-- **swiftlint**: リポジトリ直下の `mise.toml` で `swiftlint = "0.65.1"`（2026-08-21 公開）に固定し、`mise.lock` でチェックサムも固定する。手元も CI も `mise exec -- swiftlint` で呼ぶ。Linux 版は Swift ツールチェーンの SourceKit を使うので、CI では Swift のコンテナの中で動かす
+- **swift-format**: 手元では Xcode 27 に同梱されている `xcrun swift-format` を使う。CI（Linux）では Swift の公式 Docker イメージ `swift:6.3.2-noble`（digest で固定）に同梱の `swift-format` を `docker run` で使う
+  - 手元（Swift 6.4）とバージョンがずれるのは、6.4 のイメージが公開から 7 日の下限を満たしていなかったため。両方で同じ結果になることを確かめた。ずれが出たら 6.4 のイメージに上げる
+- **swiftlint**: 手元ではリポジトリ直下の `mise.toml` で `swiftlint = "0.65.1"`（2026-08-21 公開）に固定し、`mise.lock` でチェックサムも固定して `mise exec -- swiftlint` で呼ぶ。CI では同じ 0.65.1 の公式 Docker イメージ `ghcr.io/realm/swiftlint`（digest で固定）を `docker run` で使う
+  - CI で mise を使わない理由: Linux 版の swiftlint は Swift ツールチェーンの SourceKit を必要とするため Swift のコンテナで動かす必要があるが、Swift のイメージには curl も wget もなく mise を取得できない。apt で curl を入れる方法は、パッケージのバージョンを固定できないので採らない
   - 代替案: Homebrew → バージョンを固定できない。採らない
   - 代替案: SwiftPM のビルドツールプラグイン（SwiftLintPlugins）→ プロジェクトに SwiftPM 依存が入り、プラグインの信頼確認がビルドのたびに必要になる。採らない
   - 代替案: GitHub Releases の `portable_swiftlint.zip` を SHA-256 を確かめてダウンロードするスクリプト → これでも要件は満たせるが、mise ならバージョン固定とチェックサム検証をまとめて任せられる
 - **Node.js**（OpenSpec CLI 用）: `mise.toml` で `node = "26.9.0"` に固定する
 - `swift-format` と `swiftlint` はルールが重なるので、整形（import の並びを含む）は `swift-format` に任せ、swiftlint では整形系のルール（`trailing_whitespace`、`opening_brace`、`sorted_imports` など）を無効にする
-- 呼び出しは `scripts/lint.sh` にまとめる（`swift-format lint --strict -r Mewbell MewbellTests` と `swiftlint lint --strict`）
+- 手元の呼び出しは `scripts/lint.sh` にまとめる（`swift-format lint --strict -r Mewbell MewbellTests` と `swiftlint lint --strict`）。CI は同じ引数で各イメージを呼ぶ。対象や引数を変えるときは `scripts/lint.sh` と `ci.yml` の両方を直す
 
 ### D6. CI
 
 `.github/workflows/ci.yml` を 1 本置き、`pull_request` と `push`（main）で動かす。macOS ランナーは高価なので使わず、ubuntu で動く範囲だけを回す。
 
-- `runs-on: ubuntu-24.04` で、ジョブを `swift:6.3.2-noble`（digest 固定）のコンテナの中で動かす
-- ジョブの流れ: checkout → mise のセットアップ（swiftlint と Node） → `bash scripts/lint.sh` → `npm ci --ignore-scripts` → `npx openspec validate --all --strict`
+- `runs-on: ubuntu-24.04`
+- ジョブの流れ: checkout → swift-format（`swift` イメージ）→ swiftlint（`ghcr.io/realm/swiftlint` イメージ）→ mise のセットアップ（Node だけ）→ `npm ci --ignore-scripts` → `npx openspec validate --all --strict`
 - **xcodebuild のビルドとテストは CI では回さない**（SwiftUI / AppKit は Linux でビルドできない）。手元で `xcodebuild test` と Debug / Release のビルドを通してから push する。tasks.md の最終確認にも入れる
 - Action はタグではなくコミット SHA で固定する（`actions/checkout` v7.0.1、`jdx/mise-action` v5.0.0）。mise 本体もバージョンと sha256 で固定する
 - ワークフローに `permissions: contents: read` を明示し、checkout は `persist-credentials: false` にする。トリガーは `pull_request` と `push` だけにし、`pull_request_target` は使わない。シークレットは渡さない

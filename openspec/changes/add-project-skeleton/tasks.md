@@ -28,8 +28,8 @@
 
 ## 5. CI
 
-- [x] 5.1 `.github/workflows/ci.yml` を design.md D6 のとおりに作る（`runs-on: ubuntu-24.04`、`swift:6.3.2-noble` を digest で固定したコンテナ、mise のセットアップ、lint、`openspec validate --all --strict`）。`actions/checkout` と `jdx/mise-action` はコミット SHA で固定し、横にタグをコメントで書く。`permissions: contents: read` を明示し、トリガーは `pull_request` と `push` だけにする。確認: ブランチを push して PR を作り、ワークフローが緑になる
-- [x] 5.2 `scripts/lint.sh` を macOS（`xcrun swift-format`）と Linux（`swift-format`）の両方で動くようにする。確認: 手元で `bash scripts/lint.sh` が通り、同じ Docker イメージで `swift-format lint --strict` を実行しても違反が出ない
+- [x] 5.1 `.github/workflows/ci.yml` を design.md D6 のとおりに作る（`runs-on: ubuntu-24.04`、swift-format は `swift:6.3.2-noble`、swiftlint は `ghcr.io/realm/swiftlint:0.65.1` のイメージをそれぞれ digest で固定して `docker run`、mise で Node を入れて `openspec validate --all --strict`）。`actions/checkout` と `jdx/mise-action` はコミット SHA で固定し、横にタグをコメントで書く。`permissions: contents: read` を明示し、トリガーは `pull_request` と `push` だけにする。確認: ブランチを push して PR を作り、ワークフローが緑になる
+- [x] 5.2 CI と同じイメージで手元でも lint を実行し、手元の `bash scripts/lint.sh`（Xcode 同梱の swift-format と mise の swiftlint）と結果が同じになることを確かめる。確認: `docker run` で両方のイメージを実行して違反が出ない
 
 ## 6. 最終確認
 
