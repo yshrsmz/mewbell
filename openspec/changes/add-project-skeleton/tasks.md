@@ -3,7 +3,7 @@
 ## 1. 開発環境の前提（ユーザー作業を含む）
 
 - [x] 1.1 Xcode 27.2 以降をインストールし、`sudo xcode-select -s <Xcode 27.2 のパス>/Contents/Developer` と `sudo xcodebuild -license accept` を実行する（sudo が必要なのでユーザーが行う）。確認: `xcodebuild -version` が 27.2 以降を表示し、`xcode-select -p` が Xcode を指している
-- [x] 1.2 リポジトリ直下に `mise.toml` を作って `swiftlint = "0.65.1"` を固定し、`mise install` と `mise lock` で `mise.lock` を生成する。確認: `mise exec -- swiftlint version` が `0.65.1` を表示し、`xcrun swift-format --version` が通る
+- [x] 1.2 リポジトリ直下に `mise.toml` を作って `swiftlint = "0.65.1"` と `node = "26.9.0"` を固定し、`mise install` と `mise lock` で `mise.lock` を生成する。確認: `mise exec -- swiftlint version` が `0.65.1` を表示し、`xcrun swift-format --version` が通る
 
 ## 2. Xcode プロジェクトとアプリ本体
 
@@ -11,6 +11,8 @@
 - [x] 2.2 `project.xcproj` のビルド設定を design.md D1 の表どおりにする（Bundle ID、macOS 26.0、Swift 6、strict concurrency `complete`、App Sandbox 無効、Hardened Runtime 有効、`LSUIElement=YES`、ad-hoc 署名）。entitlements ファイルは作らない。確認: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -showBuildSettings | grep -E 'PRODUCT_BUNDLE_IDENTIFIER|MACOSX_DEPLOYMENT_TARGET|SWIFT_VERSION|SWIFT_STRICT_CONCURRENCY|ENABLE_APP_SANDBOX|ENABLE_HARDENED_RUNTIME|INFOPLIST_KEY_LSUIElement'` の値が表どおり（`ENABLE_HARDENED_RUNTIME` は `-configuration Release` で `YES`）。ビルドした `.app` で `codesign -d --entitlements - build/Debug/Mewbell.app` に緩める entitlement がなく、`plutil -p build/Debug/Mewbell.app/Contents/Info.plist` に `NSAppTransportSecurity` がないことも確かめる
 - [x] 2.3 ソースを `Mewbell/App/` に置く（`MewbellApp.swift` と `MenuBarContentView.swift`）。`MenuBarExtra("Mewbell", systemImage: "cat.fill")` と `.menuBarExtraStyle(.window)`、「Mewbell」の `Text`、⌘Q 付きの Quit ボタン（`NSApplication.shared.terminate(nil)`）を実装する。確認: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug build` が警告なしで通る
 - [x] 2.4 `MewbellTests` に Swift Testing のダミーテストを 1 つ置く（例: `#expect(Bundle.main.bundleIdentifier != nil)` のように、ホストアプリが読み込まれていることを確かめるもの）。確認: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が成功し、テストが 1 件実行されている
+
+- [x] 2.5 二重起動を防ぐ（design.md D2a）。判定の関数 `SingleInstance.shouldTerminate` のユニットテスト（先に起動したものがある・ない、起動時刻が同じ、起動時刻が不明、自分自身を無視）を書く。確認: `xcodebuild test` でテストが通り、起動中に `open -n` で別のコピーを起動してもプロセスが 1 つのまま
 
 ## 3. スクリプトと lint 設定
 
@@ -26,14 +28,15 @@
 
 ## 5. CI
 
-- [x] 5.1 `.github/workflows/ci.yml` を design.md D6 のとおりに作る（`runs-on: xcode-27`、`sudo xcode-select -s /Applications/Xcode_27.2_beta.app`、mise のセットアップ、lint、build、test）。`actions/checkout` と `jdx/mise-action` はコミット SHA で固定し、横にタグをコメントで書く（公開から 7 日以上たった版を選ぶ）。`permissions: contents: read` を明示し、トリガーは `pull_request` と `push` だけにする。確認: ブランチを push して PR を作り、ワークフローが緑になる
-- [x] 5.2 ランナーイメージの Xcode 一覧（`actions/runner-images` の `images/macos/xcode-27-arm64-Readme.md`）を見て、`Xcode_27.2_beta.app` のパスがまだ有効かを確かめる。正式版の `Xcode_27.2.app` が入っていればそちらを指定する。確認: CI のログで `xcodebuild -version` が 27.2 系を表示している
+- [x] 5.1 `.github/workflows/ci.yml` を design.md D6 のとおりに作る（`runs-on: ubuntu-24.04`、`swift:6.3.2-noble` を digest で固定したコンテナ、mise のセットアップ、lint、`openspec validate --all --strict`）。`actions/checkout` と `jdx/mise-action` はコミット SHA で固定し、横にタグをコメントで書く。`permissions: contents: read` を明示し、トリガーは `pull_request` と `push` だけにする。確認: ブランチを push して PR を作り、ワークフローが緑になる
+- [x] 5.2 `scripts/lint.sh` を macOS（`xcrun swift-format`）と Linux（`swift-format`）の両方で動くようにする。確認: 手元で `bash scripts/lint.sh` が通り、同じ Docker イメージで `swift-format lint --strict` を実行しても違反が出ない
 
 ## 6. 最終確認
 
 - [x] 6.1 ビルドが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug build` が成功する
 - [x] 6.2 テストが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が成功し、`bash scripts/lint.sh` も通る
-- [ ] 6.3 手元で起動して確認した: `bash scripts/run.sh` で起動し、spec のシナリオを手で確かめる。メニューバーに猫アイコンが出ること、Dock に出ないこと、クリックでポップオーバーに「Mewbell」と Quit が出ること、外側のクリックで閉じること、ライトとダークの両方でアイコンが見えること、Quit と ⌘Q で終了してアイコンが消えること
+- [x] 6.3 手元で起動して確認した: `bash scripts/run.sh` で起動し、spec のシナリオを手で確かめる。メニューバーに猫アイコンが出ること、Dock に出ないこと、クリックでポップオーバーに「Mewbell」と Quit が出ること、外側のクリックで閉じること、ライトとダークの両方でアイコンが見えること、Quit と ⌘Q で終了してアイコンが消えること
+- [x] 6.4 二重起動しないことを手元で確かめた: 起動中に `open -n build/DerivedData/Build/Products/Debug/Mewbell.app` と `open -n build/Debug/Mewbell.app` を実行しても、`pgrep -fl 'MacOS/Mewbell$'` が 1 件のまま
 
 ## 7. 別コンテキストでのレビュー
 

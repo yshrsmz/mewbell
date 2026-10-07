@@ -49,7 +49,7 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test
 open build/Debug/Mewbell.app     # 手元で起動して確認（パスはスキーム設定に合わせる）
 ```
 
-- `swift-format` でフォーマット、`swiftlint` で lint。CI（GitHub Actions）で両方と `xcodebuild test` を回す。ランナーは Xcode 27.2 以降が入っているものを選び、`xcode-select` で明示する
+- `swift-format` でフォーマット、`swiftlint` で lint（`bash scripts/lint.sh`）。CI（GitHub Actions）は macOS ランナーが高価なので ubuntu だけを使い、lint と `openspec validate` だけを回す。`xcodebuild` のビルドとテストは CI で回らないので、push 前に手元で必ず通す
 - プロジェクトは Xcode 27.2 以降の JSON 形式（`project.xcproj`）。`project.pbxproj` には戻さない。ターゲット追加・ビルド設定の変更は `project.xcproj` を直接編集してよいが、編集後は必ず `xcodebuild` で開けることを確認する
 - `DerivedData`・`build/`・`xcuserdata/` はコミットしない
 

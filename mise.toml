@@ -1,2 +1,3 @@
 [tools]
+node = "26.9.0"
 swiftlint = "0.65.1"

@@ -8,14 +8,14 @@
 
 - プロジェクトは Xcode 27.2 以降の JSON 形式（`project.xcproj`）にする（CLAUDE.md）。Apple の説明では、27.2 以降は新規プロジェクトの既定がこの形式で、既存プロジェクトは file inspector から切り替えられる。`.xcproj` のプロジェクトは 27.0 / 27.1 でも開けるが、生成と変換は 27.2 以降でしかできない
 - 手元の Xcode は 27.0（27A266a）で、ライセンスに未同意、`xcode-select` は `/Library/Developer/CommandLineTools` を指している
-- GitHub Actions では `runs-on: xcode-27` イメージに `/Applications/Xcode_27.2_beta.app`（27B5019j）が入っている。2026-09-28 時点で 27.2 はまだ beta
+- macOS の GitHub Actions ランナーは高価なので使わない。CI は ubuntu で動く範囲（lint と OpenSpec の検証）だけにする
 - 依存ポリシー: ツールのバージョンは固定し、公開から 7 日以上たった版を使う。グローバルインストールはしない
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- `xcodebuild build` / `xcodebuild test` / lint を手元と CI で同じコマンドで回せる
+- `xcodebuild build` / `xcodebuild test` / lint を手元で同じコマンドで回せる。lint は CI（ubuntu）でも同じスクリプトで回せる
 - M1 以降で `CLAUDE.md` の目標構成（`Mewbell/App/`, `Mewbell/GhCLI/` …）にファイルを足していけるディレクトリとグループ構成にする
 - Swift 6 の strict concurrency を最初から有効にし、後から警告を潰す作業を発生させない
 
@@ -63,6 +63,16 @@ Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプ�
 - 代替案: AppKit の `NSStatusItem` + `NSPopover` → SwiftUI だけで足りる間は使わない（CLAUDE.md の「AppKit は必要箇所のみ」）
 - `Settings` シーンは M4 で追加する。M0 では置かない
 
+### D2a. 二重起動の防止
+
+`MewbellApp.init()` で、同じ Bundle ID の `NSRunningApplication` を調べる。自分より先に起動したものがあれば、それを前面に出して `exit` する。シーンを作る前に確かめるので、アイコンが一瞬出てから消えることもない。
+
+- 先に起動した方を判定する部分は、`SingleInstance.shouldTerminate(current:others:)` という純粋な関数に切り出してユニットテストする。起動時刻を比べ、同じか不明なときは PID の小さい方を先とみなす。同時に起動しても片方だけが残る
+- テストのホストとして起動されたとき（環境変数 `XCTestConfigurationFilePath` があるとき）は判定しない。起動中の Mewbell があってもテストを走らせられるようにするため
+- 代替案: `LSMultipleInstancesProhibited` → 同じ `.app` を開き直す場合しか防げず、別の場所にあるコピー（`build/` と DerivedData の 2 か所や、配布後のコピー）は防げない。採らない
+- 代替案: ロックファイル（`flock`）→ 確実だが、ファイルの置き場所と後片付けが必要になる。Bundle ID で十分なので採らない
+- M1 以降、二重起動するとポーリングと通知が重複するため、M0 のうちに入れておく
+
 ### D3. 並行性の境界
 
 - M0 で動くのは SwiftUI のシーンと View、Quit の処理だけで、すべて main thread / `@MainActor` 上で動く。`App` と `View` は SwiftUI 側で `@MainActor` に隔離されているため、追加の注釈は要らない。Quit のハンドラも `@MainActor` 上から `NSApplication` を呼ぶ
@@ -79,24 +89,26 @@ M1 以降の方針としてここに書いておく: gh の実行は `GhCommandR
 
 ### D5. lint / format ツールの入手方法
 
-- **swift-format**: Xcode 27 に同梱されている `xcrun swift-format` を使う。Xcode のバージョンに固定されるので、別途ピン留めする必要がない
-- **swiftlint**: リポジトリ直下の `mise.toml` で `swiftlint = "0.65.1"`（2026-08-21 公開）に固定し、`mise.lock` でチェックサムも固定する。手元も CI も `mise exec -- swiftlint` で呼ぶ
+- **swift-format**: 手元では Xcode 27 に同梱されている `xcrun swift-format` を使う。CI（Linux）では Swift の公式 Docker イメージに同梱の `swift-format` を使う。`scripts/lint.sh` は `xcrun` があるかどうかで切り替える
+  - CI のイメージは `swift:6.3.2-noble` を digest で固定する。手元（Swift 6.4）とバージョンがずれるのは、6.4 のイメージが公開から 7 日の下限を満たしていなかったため。両方で同じ結果になることを確かめた。ずれが出たら 6.4 のイメージに上げる
+- **swiftlint**: リポジトリ直下の `mise.toml` で `swiftlint = "0.65.1"`（2026-08-21 公開）に固定し、`mise.lock` でチェックサムも固定する。手元も CI も `mise exec -- swiftlint` で呼ぶ。Linux 版は Swift ツールチェーンの SourceKit を使うので、CI では Swift のコンテナの中で動かす
   - 代替案: Homebrew → バージョンを固定できない。採らない
   - 代替案: SwiftPM のビルドツールプラグイン（SwiftLintPlugins）→ プロジェクトに SwiftPM 依存が入り、プラグインの信頼確認がビルドのたびに必要になる。採らない
   - 代替案: GitHub Releases の `portable_swiftlint.zip` を SHA-256 を確かめてダウンロードするスクリプト → これでも要件は満たせるが、mise ならバージョン固定とチェックサム検証をまとめて任せられる
-- `swift-format` と `swiftlint` はルールが重なるので、整形は `swift-format` に任せ、swiftlint では整形系のルール（`trailing_whitespace`、`opening_brace` など）を無効にする
+- **Node.js**（OpenSpec CLI 用）: `mise.toml` で `node = "26.9.0"` に固定する
+- `swift-format` と `swiftlint` はルールが重なるので、整形（import の並びを含む）は `swift-format` に任せ、swiftlint では整形系のルール（`trailing_whitespace`、`opening_brace`、`sorted_imports` など）を無効にする
 - 呼び出しは `scripts/lint.sh` にまとめる（`swift-format lint --strict -r Mewbell MewbellTests` と `swiftlint lint --strict`）
 
 ### D6. CI
 
-`.github/workflows/ci.yml` を 1 本置き、`pull_request` と `push`（main）で動かす。
+`.github/workflows/ci.yml` を 1 本置き、`pull_request` と `push`（main）で動かす。macOS ランナーは高価なので使わず、ubuntu で動く範囲だけを回す。
 
-- `runs-on: xcode-27`
-- `sudo xcode-select -s /Applications/Xcode_27.2_beta.app` で Xcode を明示する。27.2 の正式版がイメージに入ったら `/Applications/Xcode_27.2.app` に変える
-- ジョブの流れ: checkout → mise のセットアップ → `bash scripts/lint.sh` → `xcodebuild build` → `xcodebuild test`
-- Action はタグではなくコミット SHA で固定する（`actions/checkout` v7.0.1、`jdx/mise-action` は公開から 7 日以上たった版）。SHA は実装時に確かめる
-- 署名は `CODE_SIGNING_ALLOWED=NO` で無効にする
-- ワークフローに `permissions: contents: read` を明示する。トリガーは `pull_request` と `push` だけにし、`pull_request_target` は使わない。シークレットは渡さない
+- `runs-on: ubuntu-24.04` で、ジョブを `swift:6.3.2-noble`（digest 固定）のコンテナの中で動かす
+- ジョブの流れ: checkout → mise のセットアップ（swiftlint と Node） → `bash scripts/lint.sh` → `npm ci --ignore-scripts` → `npx openspec validate --all --strict`
+- **xcodebuild のビルドとテストは CI では回さない**（SwiftUI / AppKit は Linux でビルドできない）。手元で `xcodebuild test` と Debug / Release のビルドを通してから push する。tasks.md の最終確認にも入れる
+- Action はタグではなくコミット SHA で固定する（`actions/checkout` v7.0.1、`jdx/mise-action` v5.0.0）。mise 本体もバージョンと sha256 で固定する
+- ワークフローに `permissions: contents: read` を明示し、checkout は `persist-credentials: false` にする。トリガーは `pull_request` と `push` だけにし、`pull_request_target` は使わない。シークレットは渡さない
+- main への push では、実行中の CI をキャンセルしない（コミットごとの結果を残す）
 
 ### D7. ビルド出力の置き場所
 
@@ -113,7 +125,8 @@ M0 ではトークンを取得も保持も送信もしない。gh サブプロ�
 
 ## Risks / Trade-offs
 
-- [Xcode 27.2 は 2026-09 時点で CI では beta] → CI はまず `Xcode_27.2_beta.app` で動かし、正式版が入ったらパスを差し替える。beta によるビルド失敗は CI のログで切り分ける
+- [CI でビルドとテストを回さない] → macOS 固有のビルドエラーやテストの失敗は CI では見つからない。push の前に手元で `xcodebuild test` と Release のビルドを通すことを tasks.md と PR の Test plan で確かめる。必要になったら、macOS ランナーを手動実行（`workflow_dispatch`）のジョブとして足す
+- [Xcode 27.2 は 2026-10 時点で beta] → 手元は Xcode-beta.app で作業する。正式版が出たら入れ替える
 - [手元の Xcode が 27.0] → 実装の最初のタスクで 27.2 に更新し、`xcode-select` の切り替えとライセンス同意をする（sudo が要るのでユーザーが行う）。27.0 のままでも `.xcproj` は開けるが、プロジェクトを作る作業は 27.2 でしかできない
 - [`.xcproj` の形式はまだ新しく、ツールの対応が追いついていない] → `xcodebuild` が CLI で開けることを毎回確かめる（CLAUDE.md の約束どおり）。うまくいかない場合は直接編集をやめて Xcode の GUI で設定を変える
 - [swift-format と swiftlint のルールが食い違う] → 整形は swift-format だけに任せ、swiftlint 側の整形ルールを切る（D5）
@@ -125,4 +138,4 @@ M0 ではトークンを取得も保持も送信もしない。gh サブプロ�
 
 ## Open Questions
 
-- 27.2 の正式版が出た後に CI の `xcode-select` のパスを差し替えるのは、M0 の後でよい（spec にも tasks にも影響しない）
+- CI の swift-format を Swift 6.4 のイメージに上げるのは、M0 の後でよい（spec にも tasks にも影響しない）

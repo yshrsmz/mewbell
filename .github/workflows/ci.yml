@@ -1,5 +1,8 @@
 name: CI
 
+# macOS ランナーは高価なので、CI は ubuntu で動く範囲（lint と OpenSpec の検証）だけにする。
+# xcodebuild のビルドとテストは手元で実行する（README・tasks.md の最終確認を参照）。
+
 on:
   pull_request:
   push:
@@ -14,47 +17,26 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build-and-test:
-    runs-on: xcode-27
-    timeout-minutes: 30
-    env:
-      # Xcode 27.2 の正式版がランナーに入ったら /Applications/Xcode_27.2.app に変える
-      XCODE_PATH: /Applications/Xcode_27.2_beta.app
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # swift-format と、swiftlint が使う SourceKit は Swift ツールチェーンに含まれる
+    container:
+      image: swift:6.3.2-noble@sha256:c4336909a71b2e69b884f4078cdf98c0cd081911632cb349ef72abc4cbed69fc
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Select Xcode
-        run: |
-          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
-          xcodebuild -version
-
       - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           version: 2026.9.16
-          sha256: 86cda8dde0fa9181706e825323dd8e26e96721a1b3cf37cbc610dd1680fecfda # mise-v2026.9.16-macos-arm64
+          sha256: b6f8757201f6a2ee799f45f3f52ef7ca0b4071523637dc3b0b24264dd3333518 # mise-v2026.9.16-linux-x64
 
       - name: Lint
         run: bash scripts/lint.sh
 
-      - name: Build for testing (Debug)
-        run: >-
-          xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug
-          -derivedDataPath build/DerivedData
-          CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
-          build-for-testing
-
-      - name: Test
-        run: >-
-          xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug
-          -derivedDataPath build/DerivedData
-          CODE_SIGNING_ALLOWED=NO
-          test-without-building
-
-      - name: Build (Release)
-        run: >-
-          xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release
-          -derivedDataPath build/DerivedData
-          CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
-          build
+      - name: Validate OpenSpec
+        run: |
+          npm ci --ignore-scripts
+          npx openspec validate --all --strict

@@ -31,6 +31,8 @@ bash scripts/lint.sh         # swift-format（Xcode 同梱）と swiftlint
 bash scripts/run.sh          # ビルドして起動する
 ```
 
+CI（GitHub Actions）は ubuntu で lint と OpenSpec の検証だけを回します。ビルドとテストは CI で実行されないので、push する前に手元で通してください。
+
 ### 進め方
 
 仕様は [OpenSpec](https://github.com/Fission-AI/OpenSpec) で管理しています。正本は `openspec/specs/`、作業中の変更は `openspec/changes/` にあります。詳しくは [CLAUDE.md](CLAUDE.md) を参照してください。
