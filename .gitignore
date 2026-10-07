@@ -60,3 +60,9 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Node (OpenSpec CLI tooling)
+node_modules/
+
+# macOS
+.DS_Store
