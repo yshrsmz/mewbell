@@ -20,6 +20,10 @@ actor CredentialStore {
         return Set(tokens.keys)
     }
 
+    func remove(_ id: AccountID) {
+        tokens[id] = nil
+    }
+
     func removeAll() {
         tokens.removeAll()
     }

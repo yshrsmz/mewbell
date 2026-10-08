@@ -34,39 +34,6 @@ struct AccountTests {
     }
 }
 
-struct CredentialStoreTests {
-    private let alice = AccountID(host: "github.com", user: "alice")
-    private let bob = AccountID(host: "github.com", user: "bob")
-    private let token = AccessToken(ghOutput: Data("test-token".utf8))
-
-    @Test func discardsOnlyTheAccountsThatAreGone() async throws {
-        let store = CredentialStore()
-        let token = try #require(token)
-        await store.set(token, for: alice)
-        await store.set(token, for: bob)
-        await store.retainOnly([alice])
-        #expect(await store.token(for: alice) != nil)
-        #expect(await store.token(for: bob) == nil)
-    }
-
-    @Test func ignoresNewTokensAfterClosing() async throws {
-        let store = CredentialStore()
-        let token = try #require(token)
-        await store.set(token, for: alice)
-        await store.close()
-        await store.set(token, for: bob)
-        #expect(await store.token(for: alice) == nil)
-        #expect(await store.token(for: bob) == nil)
-    }
-
-    @Test func removesEverything() async throws {
-        let store = CredentialStore()
-        await store.set(try #require(token), for: alice)
-        await store.removeAll()
-        #expect(await store.token(for: alice) == nil)
-    }
-}
-
 /// gh を偽物にした `AccountDiscovery` のテスト環境。
 final class DiscoveryFixture: Sendable {
     let directory: TemporaryDirectory
@@ -96,7 +63,8 @@ final class DiscoveryFixture: Sendable {
 
     var configDirectory: URL { directory.url.appending(path: "config") }
 
-    func discovery(candidates: [String]? = nil) -> AccountDiscovery {
+    func discovery(candidates: [String]? = nil, runner: (any ProcessRunning)? = nil) -> AccountDiscovery {
+        let runner = runner ?? self.runner
         let locator = GhLocator(
             candidates: candidates ?? [ghPath], runner: runner, environment: [:], loginShell: { nil })
         return AccountDiscovery(
@@ -240,58 +208,74 @@ struct AccountDiscoveryTests {
         #expect(states.last == .notLoggedIn)
         #expect(await fixture.credentials.token(for: AccountID(host: "github.com", user: "alice")) == nil)
     }
-}
 
-/// 読み込みが呼ばれた回数を数え、`finish()` まで終わらない `AccountDiscovering`。
-final class BlockingDiscovery: AccountDiscovering {
-    private let calls = Mutex(0)
-    /// `finish()` された回数（読み込みを 1 回ずつ進める許可）と、許可を待っている読み込み
-    private let gate = Mutex<(permits: Int, waiters: [CheckedContinuation<Void, Never>])>((0, []))
-    private let recordedEvents = Mutex<[String]>([])
+    private let alice = AccountID(host: "github.com", user: "alice")
 
-    var callCount: Int { calls.withLock { $0 } }
-    /// 読み込みの終了と破棄が起きた順
-    var events: [String] { recordedEvents.withLock { $0 } }
-
-    func reload(userInitiated: Bool, update: @escaping @Sendable (DiscoveryState) async -> Void) async {
-        calls.withLock { $0 += 1 }
-        recordedEvents.withLock { $0.append(userInitiated ? "reload(user)" : "reload") }
-        await withCheckedContinuation { continuation in
-            let resumeNow = gate.withLock { gate in
-                if gate.permits > 0 {
-                    gate.permits -= 1
-                    return true
-                }
-                gate.waiters.append(continuation)
-                return false
-            }
-            if resumeNow {
-                continuation.resume()
-            }
-        }
-        await update(.notLoggedIn)
-        recordedEvents.withLock { $0.append("reloadFinished") }
+    @Test func refreshesATokenFromGh() async throws {
+        try fixture.writeHosts(twoAccounts)
+        let discovery = fixture.discovery()
+        _ = await reload(discovery)
+        await fixture.credentials.set(try #require(AccessToken(ghOutput: Data("old-token".utf8))), for: alice)
+        let token = await discovery.refreshToken(for: alice)
+        #expect(token?.value == "test-token-alice")
+        #expect(await fixture.credentials.token(for: alice)?.value == "test-token-alice")
+        #expect(fixture.tokenRequests.filter { $0.last == "alice" }.count == 2)
     }
 
-    func closeCredentials() async {
-        recordedEvents.withLock { $0.append("closed") }
+    @Test func dropsTheOldTokenWhenRefreshingFails() async throws {
+        try fixture.writeHosts(twoAccounts)
+        let discovery = fixture.discovery()
+        _ = await reload(discovery)
+        fixture.setFailing(["alice"])
+        #expect(await discovery.refreshToken(for: alice) == nil)
+        #expect(await fixture.credentials.token(for: alice) == nil)
     }
 
-    /// 待っている読み込みを 1 つ進める（待っていなければ、次の読み込みをすぐ通す）。
-    func finish() {
-        let waiter = gate.withLock { gate -> CheckedContinuation<Void, Never>? in
-            if gate.waiters.isEmpty {
-                gate.permits += 1
-                return nil
-            }
-            return gate.waiters.removeFirst()
-        }
-        waiter?.resume()
+    @Test func doesNotRefreshBeforeGhIsVerified() async throws {
+        await fixture.credentials.set(try #require(AccessToken(ghOutput: Data("old-token".utf8))), for: alice)
+        #expect(await fixture.discovery().refreshToken(for: alice) == nil)
+        #expect(await fixture.credentials.token(for: alice) == nil)
+        #expect(fixture.tokenRequests.isEmpty)
+    }
+
+    @Test func sharesARunningTokenFetchBetweenReloadAndRefresh() async throws {
+        try fixture.writeHosts(twoAccounts)
+        let gated = GatedProcessRunner(base: fixture.runner)
+        let discovery = fixture.discovery(runner: gated)
+        _ = await reload(discovery)
+        await fixture.credentials.remove(alice)
+        gated.close()
+        async let reloaded = reload(discovery)
+        await gated.waitUntilWaiting(1)
+        async let refreshed = discovery.refreshToken(for: alice)
+        // 取り直しが走っている取得に合流するまで待つ（合流しなければ 2 つ目の gh が門の前に並ぶ）
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(gated.waitingCount == 1)
+        gated.open()
+        let (states, token) = await (reloaded, refreshed)
+        #expect(token?.value == "test-token-alice")
+        #expect(states.last?.hasAccounts == true)
+        #expect(fixture.tokenRequests.filter { $0.last == "alice" }.count == 2)
     }
 }
 
 @MainActor
 struct AccountStoreTests {
+    @Test func reportsStateChanges() async {
+        let discovery = BlockingDiscovery()
+        let store = AccountStore(discovery: discovery, state: .ghNotFound)
+        let reported = LockedValue<[DiscoveryState]>([])
+        store.onStateChange = { state in reported.withLock { $0.append(state) } }
+        discovery.finish()
+        discovery.finish()
+        store.reload()
+        await store.waitForReload()
+        store.reload()
+        await store.waitForReload()
+        // 変わらなかった 2 回目は知らせない
+        #expect(reported.value == [.notLoggedIn])
+    }
+
     @Test func doesNotRunTwoReloadsAtOnce() async {
         let discovery = BlockingDiscovery()
         let store = AccountStore(discovery: discovery, state: .ghNotFound)

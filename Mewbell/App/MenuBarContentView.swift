@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MenuBarContentView: View {
     let store: AccountStore
+    let notifications: NotificationStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -12,19 +13,20 @@ struct MenuBarContentView: View {
                 Spacer()
                 Button {
                     store.reload(userInitiated: true)
+                    notifications.resumeStopped()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.borderless)
                 .disabled(store.isReloading)
-                .help("Reload gh accounts")
+                .help("Reload gh accounts and resume stopped accounts")
                 .accessibilityLabel("Reload")
             }
 
             Divider()
 
             if case .accounts(let statuses) = store.state {
-                AccountListView(statuses: statuses)
+                NotificationListView(statuses: statuses, feeds: notifications.feeds)
             } else {
                 GuidanceView(state: store.state)
             }
@@ -37,7 +39,7 @@ struct MenuBarContentView: View {
             .keyboardShortcut("q")
         }
         .padding()
-        .frame(width: 320, alignment: .leading)
+        .frame(width: 380, alignment: .leading)
         // ポップオーバーを開くたびに読み直す（ログイン直後に開けば一覧に出るように）
         .onAppear {
             store.reload()
@@ -46,16 +48,29 @@ struct MenuBarContentView: View {
 }
 
 #Preview("Accounts") {
+    let alice = AccountID(host: "github.com", user: "alice")
     MenuBarContentView(
         store: AccountStore(
             discovery: nil,
-            state: .accounts([
-                AccountStatus(
-                    account: Account(id: AccountID(host: "github.com", user: "alice"), isActive: true),
-                    tokenState: .ready)
-            ])))
+            state: .accounts([AccountStatus(account: Account(id: alice, isActive: true), tokenState: .ready)])),
+        notifications: NotificationStore(
+            makePoller: nil,
+            feeds: [
+                alice: FeedState(
+                    phase: .loaded(updatedAt: Date()),
+                    threads: (1...12).compactMap { index in
+                        RepositoryName(owner: "octo", name: index.isMultiple(of: 2) ? "app" : "lib").map { repository in
+                            NotificationThread(
+                                id: "\(index)", reason: "subscribed",
+                                updatedAt: Date().addingTimeInterval(-Double(index) * 600),
+                                title: "Thread \(index)", kind: .issue, subjectURL: nil,
+                                repository: repository)
+                        }
+                    })
+            ]))
 }
 
 #Preview("gh not found") {
-    MenuBarContentView(store: AccountStore(discovery: nil, state: .ghNotFound))
+    MenuBarContentView(
+        store: AccountStore(discovery: nil, state: .ghNotFound), notifications: NotificationStore(makePoller: nil))
 }
