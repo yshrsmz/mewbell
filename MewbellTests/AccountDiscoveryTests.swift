@@ -49,6 +49,16 @@ struct CredentialStoreTests {
         #expect(await !store.contains(bob))
     }
 
+    @Test func ignoresNewTokensAfterClosing() async throws {
+        let store = CredentialStore()
+        let token = try #require(token)
+        await store.set(token, for: alice)
+        await store.close()
+        await store.set(token, for: bob)
+        #expect(await !store.contains(alice))
+        #expect(await !store.contains(bob))
+    }
+
     @Test func removesEverything() async throws {
         let store = CredentialStore()
         await store.set(try #require(token), for: alice)
@@ -226,7 +236,8 @@ struct AccountDiscoveryTests {
 /// 読み込みが呼ばれた回数を数え、`finish()` まで終わらない `AccountDiscovering`。
 final class BlockingDiscovery: AccountDiscovering {
     private let calls = Mutex(0)
-    private let gate = AsyncStream<Void>.makeStream()
+    /// `finish()` された回数（読み込みを 1 回ずつ進める許可）と、許可を待っている読み込み
+    private let gate = Mutex<(permits: Int, waiters: [CheckedContinuation<Void, Never>])>((0, []))
     private let recordedEvents = Mutex<[String]>([])
 
     var callCount: Int { calls.withLock { $0 } }
@@ -235,34 +246,57 @@ final class BlockingDiscovery: AccountDiscovering {
 
     func reload(update: @escaping @Sendable (DiscoveryState) async -> Void) async {
         calls.withLock { $0 += 1 }
-        // キャンセルされると、待ちが終わって次へ進む
-        for await _ in gate.stream { break }
+        await withCheckedContinuation { continuation in
+            let resumeNow = gate.withLock { gate in
+                if gate.permits > 0 {
+                    gate.permits -= 1
+                    return true
+                }
+                gate.waiters.append(continuation)
+                return false
+            }
+            if resumeNow {
+                continuation.resume()
+            }
+        }
         await update(.notLoggedIn)
         recordedEvents.withLock { $0.append("reloadFinished") }
     }
 
-    func discardAllCredentials() async {
-        recordedEvents.withLock { $0.append("discarded") }
+    func closeCredentials() async {
+        recordedEvents.withLock { $0.append("closed") }
     }
 
+    /// 待っている読み込みを 1 つ進める（待っていなければ、次の読み込みをすぐ通す）。
     func finish() {
-        gate.continuation.yield()
+        let waiter = gate.withLock { gate -> CheckedContinuation<Void, Never>? in
+            if gate.waiters.isEmpty {
+                gate.permits += 1
+                return nil
+            }
+            return gate.waiters.removeFirst()
+        }
+        waiter?.resume()
     }
 }
 
 @MainActor
 struct AccountStoreTests {
-    @Test func ignoresAReloadWhileOneIsRunning() async {
+    @Test func doesNotRunTwoReloadsAtOnce() async {
         let discovery = BlockingDiscovery()
         let store = AccountStore(discovery: discovery, state: .ghNotFound)
         store.reload()
         #expect(store.state == .checking)
         #expect(store.isReloading)
         store.reload()
-        await Task.yield()
+        for _ in 0..<5 {
+            await Task.yield()
+        }
+        #expect(discovery.callCount == 1)
+        discovery.finish()
         discovery.finish()
         await store.waitForReload()
-        #expect(discovery.callCount == 1)
+        #expect(discovery.callCount == 2)
         #expect(store.state == .notLoggedIn)
         #expect(!store.isReloading)
     }
@@ -276,14 +310,29 @@ struct AccountStoreTests {
         discovery.finish()
     }
 
-    @Test func stopsAReloadBeforeDiscardingCredentials() async {
+    @Test func runsAQueuedReloadAfterTheCurrentOne() async {
         let discovery = BlockingDiscovery()
         let store = AccountStore(discovery: discovery)
         store.reload()
-        await Task.yield()
+        store.reload()
+        store.reload()
+        discovery.finish()
+        discovery.finish()
+        await store.waitForReload()
+        #expect(discovery.callCount == 2)
+    }
+
+    @Test func closesCredentialsAndRefusesToReloadWhenTerminating() async {
+        let discovery = BlockingDiscovery()
+        let store = AccountStore(discovery: discovery)
+        store.reload()
         await store.discardCredentials()
-        #expect(discovery.events == ["reloadFinished", "discarded"])
+        #expect(discovery.events.contains("closed"))
+        discovery.finish()
+        await store.waitForReload()
+        store.reload()
         #expect(!store.isReloading)
+        #expect(discovery.callCount == 1)
     }
 
     @Test func doesNothingWithoutDiscovery() {

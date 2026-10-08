@@ -4,7 +4,8 @@ import os
 /// gh 実行ファイルの候補を検証する。
 enum ExecutableValidator {
     /// 候補が使えるとき、シンボリックリンクを解決した実体のパスを返す。
-    /// 絶対パスで、実体が通常ファイルで、現在のユーザーが実行でき、所有者以外が書き込めないことを確かめる。
+    /// 絶対パスで、実体が通常ファイルで、現在のユーザーが実行でき、他人が書き換えられないことを確かめる。
+    /// 他人が書き換えられないとは、ファイルとそのディレクトリの所有者が自分か root で、group / world に書き込み権が無いこと。
     static func validate(_ path: String) -> URL? {
         guard path.hasPrefix("/"), let resolvedPointer = realpath(path, nil) else { return nil }
         let resolved = String(cString: resolvedPointer)
@@ -13,10 +14,18 @@ enum ExecutableValidator {
         var info = stat()
         guard stat(resolved, &info) == 0,
             info.st_mode & S_IFMT == S_IFREG,
-            info.st_mode & (S_IWGRP | S_IWOTH) == 0,
+            isProtected(info),
             access(resolved, X_OK) == 0
         else { return nil }
+        // 他人が書き込めるディレクトリにあると、ファイルを差し替えられる
+        var directoryInfo = stat()
+        let directory = URL(filePath: resolved).deletingLastPathComponent().path
+        guard stat(directory, &directoryInfo) == 0, isProtected(directoryInfo) else { return nil }
         return URL(filePath: resolved)
+    }
+
+    private static func isProtected(_ info: stat) -> Bool {
+        (info.st_uid == getuid() || info.st_uid == 0) && info.st_mode & (S_IWGRP | S_IWOTH) == 0
     }
 }
 
@@ -57,6 +66,7 @@ actor GhLocator {
     private let environment: [String: String]
     private let loginShell: @Sendable () -> String?
     /// ログインシェルでの検索。最初に必要になったときに 1 回だけ始め、同時に呼ばれても同じ結果を待つ
+    /// （呼び出し側がキャンセルされても検索は止まらないが、5 秒のタイムアウトで終わる）
     private var loginShellSearch: Task<String?, Never>?
 
     init(

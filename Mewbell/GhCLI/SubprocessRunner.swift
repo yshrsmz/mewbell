@@ -35,16 +35,21 @@ struct SubprocessRunner: ProcessRunning {
         }
         defer {
             timeoutTask.cancel()
-            // 結果を返した後は読まない（孫プロセスがパイプを開いたままでも、ハンドラーとディスクリプターを残さない）
+            // 結果を返した後は読まない（孫プロセスがパイプを開いたままでもハンドラーを残さない）。
+            // ここで close() すると、別スレッドで走っている最中のハンドラーが閉じた fd を読んで落ちるので、
+            // ディスクリプターは FileHandle の解放に任せる
             for pipe in [stdoutPipe, stderrPipe] {
                 pipe.fileHandleForReading.readabilityHandler = nil
-                try? pipe.fileHandleForReading.close()
             }
         }
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                state.start(continuation)
+                // タイムアウトやキャンセルが先に届いていたら、起動しない
+                guard state.start(continuation) else {
+                    retained.release()
+                    return
+                }
                 do {
                     try process.run()
                     state.launched(pid: process.processIdentifier)
@@ -122,7 +127,8 @@ private final class RunState: Sendable {
         self.stderrLimit = stderrLimit
     }
 
-    func start(_ continuation: CheckedContinuation<ProcessOutput, any Error>) {
+    /// 結果の受け取り先を登録する。すでに失敗していればそのエラーで返し、false を返す（起動しない）。
+    func start(_ continuation: CheckedContinuation<ProcessOutput, any Error>) -> Bool {
         let earlyFailure = inner.withLock { inner -> (any Error)? in
             if inner.finished { return inner.failure ?? CancellationError() }
             inner.continuation = continuation
@@ -131,7 +137,9 @@ private final class RunState: Sendable {
         // タイムアウトやキャンセルが先に届いていたら、すぐに返す
         if let earlyFailure {
             continuation.resume(throwing: earlyFailure)
+            return false
         }
+        return true
     }
 
     func launched(pid: pid_t) {

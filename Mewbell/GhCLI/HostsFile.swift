@@ -111,7 +111,7 @@ struct HostsFile: Sendable, Equatable {
 
             let activeUser = entry["user"]?.scalar?.string
             let listedUsers: [String]
-            if let users = entry["users"]?.mapping {
+            if let users = entry["users"]?.mapping, !users.isEmpty {
                 listedUsers = users.compactMap { $0.key.scalar?.string }
             } else {
                 listedUsers = activeUser.map { [$0] } ?? []

@@ -34,7 +34,8 @@ enum DiscoveryState: Sendable, Equatable {
 protocol AccountDiscovering: Sendable {
     /// 読み直し、途中と最後の状態を `update` に渡す。
     func reload(update: @escaping @Sendable (DiscoveryState) async -> Void) async
-    func discardAllCredentials() async
+    /// トークンをすべて捨て、以後は受け取らない（アプリの終了時）。
+    func closeCredentials() async
 }
 
 actor AccountDiscovery: AccountDiscovering {
@@ -88,8 +89,8 @@ actor AccountDiscovery: AccountDiscovering {
         await update(state)
     }
 
-    func discardAllCredentials() async {
-        await credentials.removeAll()
+    func closeCredentials() async {
+        await credentials.close()
     }
 
     private func discover(update: @Sendable (DiscoveryState) async -> Void) async -> DiscoveryState {

@@ -28,6 +28,17 @@ struct ExecutableValidatorTests {
         #expect(ExecutableValidator.validate(path) == nil)
     }
 
+    @Test func rejectsAFileInADirectoryOthersCanWrite() throws {
+        let path = try directory.makeFile("shared/gh")
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o777], ofItemAtPath: directory.url.appending(path: "shared").path)
+        #expect(ExecutableValidator.validate(path) == nil)
+    }
+
+    @Test func acceptsARootOwnedExecutable() {
+        #expect(ExecutableValidator.validate("/bin/sh") != nil)
+    }
+
     @Test func rejectsADirectory() throws {
         let path = directory.url.appending(path: "gh").path
         try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: false)

@@ -11,6 +11,10 @@ final class AccountStore {
     @ObservationIgnored private static let logger = Logger(category: "Accounts")
     @ObservationIgnored private let discovery: (any AccountDiscovering)?
     private var reloadTask: Task<Void, Never>?
+    /// 読み直している間に要求が来たか（終わった後にもう一度読み直す）
+    @ObservationIgnored private var reloadRequested = false
+    /// 終了処理を始めたか（以後は読み直さない）
+    @ObservationIgnored private var isTerminating = false
 
     var isReloading: Bool { reloadTask != nil }
 
@@ -24,9 +28,15 @@ final class AccountStore {
         AccountStore(discovery: AccountDiscovery.live(credentials: CredentialStore()))
     }
 
-    /// 読み直す。読み直している間に呼ばれたときは何もしない（同じアカウントの gh を同時に走らせないため）。
+    /// 読み直す。読み直している間に呼ばれたときは、同じアカウントの gh を同時に走らせないよう、
+    /// 今の読み直しが終わってからもう一度読み直す（ログイン直後に開いたポップオーバーの要求を取りこぼさないため）。
     func reload() {
-        guard let discovery, reloadTask == nil else { return }
+        guard let discovery, !isTerminating else { return }
+        guard reloadTask == nil else {
+            reloadRequested = true
+            return
+        }
+        reloadRequested = false
         Self.logger.info("Reloading gh accounts")
         // 一覧が出ていないときは、確認中の表示にする
         if !state.hasAccounts {
@@ -37,20 +47,27 @@ final class AccountStore {
                 await self.apply(state)
             }
             reloadTask = nil
+            if reloadRequested {
+                reload()
+            }
         }
     }
 
-    /// 走っている読み直しが終わるのを待つ（テスト用）。
+    /// 読み直しが（続けて要求された分も含めて）終わるのを待つ（テスト用）。
     func waitForReload() async {
-        await reloadTask?.value
+        while let reloadTask {
+            await reloadTask.value
+        }
     }
 
-    /// 走っている読み直しを止めてから、メモリ上のトークンを捨てる（終了時用）。
-    /// 先に止めないと、捨てた後に読み直しがトークンを書き戻すことがある。
+    /// 終了時に、読み直しを止めてメモリ上のトークンを捨てる。
+    /// 走っている読み直しの終わりは待たない（ログインシェルの検索などで終了が遅れないように）。
+    /// その代わり、捨てた後は `CredentialStore` がトークンを受け取らない。
     func discardCredentials() async {
+        isTerminating = true
+        reloadRequested = false
         reloadTask?.cancel()
-        await reloadTask?.value
-        await discovery?.discardAllCredentials()
+        await discovery?.closeCredentials()
     }
 
     private func apply(_ state: DiscoveryState) {
