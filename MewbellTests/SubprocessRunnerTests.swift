@@ -51,6 +51,14 @@ struct SubprocessRunnerTests {
         #expect(kill(pid, 0) == -1 && errno == ESRCH)
     }
 
+    @Test func returnsWhenABackgroundChildKeepsThePipeOpen() async throws {
+        // シェルは すぐ終わるが、バックグラウンドの sleep が標準出力を開いたまま残る
+        let output = try await runner.run(
+            request("/bin/sh", ["-c", "/bin/sleep 3 & echo done"], timeout: .seconds(2)))
+        #expect(output.exitCode == 0)
+        #expect(String(bytes: output.stdout, encoding: .utf8) == "done\n")
+    }
+
     @Test func failsWhenStdoutExceedsTheLimit() async throws {
         await #expect(throws: ProcessRunError.outputTooLarge) {
             try await runner.run(request("/usr/bin/yes", stdoutLimit: 1024))
@@ -136,6 +144,12 @@ struct RedactionTests {
         let text = "error: \(classic) and \(oauth), also \(fineGrained)."
         let redacted = Redaction.redactTokens(in: text)
         #expect(redacted == "error: <redacted> and <redacted>, also <redacted>.")
+    }
+
+    @Test func redactsRefreshTokensAndLegacyHexTokens() {
+        let refresh = "gh" + "r_" + "abcDEF0123456789"
+        let legacy = String(repeating: "0123456789", count: 4)
+        #expect(Redaction.redactTokens(in: "\(refresh) \(legacy)") == "<redacted> <redacted>")
     }
 
     @Test func leavesOtherTextAlone() {

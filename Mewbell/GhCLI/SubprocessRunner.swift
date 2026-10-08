@@ -33,7 +33,14 @@ struct SubprocessRunner: ProcessRunning {
                 state.fail(ProcessRunError.timedOut)
             }
         }
-        defer { timeoutTask.cancel() }
+        defer {
+            timeoutTask.cancel()
+            // 結果を返した後は読まない（孫プロセスがパイプを開いたままでも、ハンドラーとディスクリプターを残さない）
+            for pipe in [stdoutPipe, stderrPipe] {
+                pipe.fileHandleForReading.readabilityHandler = nil
+                try? pipe.fileHandleForReading.close()
+            }
+        }
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -43,6 +50,9 @@ struct SubprocessRunner: ProcessRunning {
                     state.launched(pid: process.processIdentifier)
                 } catch {
                     retained.release()
+                    // 起動していないので、書き込み側を閉じる人がいない
+                    try? stdoutPipe.fileHandleForWriting.close()
+                    try? stderrPipe.fileHandleForWriting.close()
                     state.fail(ProcessRunError.launchFailed)
                 }
             }
@@ -94,7 +104,14 @@ private final class RunState: Sendable {
         var pid: pid_t = 0
         var continuation: CheckedContinuation<ProcessOutput, any Error>?
         var finished = false
+        /// continuation を受け取る前に失敗したときのエラー
+        var failure: (any Error)?
     }
+
+    /// 子プロセスが終了してから、パイプの EOF を待つ時間。
+    /// 子が起動したバックグラウンドのプロセス（ログインシェルの rc が起動するエージェントなど）がパイプを開いたままでも、
+    /// 結果を返せるようにする。
+    static let drainTimeout: Duration = .milliseconds(500)
 
     private let inner = Mutex(Inner())
     private let stdoutLimit: Int
@@ -106,14 +123,14 @@ private final class RunState: Sendable {
     }
 
     func start(_ continuation: CheckedContinuation<ProcessOutput, any Error>) {
-        let alreadyFinished = inner.withLock { inner in
-            if inner.finished { return true }
+        let earlyFailure = inner.withLock { inner -> (any Error)? in
+            if inner.finished { return inner.failure ?? CancellationError() }
             inner.continuation = continuation
-            return false
+            return nil
         }
-        // キャンセルが先に届いていたら、すぐに返す
-        if alreadyFinished {
-            continuation.resume(throwing: CancellationError())
+        // タイムアウトやキャンセルが先に届いていたら、すぐに返す
+        if let earlyFailure {
+            continuation.resume(throwing: earlyFailure)
         }
     }
 
@@ -157,6 +174,14 @@ private final class RunState: Sendable {
 
     func exited(status: Int32) {
         finishIfComplete { $0.exitStatus = status }
+        Task {
+            try? await Task.sleep(for: Self.drainTimeout)
+            // EOF が来ないままなら、そこまでに読んだ分で結果を返す
+            self.finishIfComplete {
+                $0.stdoutClosed = true
+                $0.stderrClosed = true
+            }
+        }
     }
 
     /// 失敗として結果を返し、子プロセスがまだ動いていれば終了させる。
@@ -164,6 +189,7 @@ private final class RunState: Sendable {
         let continuation = inner.withLock { inner -> CheckedContinuation<ProcessOutput, any Error>? in
             if inner.finished { return nil }
             inner.finished = true
+            inner.failure = error
             defer { inner.continuation = nil }
             return inner.continuation
         }

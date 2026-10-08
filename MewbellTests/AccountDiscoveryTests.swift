@@ -227,16 +227,23 @@ struct AccountDiscoveryTests {
 final class BlockingDiscovery: AccountDiscovering {
     private let calls = Mutex(0)
     private let gate = AsyncStream<Void>.makeStream()
+    private let recordedEvents = Mutex<[String]>([])
 
     var callCount: Int { calls.withLock { $0 } }
+    /// 読み込みの終了と破棄が起きた順
+    var events: [String] { recordedEvents.withLock { $0 } }
 
     func reload(update: @escaping @Sendable (DiscoveryState) async -> Void) async {
         calls.withLock { $0 += 1 }
+        // キャンセルされると、待ちが終わって次へ進む
         for await _ in gate.stream { break }
         await update(.notLoggedIn)
+        recordedEvents.withLock { $0.append("reloadFinished") }
     }
 
-    func discardAllCredentials() async {}
+    func discardAllCredentials() async {
+        recordedEvents.withLock { $0.append("discarded") }
+    }
 
     func finish() {
         gate.continuation.yield()
@@ -267,6 +274,16 @@ struct AccountStoreTests {
         store.reload()
         #expect(store.state == accounts)
         discovery.finish()
+    }
+
+    @Test func stopsAReloadBeforeDiscardingCredentials() async {
+        let discovery = BlockingDiscovery()
+        let store = AccountStore(discovery: discovery)
+        store.reload()
+        await Task.yield()
+        await store.discardCredentials()
+        #expect(discovery.events == ["reloadFinished", "discarded"])
+        #expect(!store.isReloading)
     }
 
     @Test func doesNothingWithoutDiscovery() {

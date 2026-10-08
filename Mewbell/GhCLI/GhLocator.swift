@@ -56,8 +56,8 @@ actor GhLocator {
     private let runner: any ProcessRunning
     private let environment: [String: String]
     private let loginShell: @Sendable () -> String?
-    private var didSearchLoginShell = false
-    private var loginShellResult: String?
+    /// ログインシェルでの検索。最初に必要になったときに 1 回だけ始め、同時に呼ばれても同じ結果を待つ
+    private var loginShellSearch: Task<String?, Never>?
 
     init(
         candidates: [String] = GhLocator.defaultCandidates,
@@ -81,11 +81,9 @@ actor GhLocator {
                 return url
             }
         }
-        if !didSearchLoginShell {
-            didSearchLoginShell = true
-            loginShellResult = await searchLoginShell()
-        }
-        return loginShellResult.flatMap(ExecutableValidator.validate)
+        let search = loginShellSearch ?? Task { await searchLoginShell() }
+        loginShellSearch = search
+        return await search.value.flatMap(ExecutableValidator.validate)
     }
 
     private func searchLoginShell() async -> String? {

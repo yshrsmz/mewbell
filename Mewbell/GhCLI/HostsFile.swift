@@ -117,7 +117,8 @@ struct HostsFile: Sendable, Equatable {
                 listedUsers = activeUser.map { [$0] } ?? []
             }
             var users: [String] = []
-            for user in listedUsers where !users.contains(user) {
+            // GitHub のログイン名は大文字・小文字を区別しないので、大文字・小文字だけが違う名前は 1 つにまとめる
+            for user in listedUsers where !users.contains(where: { $0.lowercased() == user.lowercased() }) {
                 if GhIdentifier.isValidUser(user) {
                     users.append(user)
                 } else {
@@ -126,7 +127,7 @@ struct HostsFile: Sendable, Equatable {
             }
             guard !users.isEmpty else { continue }
             hosts.append(
-                Host(name: name, users: users, activeUser: users.contains { $0 == activeUser } ? activeUser : nil))
+                Host(name: name, users: users, activeUser: users.first { $0.lowercased() == activeUser?.lowercased() }))
         }
         return HostsFile(hosts: hosts)
     }

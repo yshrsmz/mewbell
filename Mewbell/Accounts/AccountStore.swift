@@ -45,7 +45,11 @@ final class AccountStore {
         await reloadTask?.value
     }
 
+    /// 走っている読み直しを止めてから、メモリ上のトークンを捨てる（終了時用）。
+    /// 先に止めないと、捨てた後に読み直しがトークンを書き戻すことがある。
     func discardCredentials() async {
+        reloadTask?.cancel()
+        await reloadTask?.value
         await discovery?.discardAllCredentials()
     }
 

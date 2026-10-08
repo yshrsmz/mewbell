@@ -120,6 +120,17 @@ struct GhLocatorTests {
         #expect(runner.requests.count == 1)
     }
 
+    @Test func concurrentCallersShareTheLoginShellResult() async throws {
+        let ghFile = try directory.makeFile("custom/gh")
+        let runner = FakeProcessRunner { _ in FakeProcessRunner.output("\(ghFile)\n") }
+        let locator = locator(candidates: [], runner: runner)
+        async let first = locator.locate()
+        async let second = locator.locate()
+        let results = await [first, second]
+        #expect(results.allSatisfy { $0 != nil })
+        #expect(runner.requests.count == 1)
+    }
+
     @Test func reusesTheLoginShellResultWithoutSearchingAgain() async throws {
         let ghFile = try directory.makeFile("custom/gh")
         let runner = FakeProcessRunner { _ in FakeProcessRunner.output("\(ghFile)\n") }

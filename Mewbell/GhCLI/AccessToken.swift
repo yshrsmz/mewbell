@@ -29,6 +29,7 @@ enum Redaction {
     static let placeholder = "<redacted>"
 
     static func redactTokens(in text: String) -> String {
-        text.replacing(/(?:gh[opsu]_|github_pat_)[A-Za-z0-9_]+/, with: placeholder)
+        // gh の各種トークン（ghp_ / gho_ / ghu_ / ghs_ / ghr_ など）、fine-grained PAT、古い形式の 40 桁 16 進のトークン
+        text.replacing(/(?:gh[a-z]_|github_pat_)[A-Za-z0-9_]+|\b[0-9a-fA-F]{40}\b/, with: placeholder)
     }
 }

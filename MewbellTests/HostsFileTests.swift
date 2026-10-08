@@ -115,6 +115,18 @@ struct HostsFileTests {
                 ]))
     }
 
+    @Test func mergesUsersThatDifferOnlyInCase() throws {
+        let yaml = """
+            github.com:
+                users:
+                    Alice:
+                    alice:
+                user: alice
+            """
+        let hosts = try HostsFile.parse(yaml)
+        #expect(hosts == HostsFile(hosts: [.init(name: "github.com", users: ["Alice"], activeUser: "Alice")]))
+    }
+
     @Test func treatsAnEmptyFileAsNoHosts() throws {
         #expect(try HostsFile.parse("") == HostsFile(hosts: []))
     }
