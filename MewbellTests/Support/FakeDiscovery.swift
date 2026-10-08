@@ -29,9 +29,7 @@ final class GatedProcessRunner: ProcessRunning {
     }
 
     func waitUntilWaiting(_ count: Int) async {
-        while waitingCount < count {
-            await Task.yield()
-        }
+        await waitUntil { self.waitingCount >= count }
     }
 
     func run(_ request: ProcessRequest) async throws -> ProcessOutput {

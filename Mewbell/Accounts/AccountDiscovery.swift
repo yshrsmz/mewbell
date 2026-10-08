@@ -44,7 +44,7 @@ protocol AccountDiscovering: Sendable {
     func refreshToken(for id: AccountID) async -> AccessToken?
 }
 
-actor AccountDiscovery: AccountDiscovering {
+actor AccountDiscovery: AccountDiscovering, TokenProviding {
     private static let logger = Logger(category: "Accounts")
 
     private let locator: GhLocator
@@ -99,6 +99,14 @@ actor AccountDiscovery: AccountDiscovering {
 
     func closeCredentials() async {
         await credentials.close()
+    }
+
+    func currentToken(for id: AccountID) async -> AccessToken? {
+        await credentials.token(for: id)
+    }
+
+    func discardToken(for id: AccountID) async {
+        await credentials.remove(id)
     }
 
     func refreshToken(for id: AccountID) async -> AccessToken? {

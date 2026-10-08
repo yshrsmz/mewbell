@@ -7,7 +7,7 @@ enum FeedPhase: Sendable, Equatable {
     /// 取得できた
     case loaded(updatedAt: Date)
     /// 失敗して `nextAttempt` まで待っている（スレッドは最後に取得できたもの）
-    case retrying(nextAttempt: Date, rateLimited: Bool, lastSuccess: Date?)
+    case retrying(nextAttempt: Date, rateLimited: Bool)
     /// トークンに `repo` も `notifications` も無いので止めた
     case scopeInsufficient
     /// トークンを取り直しても 401 だったので止めた

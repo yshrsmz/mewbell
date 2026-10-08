@@ -46,7 +46,7 @@ GitHub の Notifications API の前提:
 | `Polling/` | `PollSchedule` | 結果から次の取得までの待ち時間を決める純粋な関数（D5） |
 | `Polling/` | `AccountPoller`（actor） | 1 アカウントのポーリングのループと状態（`Last-Modified`、失敗の回数、スコープ確認済みか）を持つ（D4） |
 | `Polling/` | `NotificationStore`（`@MainActor @Observable`） | アカウントごとの `FeedState` を UI に見せ、アカウントの状態に合わせて `AccountPoller` を起動・停止する |
-| `Polling/` | `TokenProviding`（protocol） | ポーラーがトークンを受け取る口。`currentToken(for:)` と `refreshToken(for:)`（捨てて取り直す）。実装は `CredentialStore` と `AccountDiscovery` に委ねる |
+| `Polling/` | `TokenProviding`（protocol） | ポーラーがトークンを受け取る口。`currentToken(for:)`、`refreshToken(for:)`（捨てて取り直す）、`discardToken(for:)`。`AccountDiscovery` が準拠し、自分の `CredentialStore` を使う |
 | `Accounts/` | `AccountDiscovery`、`CredentialStore` | `refreshToken(for:)` と `CredentialStore.remove(_:)` を足す。同じアカウントのトークン取得の `Task` を共有する（D6） |
 | `UI/` | `NotificationListView`、`AccountSectionView`、`ThreadRow`、`FeedStatusView` | アカウントの区画、リポジトリの見出し、スレッドの行、取得の状態と案内（D9） |
 

@@ -186,7 +186,7 @@ struct FeedStatusView: View {
                     Text("ago")
                 }
                 .foregroundStyle(.secondary)
-            case .retrying(let nextAttempt, let rateLimited, _):
+            case .retrying(let nextAttempt, let rateLimited):
                 Label {
                     HStack(spacing: 4) {
                         Text(rateLimited ? "Rate limited. Retrying at" : "Could not fetch notifications. Retrying at")
@@ -249,7 +249,7 @@ struct FeedStatusView: View {
                 ].compactMap { $0 }),
             bob.id: FeedState(phase: .scopeInsufficient, threads: []),
             dave.id: FeedState(
-                phase: .retrying(nextAttempt: now.addingTimeInterval(240), rateLimited: false, lastSuccess: now),
+                phase: .retrying(nextAttempt: now.addingTimeInterval(240), rateLimited: false),
                 threads: [thread("4", "acme/web", .discussion, "team_mention", minutesAgo: 600)].compactMap { $0 }),
             erin.id: FeedState(phase: .unauthorized, threads: []),
         ]

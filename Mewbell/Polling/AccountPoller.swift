@@ -25,7 +25,6 @@ actor AccountPoller {
     /// 今のトークンでスコープを確かめたか
     private var scopesVerified = false
     private var consecutiveFailures = 0
-    private var lastSuccess: Date?
 
     init(
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,
@@ -159,16 +158,12 @@ actor AccountPoller {
 
     private func succeeded(pollInterval: Int?) -> Duration {
         consecutiveFailures = 0
-        let date = now()
-        lastSuccess = date
-        state.phase = .loaded(updatedAt: date)
+        state.phase = .loaded(updatedAt: now())
         return PollSchedule.afterSuccess(pollInterval: pollInterval)
     }
 
     private func retrying(after delay: Duration, rateLimited: Bool) -> FeedPhase {
-        .retrying(
-            nextAttempt: now().addingTimeInterval(Double(delay.components.seconds)), rateLimited: rateLimited,
-            lastSuccess: lastSuccess)
+        .retrying(nextAttempt: now().addingTimeInterval(Double(delay.components.seconds)), rateLimited: rateLimited)
     }
 
     /// 止まった状態にする。スレッドは捨てる。

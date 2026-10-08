@@ -126,9 +126,7 @@ struct AccountPollerTests {
         #expect(fixture.last?.threads.count == 2)
         #expect(
             fixture.last?.phase
-                == .retrying(
-                    nextAttempt: PollerFixture.now.addingTimeInterval(240), rateLimited: false,
-                    lastSuccess: PollerFixture.now))
+                == .retrying(nextAttempt: PollerFixture.now.addingTimeInterval(240), rateLimited: false))
         fixture.respond([PollerFixture.ok(1...1)])
         await fixture.sleeper.waitForSleeps(5)
         #expect(fixture.sleeper.durations.last == .seconds(60))
@@ -140,7 +138,7 @@ struct AccountPollerTests {
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         #expect(fixture.sleeper.durations == [.seconds(300)])
-        if case .retrying(_, let rateLimited, _) = fixture.last?.phase {
+        if case .retrying(_, let rateLimited) = fixture.last?.phase {
             #expect(rateLimited)
         } else {
             Issue.record("unexpected phase \(String(describing: fixture.last?.phase))")

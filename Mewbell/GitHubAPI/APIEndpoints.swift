@@ -35,25 +35,23 @@ struct APIEndpoints: Sendable, Equatable {
     /// トークンを付けて送ってよい URL か。スキームが `https`、ホストとポートが API ベースと一致し、
     /// ユーザー情報を含まず、パスが API ベースのパスの下にあるときだけ true。
     func isAllowedRequestURL(_ url: URL) -> Bool {
+        pathComponentsBelowAPIBase(url) != nil
+    }
+
+    /// API ベースのパスより後ろのパスの要素。トークンを付けて送ってよい URL でなければ nil。
+    func pathComponentsBelowAPIBase(_ url: URL) -> [String]? {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
             let base = URLComponents(url: apiBaseURL, resolvingAgainstBaseURL: false)
-        else { return false }
+        else { return nil }
         guard components.scheme?.lowercased() == "https",
             components.host?.lowercased() == base.host?.lowercased(),
             components.port == nil || components.port == 443,
             components.user == nil, components.password == nil
-        else { return false }
+        else { return nil }
         let path = components.percentEncodedPath
         let basePath = base.percentEncodedPath
-        guard !path.split(separator: "/").contains(where: { $0 == ".." || $0 == "." }) else { return false }
-        return basePath.isEmpty || path == basePath || path.hasPrefix(basePath + "/")
-    }
-
-    /// API ベースのパスより後ろのパスの要素。API ベースの下に無ければ nil。
-    func pathComponentsBelowAPIBase(_ url: URL) -> [String]? {
-        guard isAllowedRequestURL(url) else { return nil }
-        let basePath = URLComponents(url: apiBaseURL, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? ""
-        let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? ""
+        guard !path.split(separator: "/").contains(where: { $0 == ".." || $0 == "." }) else { return nil }
+        guard basePath.isEmpty || path == basePath || path.hasPrefix(basePath + "/") else { return nil }
         return path.dropFirst(basePath.count).split(separator: "/").map(String.init)
     }
 }

@@ -10,11 +10,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             accountStore = AccountStore(discovery: nil)
             notificationStore = NotificationStore(makePoller: nil)
         } else {
-            let credentials = CredentialStore()
-            let discovery = AccountDiscovery.live(credentials: credentials)
+            let discovery = AccountDiscovery.live(credentials: CredentialStore())
             accountStore = AccountStore(discovery: discovery)
-            notificationStore = NotificationStore.live(
-                tokens: LiveTokenProvider(credentials: credentials, discovery: discovery))
+            notificationStore = NotificationStore.live(tokens: discovery)
         }
         super.init()
         accountStore.onStateChange = { [notificationStore] state in

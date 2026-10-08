@@ -1,6 +1,6 @@
 import Foundation
 
-/// HTTP のレスポンス。ヘッダー名は大文字小文字を区別せずに引く。
+/// HTTP のレスポンス。ヘッダー名は大文字小文字を区別せずに引き、値は前後の空白を除いて返す。
 struct HTTPResponse: Sendable {
     let statusCode: Int
     let body: Data
@@ -13,7 +13,7 @@ struct HTTPResponse: Sendable {
     }
 
     func header(_ name: String) -> String? {
-        headers[name.lowercased()]
+        headers[name.lowercased()]?.trimmingCharacters(in: .whitespaces)
     }
 }
 

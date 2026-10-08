@@ -7,20 +7,3 @@ protocol TokenProviding: Sendable {
     /// トークンを捨てる（取り直しても 401 だったとき）。
     func discardToken(for id: AccountID) async
 }
-
-struct LiveTokenProvider: TokenProviding {
-    let credentials: CredentialStore
-    let discovery: any AccountDiscovering
-
-    func currentToken(for id: AccountID) async -> AccessToken? {
-        await credentials.token(for: id)
-    }
-
-    func refreshToken(for id: AccountID) async -> AccessToken? {
-        await discovery.refreshToken(for: id)
-    }
-
-    func discardToken(for id: AccountID) async {
-        await credentials.remove(id)
-    }
-}

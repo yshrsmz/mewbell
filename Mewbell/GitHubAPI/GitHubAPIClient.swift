@@ -148,12 +148,12 @@ struct GitHubAPIClient: Sendable {
         case 401:
             return .unauthorized
         case 403:
-            if let seconds = response.header("Retry-After").flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }) {
+            if let seconds = response.header("Retry-After").flatMap({ Int($0) }) {
                 return .rateLimited(retryAt: now().addingTimeInterval(TimeInterval(max(seconds, 0))))
             }
-            if response.header("X-RateLimit-Remaining")?.trimmingCharacters(in: .whitespaces) == "0" {
+            if response.header("X-RateLimit-Remaining") == "0" {
                 let reset = response.header("X-RateLimit-Reset")
-                    .flatMap { TimeInterval($0.trimmingCharacters(in: .whitespaces)) }
+                    .flatMap { TimeInterval($0) }
                     .map(Date.init(timeIntervalSince1970:))
                 return .rateLimited(retryAt: reset ?? now())
             }
@@ -166,6 +166,6 @@ struct GitHubAPIClient: Sendable {
     }
 
     private static func pollInterval(_ response: HTTPResponse) -> Int? {
-        response.header("X-Poll-Interval").flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+        response.header("X-Poll-Interval").flatMap { Int($0) }
     }
 }
