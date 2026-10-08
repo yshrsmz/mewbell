@@ -175,6 +175,25 @@ struct AccountPollerTests {
         #expect(fixture.sleeper.durations.isEmpty)
     }
 
+    @Test func startsTheBackoffOverAfterResuming() async {
+        // 通信の失敗が 2 回続いた後、スコープ不足で止まる
+        fixture.respond([])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        fixture.sleeper.advance()
+        await fixture.sleeper.waitForSleeps(2)
+        fixture.respond([PollerFixture.ok(1...1, scopes: "gist")])
+        fixture.sleeper.advance()
+        await waitUntil { self.fixture.last?.phase == .scopeInsufficient }
+        // 再開した最初の取得が失敗したら、60 秒から数え直す
+        fixture.tokens.refreshedValue.value = "test-token-alice-2"
+        fixture.respond([])
+        fixture.poller.resume()
+        await fixture.sleeper.waitForSleeps(3)
+        #expect(fixture.sleeper.durations == [60, 120, 60].map { .seconds($0) })
+        fixture.poller.stop()
+    }
+
     @Test func waitsWithoutSendingWhenThereIsNoToken() async {
         await fixture.tokens.discardToken(for: PollerFixture.alice)
         fixture.respond([PollerFixture.ok(1...1)])

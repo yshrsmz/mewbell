@@ -173,6 +173,7 @@ actor AccountPoller {
         state = FeedState(phase: phase, threads: [])
         lastModified = nil
         scopesVerified = false
+        consecutiveFailures = 0
         await publish(state)
     }
 

@@ -174,9 +174,9 @@ private struct RelativeTimeText: View {
     let date: Date
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            Text(date, format: .relative(presentation: .named, unitsStyle: .abbreviated))
-                .id(context.date)
+        TimelineView(.periodic(from: .now, by: 30)) { _ in
+            // 文字列にしてから渡す（時刻が進むと文字列が変わり、描き直される）
+            Text(date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))
         }
     }
 }

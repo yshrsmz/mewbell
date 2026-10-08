@@ -238,6 +238,21 @@ struct AccountDiscoveryTests {
         #expect(fixture.tokenRequests.isEmpty)
     }
 
+    @Test func doesNotStoreATokenForAnAccountRemovedWhileRefreshing() async throws {
+        try fixture.writeHosts(twoAccounts)
+        let gated = GatedProcessRunner(base: fixture.runner)
+        let discovery = fixture.discovery(runner: gated)
+        _ = await reload(discovery)
+        gated.close()
+        async let refreshed = discovery.refreshToken(for: alice)
+        await gated.waitUntilWaiting(1)
+        try fixture.writeHosts("ghe.example.com:\n    users:\n        dave:\n    user: dave\n")
+        _ = await reload(discovery)
+        gated.open()
+        #expect(await refreshed == nil)
+        #expect(await fixture.credentials.token(for: alice) == nil)
+    }
+
     @Test func sharesARunningTokenFetchBetweenReloadAndRefresh() async throws {
         try fixture.writeHosts(twoAccounts)
         let gated = GatedProcessRunner(base: fixture.runner)

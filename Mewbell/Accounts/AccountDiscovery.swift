@@ -54,6 +54,9 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     private var verifiedGhPath: URL?
     /// アカウントごとの走っている `gh auth token`（読み直しと取り直しで共有する）
     private var inFlightTokenFetches: [AccountID: Task<AccessToken?, Never>] = [:]
+    /// 最後の読み直しで `hosts.yml` にあったアカウント。ここに無いアカウントのトークンは保存しない
+    /// （取得の途中でアカウントが消えたときに、捨てたトークンを書き戻さないため）
+    private var knownAccountIDs: Set<AccountID> = []
 
     init(
         locator: GhLocator,
@@ -89,6 +92,7 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         let state = await discover(userInitiated: userInitiated, update: update)
         // アカウントを使えない状態になったら、持っているトークンをすべて捨てる
         if !state.hasAccounts {
+            knownAccountIDs = []
             await credentials.removeAll()
         }
         await update(state)
@@ -110,6 +114,7 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     /// 同じアカウントの取得が走っていれば、その結果を共有する。
     func refreshToken(for id: AccountID) async -> AccessToken? {
         await credentials.remove(id)
+        guard knownAccountIDs.contains(id) else { return nil }
         guard let ghPath = verifiedGhPath else {
             Self.logger.error("Cannot refresh the token of \(id) before gh is verified")
             return nil
@@ -119,17 +124,21 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     }
 
     /// `gh auth token` を実行して、取れたトークンを保存する。同じアカウントの取得が走っていれば、その結果を待つ。
+    /// 取得を始めた呼び出し元がキャンセルされたら gh も止める（合流しただけの呼び出し元のキャンセルでは止めない）。
     private func fetchToken(for id: AccountID, using client: GhClient) async -> AccessToken? {
         if let running = inFlightTokenFetches[id] {
             return await running.value
         }
         let task = Task { await client.token(host: id.host, user: id.user) }
         inFlightTokenFetches[id] = task
-        let token = await task.value
-        inFlightTokenFetches[id] = nil
-        if let token {
-            await credentials.set(token, for: id)
+        let token = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
         }
+        inFlightTokenFetches[id] = nil
+        guard let token, knownAccountIDs.contains(id) else { return nil }
+        await credentials.set(token, for: id)
         return token
     }
 
@@ -162,7 +171,8 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         let accounts = hostsFile.map(Account.accounts(from:)) ?? []
         guard !accounts.isEmpty else { return .notLoggedIn }
 
-        let held = await credentials.retainOnly(Set(accounts.map(\.id)))
+        knownAccountIDs = Set(accounts.map(\.id))
+        let held = await credentials.retainOnly(knownAccountIDs)
         let pending = accounts.filter { !held.contains($0.id) }
         if !pending.isEmpty {
             await update(
