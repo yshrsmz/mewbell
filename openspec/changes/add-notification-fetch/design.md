@@ -128,7 +128,7 @@ GitHub の Notifications API の前提:
 | `URLSessionTransport` | `Sendable` な final class（`URLSession` を持つだけ） | URLSession の delegate キュー |
 | `AccountDiscovery`、`CredentialStore` | actor（M1 のまま） | gh の実行とトークンの保持 |
 
-- `AccountStore` は状態が変わったときに `onStateChange` を呼び、`AppDelegate` がそれを `NotificationStore.sync(with:)` につなぐ。`sync` は `.accounts` のうち `tokenState == .ready` のアカウントにポーラーを起動し、それ以外（消えた、`.unavailable`、全体の状態が `.accounts` 以外）のポーラーを止めて `FeedState` を消す。すでに動いているアカウントはそのままにする
+- `AccountStore` は状態が変わったときに `onStateChange` を呼び、`AppDelegate` がそれを `NotificationStore.sync(with:)` につなぐ。`sync` は `.accounts` のうち `tokenState == .ready` のアカウントにポーラーを起動し、それ以外（消えた、`.unavailable`、全体の状態が `.accounts` 以外）のポーラーを止めて `FeedState` を消す。すでにポーラーがあるアカウントはそのままにする。「スコープ不足」「認証エラー」で止まっているポーラーも、アカウントが「使える」と報告され続けている間は残し、`sync` では再開しない（再開は `resumeStopped()` だけ。401 の後にトークンを持たなくなったアカウントは、ポップオーバーを開いたときの読み直しで gh からトークンを取得し直すが、それでもポーリングは止まったまま）
 - 再読み込みボタンは `AccountStore.reload(userInitiated: true)` と `NotificationStore.resumeStopped()` を呼ぶ。`resumeStopped()` は「スコープ不足」「認証エラー」のポーラーだけに `resume()` を送る。ポップオーバーを開いたときは `AccountStore.reload()` だけを呼ぶ
 - 終了時は `applicationShouldTerminate` で `NotificationStore.stopAll()`（すべてのポーラーを止めて状態を消す）→ `AccountStore.discardCredentials()` の順にする
 
