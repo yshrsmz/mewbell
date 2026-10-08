@@ -31,7 +31,7 @@ Mewbell はユーザーの gh 認証情報（GitHub / GHE アカウントのト�
 
 ## アプリとビルドの設定
 
-- App Sandbox は無効だが、Hardened Runtime は有効にする。`com.apple.security.cs.disable-library-validation`、`allow-dyld-environment-variables`、`allow-unsigned-executable-memory` などの緩める entitlement を付けない
+- App Sandbox は無効だが、Hardened Runtime は有効にする（配布物になる Release で有効にする。Debug は `ENABLE_PREVIEWS` のため Xcode が自動で無効にし、`get-task-allow` も入るが、これは許容する）。`com.apple.security.cs.disable-library-validation`、`allow-dyld-environment-variables`、`allow-unsigned-executable-memory` などの緩める entitlement を付けない
 - 通知（UNUserNotification）の本文には、タイトル・リポジトリ名など API が返す表示用の情報だけを入れる。トークンや API URL を入れない
 
 ## 依存とサプライチェーン
