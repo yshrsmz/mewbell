@@ -12,7 +12,7 @@
 - [x] 2.3 ソースを `Mewbell/App/` に置く（`MewbellApp.swift` と `MenuBarContentView.swift`）。`MenuBarExtra("Mewbell", systemImage: "cat.fill")` と `.menuBarExtraStyle(.window)`、「Mewbell」の `Text`、⌘Q 付きの Quit ボタン（`NSApplication.shared.terminate(nil)`）を実装する。確認: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug build` が警告なしで通る
 - [x] 2.4 `MewbellTests` に Swift Testing のダミーテストを 1 つ置く（例: `#expect(Bundle.main.bundleIdentifier != nil)` のように、ホストアプリが読み込まれていることを確かめるもの）。確認: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が成功し、このテストが実行されている（2.5 のテストと合わせて実行される）
 
-- [x] 2.5 二重起動を防ぐ（design.md D2a）。`SingleInstanceLock` のユニットテスト（誰も持っていなければ取れる、持たれていれば取れない、解放や破棄の後は取れる、同じ持ち主の 2 回目は成功する）を書く。確認: `xcodebuild test` でテストが通り、起動中に別のコピーを同時に 2 つ起動してもプロセスが 1 つのまま
+- [x] 2.5 二重起動を防ぐ（design.md D2a）。`SingleInstanceLock` のユニットテスト（誰も持っていなければ取れる、持たれていれば取れない、解放や破棄の後は取れる、同じ持ち主の 2 回目は成功する、ロックファイルを開けなければエラー）を書く。確認: `xcodebuild test` でテストが通り、起動中に別のコピーを同時に 2 つ起動してもプロセスが 1 つのまま
 
 ## 3. スクリプトと lint 設定
 

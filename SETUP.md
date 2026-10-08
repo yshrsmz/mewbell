@@ -1,6 +1,6 @@
 # Mewbell ブートストラップ手順（Claude Code + OpenSpec）
 
-このフォルダの `CLAUDE.md` と `openspec/config.yaml` を新しいリポジトリに置き、以下の順で進める。
+リポジトリを立ち上げたときの手順の記録。`CLAUDE.md`・`openspec/config.yaml`・`package.json` を新しいリポジトリに置き、以下の順で進めた（M0 は archive 済み）。
 
 ## 1. リポジトリと OpenSpec の初期化
 
@@ -37,7 +37,7 @@ Claude Code を repo 直下で開き、まず探索せずに change を起こす
 /opsx:apply add-project-skeleton
 ```
 
-ビルドが通って起動を確認したら：
+ビルドが通って起動を確認し、`.claude/rules/review-process.md` の別コンテキストのレビューを終えたら：
 
 ```
 /opsx:archive add-project-skeleton
@@ -57,7 +57,7 @@ Claude Code を repo 直下で開き、まず探索せずに change を起こす
 
 ## 4. 運用メモ
 
-- `npx openspec status --change <name>` で artifact の進捗、`npx openspec validate` で spec の形式チェック
+- `npx openspec status --change <name>` で artifact の進捗、`npx openspec validate --all --strict` で spec の形式チェック
 - `CLAUDE.md` は「どう作るか」の約束、`openspec/specs/` は「何を満たすか」の正本。重複させない
 - Claude Code の `/compact` 前に tasks.md のチェックを更新しておくと、文脈が切れても再開しやすい
 - 設計判断の経緯は claude.ai 側のドキュメント「Mac 用 GitHub 通知アプリ：既存プロダクト調査と要件整理」にある。必要なら README から参照する

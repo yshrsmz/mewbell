@@ -30,7 +30,7 @@ final class SingleInstanceLock {
         guard fileDescriptor < 0 else { return .acquired }
         try? FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let descriptor = open(fileURL.path, O_RDWR | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR)
+        let descriptor = open(fileURL.path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, S_IRUSR | S_IWUSR)
         guard descriptor >= 0 else { return .failed(errno: errno) }
         guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
             let error = errno
@@ -60,7 +60,7 @@ enum SingleInstance {
     /// （誤って起動できなくなるよりは、二重起動を防げない方が被害が小さい）。
     /// テストのホストや SwiftUI プレビューとして起動されたときはロックを取らない（起動中の Mewbell があっても
     /// テストやプレビューを動かせるように、また、その間に普段使いの Mewbell を起動しても終了しないように）。
-    /// 2 回目以降の呼び出しでは何もしない（同じプロセスで取り直すと、自分のロックに阻まれて終了してしまうため）。
+    /// すでにロックを持っていれば何もしない（同じプロセスで取り直すと、自分のロックに阻まれて終了してしまうため）。
     @MainActor
     static func terminateIfAnotherInstanceIsRunning() {
         guard lock == nil else { return }

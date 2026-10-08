@@ -29,7 +29,7 @@
 
 ### D1. `project.xcproj` は Xcode 27.2 のテンプレートから作り、設定は CLI で変える
 
-Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプロジェクトを作り、リポジトリに移す。その後のビルド設定の変更・ターゲットの削除は、Xcode 同梱の `xcrun xcodeproj`（`setting set` / `setting unset` / `target remove` / `group remove`）で行い、変更のたびに `xcrun xcprojformatter --update Mewbell.xcodeproj` で正規の形に整える。テンプレートとの差分が下の表の項目だけになっていることを `git diff --no-index` で確かめる。
+Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプロジェクトを作り、リポジトリに移す。その後のビルド設定の変更・ターゲットの削除は、Xcode 同梱の `xcrun xcodeproj`（`setting set` / `setting unset` / `target remove` / `group remove`）で行い（`project.xcproj` を直接編集してもよい。CLAUDE.md）、変更のたびに `xcrun xcprojformatter --update Mewbell.xcodeproj` で正規の形に整える。下の表は主なビルド設定で、テンプレートの既定から変えた設定はすべてこの表に入っている（既定のままの項目も、明示しておきたいものは表に入れている）。テンプレートとの差分がこれ以外にないことを `git diff --no-index` で確かめる。
 
 - テンプレートが作る UI テストのターゲット、App Sandbox の設定、`ContentView.swift` は使わないので消す。`Assets.xcassets`（AppIcon / AccentColor）は残す
 - テンプレートの警告設定（`CLANG_WARN_*` など）や `SWIFT_APPROACHABLE_CONCURRENCY=YES` はそのまま使う
@@ -69,11 +69,11 @@ Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプ�
 
 ### D2a. 二重起動の防止
 
-`MewbellApp.init()` で、`~/Library/Application Support/com.codingfeline.mewbell/instance.lock` にファイルロック（`flock(LOCK_EX | LOCK_NB)`）を取る。取れなければほかの Mewbell が動いているので、そのまま `exit` する。シーンを作る前に確かめるので、アイコンが一瞬出てから消えることもない。ロックはプロセスが終わるまで持ち続ける。
+`MewbellApp.init()` で、`~/Library/Application Support/<Bundle ID>/instance.lock`（Bundle ID は `Bundle.main` から取る。値は `com.codingfeline.mewbell`）にファイルロック（`flock(LOCK_EX | LOCK_NB)`）を取る。取れなければほかの Mewbell が動いているので、そのまま `exit` する。シーンを作る前に確かめるので、アイコンが一瞬出てから消えることもない。ロックはプロセスが終わるまで持ち続ける。すでにロックを持っているときに呼ばれても何もしない（同じプロセスで取り直すと、自分のロックに阻まれて終了してしまうため）。
 
 - ロックは OS がまとめて取得するので、同時に起動しても片方しか取れない。プロセスが終われば（クラッシュしても）ロックは自動で外れ、ロックファイルは次の起動で使い回すので後片付けも要らない
 - ロックの取得と解放は `SingleInstanceLock` に切り出し、一時ディレクトリのロックファイルを使ってユニットテストする（`flock` はファイルを開いた単位で効くので、同じプロセスの中でも 2 つ目の取得が失敗することを確かめられる）
-- ロックの結果は「取れた」「ほかが持っている」「エラー（ファイルを開けないなど）」の 3 つに分ける。エラーのときは終了せず、os_log に記録して起動を続ける（ロックファイルの置き場所が壊れているだけで、アプリが毎回黙って終了するのを避けるため。二重起動を防げない方がまだ被害が小さい）
+- ロックの結果は「取れた」「ほかが持っている」「エラー（ファイルを開けないなど）」の 3 つに分ける。エラーのとき（ほかに Bundle ID や Application Support の場所を取れないときも含む）は終了せず、os_log に記録して起動を続ける（ロックファイルの置き場所が壊れているだけで、アプリが毎回黙って終了するのを避けるため。二重起動を防げない方がまだ被害が小さい）
 - テストのホストや SwiftUI プレビューとして起動されたとき（環境変数 `XCTestConfigurationFilePath` がある、または `XCODE_RUNNING_FOR_PREVIEWS=1` のとき）はロックを取らない。起動中の Mewbell があってもテストやプレビューを動かせ、その間に普段使いの Mewbell を起動しても終了しないようにするため
 - 先に動いている方を前面に出す処理はしない。`LSUIElement` のアプリを前面に出しても表示されるものがないため
 - 代替案: `NSRunningApplication` で同じ Bundle ID のアプリを探し、起動時刻と PID で先後を決める → 最初はこの方式にしたが、起動時刻が取れないと PID の大小に頼ることになる。PID は一周すると小さい値に戻るので後から起動した方が残ることがあり、3 つ以上が同時に起動すると全部が終了することもあった。採らない
@@ -83,6 +83,7 @@ Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプ�
 ### D3. 並行性の境界
 
 - M0 で動くのは SwiftUI のシーンと View、Quit の処理だけで、すべて main thread / `@MainActor` 上で動く。`App` と `View` は SwiftUI 側で `@MainActor` に隔離されているため、追加の注釈は要らない。Quit のハンドラも `@MainActor` 上から `NSApplication` を呼ぶ
+- 二重起動の防止（D2a）は `App.init` から main thread で呼ぶ。保持するロックは `@MainActor` の static プロパティに置く。`SingleInstanceLock` 自体は隔離せず、可変状態（ファイルディスクリプタ）を持つので `Sendable` にしない（1 つのスレッドからだけ使う）
 - actor は M0 では作らない。ネットワークは M2 で `GitHubAPIClient` actor、ポーリングは M2 で `Poller` actor に閉じ込める予定（ここでは決めない）
 - strict concurrency を `complete` にしておくことで、M1 以降で境界を越えるコードを書いたときにコンパイルエラーで気づけるようにする
 
@@ -120,7 +121,7 @@ M1 以降の方針としてここに書いておく: gh の実行は `GhCommandR
 
 ### D7. ビルド出力の置き場所
 
-起動するアプリの場所を DerivedData に依存させず `build/Debug/Mewbell.app` に固定するため、`scripts/build.sh` では `-derivedDataPath build/DerivedData` を渡し、ビルドが終わったら `build/Debug/Mewbell.app` にコピーする。`build/` は `.gitignore` に入れる。
+起動するアプリの場所を DerivedData に依存させず `build/Debug/Mewbell.app` に固定するため、`scripts/build.sh` では `-derivedDataPath build/DerivedData` を渡し、ビルドが終わったら `build/Debug/Mewbell.app` にコピーする。引数に `Release` を渡すと、Release でビルドして `build/Release/Mewbell.app` にコピーする。`build/` は `.gitignore` に入れる。
 
 `scripts/run.sh` は、ビルドした後に起動中の Mewbell を場所を問わず `pkill -x Mewbell` で終了させてから `build/Debug/Mewbell.app` を開く。二重起動の防止（D2a）があるため、普段使いの Mewbell が動いたままだと新しいビルドがすぐに終了し、古いビルドのまま確認してしまうのを避けるため。5 秒待っても終了しなければ、エラーで止まる。
 
@@ -138,7 +139,7 @@ M0 ではトークンを取得も保持も送信もしない。gh サブプロ�
 - [CI でビルドとテストを回さない] → macOS 固有のビルドエラーやテストの失敗は CI では見つからない。push の前に手元で `xcodebuild test` と Release のビルドを通すことを tasks.md と PR の Test plan で確かめる。必要になったら、macOS ランナーを手動実行（`workflow_dispatch`）のジョブとして足す
 - [Xcode 27.2 は 2026-10 時点で beta] → 手元は Xcode-beta.app で作業する。正式版が出たら入れ替える
 - [手元の Xcode が 27.0] → 実装の最初のタスクで 27.2 に更新し、`xcode-select` の切り替えとライセンス同意をする（sudo が要るのでユーザーが行う）。27.0 のままでも `.xcproj` は開けるが、プロジェクトを作る作業は 27.2 でしかできない
-- [`.xcproj` の形式はまだ新しく、ツールの対応が追いついていない] → `xcodebuild` が CLI で開けることを毎回確かめる（CLAUDE.md の約束どおり）。うまくいかない場合は直接編集をやめて Xcode の GUI で設定を変える
+- [`.xcproj` の形式はまだ新しく、ツールの対応が追いついていない] → `xcodebuild` が CLI で開けることを毎回確かめる（CLAUDE.md の約束どおり）。CLI や直接編集でうまくいかない場合は Xcode の GUI で設定を変える
 - [swift-format と swiftlint のルールが食い違う] → 整形は swift-format だけに任せ、swiftlint 側の整形ルールを切る（D5）
 - [mise が手元にない開発者がいる] → v1 は作者のローカルビルドが前提なので許容する。README に `mise install` の手順を書く
 

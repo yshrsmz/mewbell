@@ -55,4 +55,17 @@ final class SingleInstanceLockTests {
             return
         }
     }
+
+    @Test func doesNotFollowASymbolicLinkAtTheLockFile() throws {
+        // ロックファイルの場所にシンボリックリンクがあっても、リンク先を作ったりロックしたりしない
+        let target = directory.appending(path: "target")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: lockURL, withDestinationURL: target)
+        let lock = SingleInstanceLock(fileURL: lockURL)
+        guard case .failed = lock.tryAcquire() else {
+            Issue.record("expected .failed")
+            return
+        }
+        #expect(!FileManager.default.fileExists(atPath: target.path))
+    }
 }
