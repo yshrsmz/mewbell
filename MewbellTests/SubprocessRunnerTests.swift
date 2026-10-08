@@ -51,12 +51,19 @@ struct SubprocessRunnerTests {
         #expect(kill(pid, 0) == -1 && errno == ESRCH)
     }
 
-    @Test func returnsWhenABackgroundChildKeepsThePipeOpen() async throws {
-        // シェルは すぐ終わるが、バックグラウンドの sleep が標準出力を開いたまま残る
-        let output = try await runner.run(
-            request("/bin/sh", ["-c", "/bin/sleep 3 & echo done"], timeout: .seconds(2)))
+    @Test func returnsWhenABackgroundChildKeepsThePipeOpenIfAllowed() async throws {
+        // シェルはすぐ終わるが、バックグラウンドの sleep が標準出力を開いたまま残る
+        var lingering = request("/bin/sh", ["-c", "/bin/sleep 3 & echo done"], timeout: .seconds(2))
+        lingering.allowsLingeringPipes = true
+        let output = try await runner.run(lingering)
         #expect(output.exitCode == 0)
         #expect(String(bytes: output.stdout, encoding: .utf8) == "done\n")
+    }
+
+    @Test func failsWhenTheOutputMayBeIncomplete() async throws {
+        await #expect(throws: ProcessRunError.outputIncomplete) {
+            try await runner.run(request("/bin/sh", ["-c", "/bin/sleep 3 & echo done"], timeout: .seconds(2)))
+        }
     }
 
     @Test func failsWhenStdoutExceedsTheLimit() async throws {

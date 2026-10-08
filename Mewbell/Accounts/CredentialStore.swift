@@ -8,10 +8,6 @@ actor CredentialStore {
         tokens[id]
     }
 
-    func contains(_ id: AccountID) -> Bool {
-        tokens[id] != nil
-    }
-
     func set(_ token: AccessToken, for id: AccountID) {
         guard !isClosed else { return }
         tokens[id] = token

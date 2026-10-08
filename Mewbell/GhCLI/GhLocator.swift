@@ -5,7 +5,8 @@ import os
 enum ExecutableValidator {
     /// 候補が使えるとき、シンボリックリンクを解決した実体のパスを返す。
     /// 絶対パスで、実体が通常ファイルで、現在のユーザーが実行でき、他人が書き換えられないことを確かめる。
-    /// 他人が書き換えられないとは、ファイルとそのディレクトリの所有者が自分か root で、group / world に書き込み権が無いこと。
+    /// 他人が書き換えられないとは、ファイルの所有者が自分か root で group / world に書き込み権が無く、
+    /// ファイルを置いたディレクトリが world-writable でないこと（Homebrew の `bin` は admin グループの 775 なので、group は許す）。
     static func validate(_ path: String) -> URL? {
         guard path.hasPrefix("/"), let resolvedPointer = realpath(path, nil) else { return nil }
         let resolved = String(cString: resolvedPointer)
@@ -14,18 +15,15 @@ enum ExecutableValidator {
         var info = stat()
         guard stat(resolved, &info) == 0,
             info.st_mode & S_IFMT == S_IFREG,
-            isProtected(info),
+            info.st_uid == getuid() || info.st_uid == 0,
+            info.st_mode & (S_IWGRP | S_IWOTH) == 0,
             access(resolved, X_OK) == 0
         else { return nil }
         // 他人が書き込めるディレクトリにあると、ファイルを差し替えられる
         var directoryInfo = stat()
         let directory = URL(filePath: resolved).deletingLastPathComponent().path
-        guard stat(directory, &directoryInfo) == 0, isProtected(directoryInfo) else { return nil }
+        guard stat(directory, &directoryInfo) == 0, directoryInfo.st_mode & S_IWOTH == 0 else { return nil }
         return URL(filePath: resolved)
-    }
-
-    private static func isProtected(_ info: stat) -> Bool {
-        (info.st_uid == getuid() || info.st_uid == 0) && info.st_mode & (S_IWGRP | S_IWOTH) == 0
     }
 }
 
@@ -102,8 +100,8 @@ actor GhLocator {
             return nil
         }
         let request = ProcessRequest(
-            executable: URL(filePath: shell), arguments: ["-l", "-c", "command -v gh"], environment: environment,
-            timeout: .seconds(5), stdoutLimit: 64 * 1024)
+            executable: URL(filePath: shell), arguments: ["-i", "-l", "-c", "command -v gh"], environment: environment,
+            timeout: .seconds(5), stdoutLimit: 64 * 1024, allowsLingeringPipes: true)
         do {
             let output = try await runner.run(request)
             guard output.exitCode == 0 else { return nil }

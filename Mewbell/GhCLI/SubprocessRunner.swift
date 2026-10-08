@@ -17,7 +17,9 @@ struct SubprocessRunner: ProcessRunning {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        let state = RunState(stdoutLimit: request.stdoutLimit, stderrLimit: request.stderrLimit)
+        let state = RunState(
+            stdoutLimit: request.stdoutLimit, stderrLimit: request.stderrLimit,
+            allowsLingeringPipes: request.allowsLingeringPipes)
         Self.read(stdoutPipe, onData: state.appendStdout, onClose: state.closeStdout)
         Self.read(stderrPipe, onData: state.appendStderr, onClose: state.closeStderr)
         // 終了するまで Process を保持しておく（タイムアウトで先に戻っても、終了の通知を受け取れるように）
@@ -121,10 +123,12 @@ private final class RunState: Sendable {
     private let inner = Mutex(Inner())
     private let stdoutLimit: Int
     private let stderrLimit: Int
+    private let allowsLingeringPipes: Bool
 
-    init(stdoutLimit: Int, stderrLimit: Int) {
+    init(stdoutLimit: Int, stderrLimit: Int, allowsLingeringPipes: Bool) {
         self.stdoutLimit = stdoutLimit
         self.stderrLimit = stderrLimit
+        self.allowsLingeringPipes = allowsLingeringPipes
     }
 
     /// 結果の受け取り先を登録する。すでに失敗していればそのエラーで返し、false を返す（起動しない）。
@@ -184,6 +188,11 @@ private final class RunState: Sendable {
         finishIfComplete { $0.exitStatus = status }
         Task {
             try? await Task.sleep(for: Self.drainTimeout)
+            guard self.allowsLingeringPipes else {
+                // 出力が途中で切れているかもしれないので、受け取らない（すでに結果を返していれば何もしない）
+                self.fail(ProcessRunError.outputIncomplete)
+                return
+            }
             // EOF が来ないままなら、そこまでに読んだ分で結果を返す
             self.finishIfComplete {
                 $0.stdoutClosed = true

@@ -30,7 +30,9 @@ final class AccountStore {
 
     /// 読み直す。読み直している間に呼ばれたときは、同じアカウントの gh を同時に走らせないよう、
     /// 今の読み直しが終わってからもう一度読み直す（ログイン直後に開いたポップオーバーの要求を取りこぼさないため）。
-    func reload() {
+    /// `showsProgress` が true（再読み込みボタン）なら、一覧が出ていないときに確認中の表示にする。
+    /// ポップオーバーを開いたときは今の表示を残す（開くたびに案内がちらつかないように）。
+    func reload(showsProgress: Bool = false) {
         guard let discovery, !isTerminating else { return }
         guard reloadTask == nil else {
             reloadRequested = true
@@ -38,8 +40,7 @@ final class AccountStore {
         }
         reloadRequested = false
         Self.logger.info("Reloading gh accounts")
-        // 一覧が出ていないときは、確認中の表示にする
-        if !state.hasAccounts {
+        if showsProgress && !state.hasAccounts {
             state = .checking
         }
         reloadTask = Task {

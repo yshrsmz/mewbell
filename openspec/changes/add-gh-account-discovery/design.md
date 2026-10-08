@@ -58,7 +58,7 @@ M0 の時点で、アプリは `Mewbell/App/` の 3 ファイル（`MewbellApp`�
 
 ### D2. 並行性の境界
 
-- `AccountStore` と View は `@MainActor`。`reload()` は `Task` を 1 つだけ持ち、走っている間の再読み込み要求は無視する（ボタンは無効にする。ポップオーバーを開いたときの要求も同じ扱い）
+- `AccountStore` と View は `@MainActor`。`reload()` は `Task` を 1 つだけ持つ。走っている間の再読み込み要求は覚えておき、今の読み直しが終わった後にもう 1 回だけ読み直す（ログイン直後に開いたポップオーバーの要求を取りこぼさないため。ボタンは読み直し中は無効にする）。確認中の表示にするのは再読み込みボタンのときだけで、ポップオーバーを開いたときは今の表示を残す。終了処理を始めた後は読み直さない
 - `AccountDiscovery`、`GhLocator`、`CredentialStore` は actor。gh の実行、ファイルの読み取り、YAML の解析はこれらの actor の上で行い、メインスレッドで行わない
 - アカウントごとのトークン取得は `withTaskGroup` で並べて走らせる。同じアカウントの取得が同時に 2 つ走らないことは、`reload()` の重複を抑えることで保証する
 - `SubprocessRunner` は `Process` を作って `terminationHandler` と `Pipe` の `readabilityHandler` で結果を集め、`withCheckedThrowingContinuation` で async に返す。ハンドラーは任意のスレッドで呼ばれるので、集めている途中のデータと「1 回だけ resume する」フラグは `Mutex`（Synchronization）で守る。`Process` は Sendable でないため、ランナーの外に出さない
@@ -68,8 +68,8 @@ M0 の時点で、アプリは `Mewbell/App/` の 3 ファイル（`MewbellApp`�
 ### D3. gh の検出
 
 - 候補の順: 上書きパス（M1 では常に `nil`。M4 で UserDefaults から渡す）→ `/opt/homebrew/bin/gh` → `/usr/local/bin/gh` → ログインシェル。上書きパスがあるときはそれだけを確かめる
-- ログインシェルは `getpwuid(getuid())` の `pw_shell` を使い、`/etc/shells` に載っていることを確かめてから `[shell, "-l", "-c", "command -v gh"]` で起動する（タイムアウト 5 秒、出力上限 64 KiB）。出力の最後の空でない行を候補にする。`GhLocator` は「試したかどうか」を持ち、成否にかかわらず 2 回目は行わない
-- 候補の検証: 絶対パスであること → シンボリックリンクを解決（`realpath`）→ `stat` で通常ファイル、`access(X_OK)`、`st_mode & (S_IWGRP | S_IWOTH) == 0`。実行するのは解決後の実パス（検証したファイルと実行するファイルを一致させるため）
+- ログインシェルは `getpwuid(getuid())` の `pw_shell` を使い、`/etc/shells` に載っていることを確かめてから `[shell, "-i", "-l", "-c", "command -v gh"]` で起動する（タイムアウト 5 秒、出力上限 64 KiB）。`-i` を付けるのは、zsh が対話モードでないと `~/.zshrc` を読まず、mise や asdf などで通した PATH を拾えないため。rc ファイルが起動したバックグラウンドのプロセスがパイプを開いたまま残ってもよい（`allowsLingeringPipes`）。出力の最後の空でない行を候補にする。`GhLocator` は検索の `Task` を持ち、成否にかかわらず 2 回目は行わない（同時に呼ばれたときも同じ `Task` を待つ）
+- 候補の検証: 絶対パスであること → シンボリックリンクを解決（`realpath`）→ `stat` で通常ファイル、`access(X_OK)`、所有者が自分か root、`st_mode & (S_IWGRP | S_IWOTH) == 0`。ファイルを置いたディレクトリは world-writable でないこと（Homebrew の `bin` は admin グループの 775 なので group は許す）。実行するのは解決後の実パス（検証したファイルと実行するファイルを一致させるため）
 - 代替案: `PATH` を自前で探す → アプリの `PATH` はシェルと違うので、結局ログインシェルが要る。採らない
 
 ### D4. `hosts.yml` の読み取りと Yams
@@ -98,7 +98,7 @@ Yams の追加:
 
 - `AccessToken` は `Sendable` な struct で、値は `fileprivate` ではなく `package`/`internal` の読み取り専用プロパティに持つ（M2 で `Authorization` ヘッダーを作るため）。`description`・`debugDescription` は `AccessToken(<redacted>)` を返し、`CustomReflectable` で `dump` や `Mirror` にも値を出さない。`Codable` には準拠させない（エンコードの経路自体を作らない）
 - `gh auth token` の出力は、前後の空白を除いて空でなく空白文字を含まないときだけ `AccessToken` にする。出力上限は 4 KiB
-- `Redaction.redactTokens(in:)` は `gh[opsu]_[A-Za-z0-9_]+` と `github_pat_[A-Za-z0-9_]+` を `<redacted>` に置き換える。gh の標準エラー出力（上限 16 KiB）は、これを通してから `Logger` の `.private` で記録する。UI には出さない
+- `Redaction.redactTokens(in:)` は `gh[a-z]_[A-Za-z0-9_]+`、`github_pat_[A-Za-z0-9_]+`、40 桁の 16 進数を `<redacted>` に置き換える（git のコミット SHA も伏せ字になるが、安全側に倒す）。gh の標準エラー出力（上限 16 KiB）は、これを通してから `Logger` の `.private` で記録する。UI には出さない
 
 ### D7. 読み込みの流れと差分
 
@@ -146,7 +146,7 @@ Yams の追加:
 | テスト・フィクスチャに本物の形式のトークンを書かない | 対応（`test-token` を使う。伏せ字化のテストに要る `ghp_` 形式の文字列は、ソース上で `"gh" + "p_"` のように分けて書き、secret scanning に引っかからないようにする） |
 | 削除・無効化・終了時にトークンを破棄 | 対応（D7）。無効化は M4 |
 | `Process` に絶対パスと引数配列 / シェル経由は `command -v gh` の 1 回だけで結果を検証 | 対応（D3） |
-| gh のパスの検証（通常ファイル・実行可能・world-writable でない） | 対応（D3）。group-writable も拒否する |
+| gh のパスの検証（通常ファイル・実行可能・world-writable でない） | 対応（D3）。ファイルは group-writable も拒否し、所有者が自分か root であることも確かめる。ディレクトリは world-writable を拒否する |
 | 子プロセスの環境変数から `GH_TOKEN` などを除去 | 対応（D5）。偽のランナーと `/usr/bin/env` の両方でテストする |
 | ホスト名・ユーザー名の検証、`-` で始まる値の拒否 | 対応（gh-cli spec、D4） |
 | サブプロセスのタイムアウトと出力上限 | 対応（D2、D3、D6） |
@@ -168,7 +168,7 @@ Yams の追加:
 
 - [一度持ったトークンを取り直す経路が無い（`gh auth refresh -s repo` や再ログインの後も古いトークンを持ち続ける）] → M1 ではトークンを送らないので影響しない。M2 で、API が 401 を返したときやスコープ不足を見つけたときに、そのアカウントのトークンを捨てて取り直す
 - [`gh auth login` などが `hosts.yml` を書いている途中に読むと「読めない」になり、トークンをすべて捨てる] → 安全側に倒す。次に開いたときに取り直すので、Keychain の確認やタイムアウトがアカウントの数だけ起きることはあるが、トークンを持ち続けるよりよい
-- [子プロセスが起動したバックグラウンドのプロセスがパイプを開いたまま残る（ログインシェルの rc がエージェントを起動するなど）] → 子プロセスの終了から 500ms だけ EOF を待ち、それまでに読んだ分で結果を返す
+- [子プロセスが起動したバックグラウンドのプロセスがパイプを開いたまま残る（ログインシェルの rc がエージェントを起動するなど）] → 子プロセスの終了から 500ms だけ EOF を待つ。ログインシェルでの検索はそこまでに読んだ分で結果を返し、`gh` の実行（トークンなど、途中で切れた出力を受け取ってはいけないもの）は `outputIncomplete` で失敗にする
 
 ## Migration Plan
 

@@ -29,7 +29,7 @@
 - [x] 5.2 `HostKind`、`AccountID`、`Account` と並び順を実装する（accounts spec）。確認: 3 種類のホストの判定、ホスト名の小文字化、`github.com` 先頭・アクティブ先頭の並び順のテストが通る
 - [x] 5.3 `CredentialStore` を実装する（設定、取得、指定したアカウント以外の破棄、全破棄）。確認: 消えたアカウントのトークンだけが捨てられるテストと、全破棄のテストが通る
 - [x] 5.4 `AccountDiscovery` を実装する（design.md D7 の 1〜5。状態をコールバックで渡す）。確認: 偽のランナーと一時ディレクトリの `hosts.yml` で、gh が無い・古い・`hosts.yml` が無い・壊れている・アカウントあり、の各状態になるテスト、2 回目の読み込みで「使える」アカウントに `gh auth token` を呼ばないテスト、失敗したアカウントは取り直すテスト、消えたアカウントのトークンが捨てられるテスト、状態が「アカウントあり」以外になると全トークンが捨てられるテストが通る
-- [x] 5.5 `AccountStore`（`@MainActor @Observable`）を実装する（`reload()` の重複抑止、テストとプレビューでは自動で始めない、`applicationShouldTerminate` で全破棄）。確認: `reload()` を続けて 2 回呼んでも読み込みは 1 回だけ走るテストと、`AccountStore` の公開する状態に `AccessToken` が含まれないこと（型で保証されていること）をコードで確かめる
+- [x] 5.5 `AccountStore`（`@MainActor @Observable`）を実装する（`reload()` の重複抑止、テストとプレビューでは自動で始めない、`applicationShouldTerminate` で全破棄）。確認: 読み直し中の `reload()` が同時に走らず、終わった後に 1 回だけ読み直すテストと、`AccountStore` の公開する状態に `AccessToken` が含まれないこと（型で保証されていること）をコードで確かめる
 
 ## 6. 画面（UI）
 

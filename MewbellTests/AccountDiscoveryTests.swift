@@ -45,8 +45,8 @@ struct CredentialStoreTests {
         await store.set(token, for: alice)
         await store.set(token, for: bob)
         await store.retainOnly([alice])
-        #expect(await store.contains(alice))
-        #expect(await !store.contains(bob))
+        #expect(await store.token(for: alice) != nil)
+        #expect(await store.token(for: bob) == nil)
     }
 
     @Test func ignoresNewTokensAfterClosing() async throws {
@@ -55,8 +55,8 @@ struct CredentialStoreTests {
         await store.set(token, for: alice)
         await store.close()
         await store.set(token, for: bob)
-        #expect(await !store.contains(alice))
-        #expect(await !store.contains(bob))
+        #expect(await store.token(for: alice) == nil)
+        #expect(await store.token(for: bob) == nil)
     }
 
     @Test func removesEverything() async throws {
@@ -218,8 +218,8 @@ struct AccountDiscoveryTests {
         try fixture.writeHosts("github.com:\n    users:\n        alice:\n    user: alice\n")
         let states = await reload(discovery)
         #expect(states.last == .accounts([status("github.com", "alice", .ready)]))
-        #expect(await fixture.credentials.contains(AccountID(host: "github.com", user: "alice")))
-        #expect(await !fixture.credentials.contains(AccountID(host: "ghe.example.com", user: "dave")))
+        #expect(await fixture.credentials.token(for: AccountID(host: "github.com", user: "alice")) != nil)
+        #expect(await fixture.credentials.token(for: AccountID(host: "ghe.example.com", user: "dave")) == nil)
     }
 
     @Test func discardsEveryTokenWhenNoLongerLoggedIn() async throws {
@@ -229,7 +229,7 @@ struct AccountDiscoveryTests {
         try FileManager.default.removeItem(at: fixture.configDirectory.appending(path: "hosts.yml"))
         let states = await reload(discovery)
         #expect(states.last == .notLoggedIn)
-        #expect(await !fixture.credentials.contains(AccountID(host: "github.com", user: "alice")))
+        #expect(await fixture.credentials.token(for: AccountID(host: "github.com", user: "alice")) == nil)
     }
 }
 
@@ -285,7 +285,7 @@ struct AccountStoreTests {
     @Test func doesNotRunTwoReloadsAtOnce() async {
         let discovery = BlockingDiscovery()
         let store = AccountStore(discovery: discovery, state: .ghNotFound)
-        store.reload()
+        store.reload(showsProgress: true)
         #expect(store.state == .checking)
         #expect(store.isReloading)
         store.reload()
@@ -299,6 +299,14 @@ struct AccountStoreTests {
         #expect(discovery.callCount == 2)
         #expect(store.state == .notLoggedIn)
         #expect(!store.isReloading)
+    }
+
+    @Test func keepsTheGuidanceWhenReloadingWithoutProgress() {
+        let discovery = BlockingDiscovery()
+        let store = AccountStore(discovery: discovery, state: .ghNotFound)
+        store.reload()
+        #expect(store.state == .ghNotFound)
+        discovery.finish()
     }
 
     @Test func keepsTheListWhileReloading() {

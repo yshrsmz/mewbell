@@ -35,6 +35,14 @@ struct ExecutableValidatorTests {
         #expect(ExecutableValidator.validate(path) == nil)
     }
 
+    @Test func acceptsAFileInAGroupWritableDirectory() throws {
+        // Homebrew の bin は admin グループの 775
+        let path = try directory.makeFile("brew/gh")
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o775], ofItemAtPath: directory.url.appending(path: "brew").path)
+        #expect(ExecutableValidator.validate(path) != nil)
+    }
+
     @Test func acceptsARootOwnedExecutable() {
         #expect(ExecutableValidator.validate("/bin/sh") != nil)
     }
@@ -119,7 +127,8 @@ struct GhLocatorTests {
         #expect(found == ExecutableValidator.validate(ghFile))
         let request = try #require(runner.requests.first)
         #expect(request.executable.path == "/bin/zsh")
-        #expect(request.arguments == ["-l", "-c", "command -v gh"])
+        #expect(request.arguments == ["-i", "-l", "-c", "command -v gh"])
+        #expect(request.allowsLingeringPipes)
         #expect(request.environment == ["HOME": "/tmp"])
     }
 

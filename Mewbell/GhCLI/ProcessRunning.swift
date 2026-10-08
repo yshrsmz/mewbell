@@ -10,6 +10,10 @@ struct ProcessRequest: Sendable, Equatable {
     var stdoutLimit: Int
     /// 標準エラー出力の上限（バイト）。超えた分は捨てる（失敗にはしない）
     var stderrLimit: Int = 16 * 1024
+    /// 子プロセスの終了後もパイプが閉じない（子が起動したバックグラウンドのプロセスが開いたまま持つ）とき、
+    /// 少し待って読めた分で結果を返すか。false なら `ProcessRunError.outputIncomplete` にする
+    /// （トークンのように、途中で切れた出力を受け取ってはいけない場合）
+    var allowsLingeringPipes = false
 }
 
 struct ProcessOutput: Sendable, Equatable {
@@ -22,6 +26,8 @@ enum ProcessRunError: Error, Equatable, Sendable {
     case launchFailed
     case timedOut
     case outputTooLarge
+    /// 子プロセスは終わったが、出力を最後まで読めなかった
+    case outputIncomplete
 }
 
 /// 子プロセスの実行。テストでは偽物に差し替える。
