@@ -12,10 +12,17 @@ enum PollSchedule {
         .seconds(max(minimumInterval, pollInterval ?? minimumInterval))
     }
 
-    /// レート制限の後: `retryAt` まで。60 秒より短ければ 60 秒。
+    /// レート制限の後に待つ上限（GitHub のレート制限は 1 時間で戻る。壊れた `X-RateLimit-Reset` で止まり続けないように）
+    static let maximumRateLimitWait = 3600
+
+    /// レート制限の後: `retryAt` まで。60 秒より短ければ 60 秒、1 時間より長ければ 1 時間。
     static func afterRateLimit(retryAt: Date, now: Date) -> Duration {
         let seconds = retryAt.timeIntervalSince(now)
-        return .seconds(max(Double(minimumInterval), seconds.isFinite ? seconds.rounded(.up) : 0))
+        let clamped =
+            seconds.isFinite
+            ? min(max(seconds.rounded(.up), Double(minimumInterval)), Double(maximumRateLimitWait))
+            : Double(maximumRateLimitWait)
+        return .seconds(Int(clamped))
     }
 
     /// そのほかの失敗の後: 60 秒から失敗が続くたびに 2 倍にし、15 分を上限にする。

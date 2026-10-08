@@ -31,18 +31,18 @@ struct AccountSectionView: View {
         VStack(alignment: .leading, spacing: 8) {
             header
             switch status.tokenState {
-            case .fetching:
-                // 401 の後などにトークンを取り直している間も、それまでの状態を出し続ける
-                if let feed {
-                    FeedStatusView(account: account, phase: feed.phase)
-                    threads(feed)
-                }
+            case .fetching where feed == nil:
+                Text("Checking gh…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 22)
             case .unavailable:
                 Text("Could not get a token from gh. Log in again with:")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 CommandRow(command: "gh auth login --hostname \(account.host)")
-            case .ready:
+            case .fetching, .ready:
+                // 401 の後などにトークンを取り直している間も、それまでの状態を出し続ける
                 if let feed {
                     FeedStatusView(account: account, phase: feed.phase)
                     threads(feed)

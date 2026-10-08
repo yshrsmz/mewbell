@@ -127,21 +127,24 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     /// `gh auth token` を実行して、取れたトークンを保存する。同じアカウントの取得が走っていれば、その結果を待つ。
     /// 取得を始めた呼び出し元がキャンセルされたら gh も止める（合流しただけの呼び出し元のキャンセルでは止めない）。
     private func fetchToken(for id: AccountID, using client: GhClient) async -> AccessToken? {
+        let token: AccessToken?
         if let running = inFlightTokenFetches[id] {
             running.isShared.withLock { $0 = true }
-            return await running.task.value
-        }
-        let fetch = TokenFetch(task: Task { await client.token(host: id.host, user: id.user) })
-        inFlightTokenFetches[id] = fetch
-        let token = await withTaskCancellationHandler {
-            await fetch.task.value
-        } onCancel: {
-            // 合流した呼び出し元がいれば、その結果を奪わないよう gh は止めない
-            if !fetch.isShared.withLock({ $0 }) {
-                fetch.task.cancel()
+            token = await running.task.value
+        } else {
+            let fetch = TokenFetch(task: Task { await client.token(host: id.host, user: id.user) })
+            inFlightTokenFetches[id] = fetch
+            token = await withTaskCancellationHandler {
+                await fetch.task.value
+            } onCancel: {
+                // 合流した呼び出し元がいれば、その結果を奪わないよう gh は止めない
+                if !fetch.isShared.withLock({ $0 }) {
+                    fetch.task.cancel()
+                }
             }
+            inFlightTokenFetches[id] = nil
         }
-        inFlightTokenFetches[id] = nil
+        // 合流した呼び出し元も保存する（返したトークンが `CredentialStore` にあることを、誰が先に戻っても保証するため）
         guard let token, knownAccountIDs.contains(id) else { return nil }
         await credentials.set(token, for: id)
         return token

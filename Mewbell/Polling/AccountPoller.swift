@@ -98,7 +98,10 @@ actor AccountPoller {
             case .retryNow:
                 refreshedToken = true
             case .wait(let delay):
-                refreshedToken = false
+                // トークンが無くて送らなかった回は、取り直した直後かどうかを持ち越す（次の 401 で 2 回目の取り直しをしない）
+                if result != .failed(.noToken) {
+                    refreshedToken = false
+                }
                 await publish(state)
                 do {
                     try await sleep(delay)

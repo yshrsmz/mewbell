@@ -106,7 +106,7 @@ GitHub の Notifications API の前提:
 ### D5. 待ち時間の決め方（`PollSchedule`）
 
 - 成功（`updated` / `notModified`）: `max(60, X-Poll-Interval ?? 60)` 秒。失敗の回数を 0 に戻す
-- `rateLimited(retryAt)`: `max(60, retryAt - now)` 秒。上限は設けない（`X-RateLimit-Reset` は最大 1 時間先）。`Retry-After` があればそちらを優先する
+- `rateLimited(retryAt)`: `max(60, retryAt - now)` 秒。1 時間を上限にする（GitHub のレート制限は 1 時間で戻る。壊れた値で止まり続けたり、`Duration` に変換できずに落ちたりしないように）。`Retry-After` があればそちらを優先する
 - トークンが無かった: 60 秒。失敗の回数には数えない
 - その他の失敗: `min(60 × 2^(n−1), 900)` 秒（n は連続した失敗の回数）
 - `now` は注入する（テストで固定する）
