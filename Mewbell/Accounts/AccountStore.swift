@@ -78,6 +78,8 @@ final class AccountStore {
         // 変わっていなければ代入しない（ポップオーバーを開くたびに一覧を描き直さないため）
         guard self.state != state else { return }
         self.state = state
+        // 終了処理を始めた後は、走っていた読み直しの結果でポーラーを作り直さない
+        guard !isTerminating else { return }
         onStateChange?(state)
     }
 }

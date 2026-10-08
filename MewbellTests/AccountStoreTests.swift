@@ -20,6 +20,18 @@ struct AccountStoreTests {
         #expect(reported.value == [.notLoggedIn])
     }
 
+    @Test func stopsReportingStateChangesAfterTermination() async {
+        let discovery = BlockingDiscovery()
+        let store = AccountStore(discovery: discovery, state: .ghNotFound)
+        let reported = LockedValue<[DiscoveryState]>([])
+        store.onStateChange = { state in reported.withLock { $0.append(state) } }
+        store.reload()
+        await store.discardCredentials()
+        discovery.finish()
+        await store.waitForReload()
+        #expect(reported.value.isEmpty)
+    }
+
     @Test func doesNotRunTwoReloadsAtOnce() async {
         let discovery = BlockingDiscovery()
         let store = AccountStore(discovery: discovery, state: .ghNotFound)
