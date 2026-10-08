@@ -57,7 +57,7 @@ struct HostsFile: Sendable, Equatable {
 
     static let sizeLimit = 1024 * 1024
 
-    private static let logger = Logger(subsystem: "com.codingfeline.mewbell", category: "GhCLI")
+    private static let logger = Logger(category: "GhCLI")
 
     let hosts: [Host]
 

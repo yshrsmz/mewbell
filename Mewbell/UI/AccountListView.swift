@@ -24,7 +24,7 @@ struct AccountListView: View {
                     HStack(spacing: 4) {
                         Text(group.host)
                             .font(.subheadline.weight(.semibold))
-                        Text("— \(HostKind(host: group.host).displayName)")
+                        Text("— \(group.statuses[0].account.hostKind.displayName)")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }

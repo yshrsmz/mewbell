@@ -14,9 +14,11 @@ actor CredentialStore {
         tokens[id] = token
     }
 
-    /// `ids` に含まれないアカウントのトークンを捨てる。
-    func retainOnly(_ ids: Set<AccountID>) {
+    /// `ids` に含まれないアカウントのトークンを捨て、トークンが残っているアカウントを返す。
+    @discardableResult
+    func retainOnly(_ ids: Set<AccountID>) -> Set<AccountID> {
         tokens = tokens.filter { ids.contains($0.key) }
+        return Set(tokens.keys)
     }
 
     func removeAll() {

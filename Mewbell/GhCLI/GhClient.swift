@@ -3,7 +3,7 @@ import os
 
 /// 検証済みの gh 実行ファイルでコマンドを実行する。
 struct GhClient: Sendable {
-    private static let logger = Logger(subsystem: "com.codingfeline.mewbell", category: "GhCLI")
+    private static let logger = Logger(category: "GhCLI")
 
     let executable: URL
     let runner: any ProcessRunning

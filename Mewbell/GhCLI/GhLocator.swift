@@ -50,7 +50,7 @@ enum LoginShell {
 actor GhLocator {
     static let defaultCandidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh"]
 
-    private static let logger = Logger(subsystem: "com.codingfeline.mewbell", category: "GhCLI")
+    private static let logger = Logger(category: "GhCLI")
 
     private let candidates: [String]
     private let runner: any ProcessRunning

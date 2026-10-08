@@ -38,7 +38,7 @@ protocol AccountDiscovering: Sendable {
 }
 
 actor AccountDiscovery: AccountDiscovering {
-    private static let logger = Logger(subsystem: "com.codingfeline.mewbell", category: "Accounts")
+    private static let logger = Logger(category: "Accounts")
 
     private let locator: GhLocator
     private let runner: any ProcessRunning
@@ -118,32 +118,22 @@ actor AccountDiscovery: AccountDiscovering {
         let accounts = hostsFile.map(Account.accounts(from:)) ?? []
         guard !accounts.isEmpty else { return .notLoggedIn }
 
-        await credentials.retainOnly(Set(accounts.map(\.id)))
-        var statuses: [AccountID: TokenState] = [:]
-        for account in accounts {
-            statuses[account.id] = await credentials.contains(account.id) ? .ready : .fetching
-        }
-        let pending = accounts.filter { statuses[$0.id] == .fetching }
+        let held = await credentials.retainOnly(Set(accounts.map(\.id)))
+        let pending = accounts.filter { !held.contains($0.id) }
         if !pending.isEmpty {
             await update(
-                .accounts(accounts.map { AccountStatus(account: $0, tokenState: statuses[$0.id] ?? .fetching) }))
+                .accounts(
+                    accounts.map { AccountStatus(account: $0, tokenState: held.contains($0.id) ? .ready : .fetching) }))
         }
 
-        let fetched = await fetchTokens(for: pending, using: client)
-        for (id, token) in fetched {
-            if let token {
-                await credentials.set(token, for: id)
-                statuses[id] = .ready
-            } else {
-                statuses[id] = .unavailable
-            }
-        }
-        return .accounts(accounts.map { AccountStatus(account: $0, tokenState: statuses[$0.id] ?? .unavailable) })
+        let failed = await fetchTokens(for: pending, using: client)
+        return .accounts(
+            accounts.map { AccountStatus(account: $0, tokenState: failed.contains($0.id) ? .unavailable : .ready) })
     }
 
-    /// アカウントごとの `gh auth token` を並べて実行する。
-    private func fetchTokens(for accounts: [Account], using client: GhClient) async -> [(AccountID, AccessToken?)] {
-        await withTaskGroup(of: (AccountID, AccessToken?).self) { group in
+    /// アカウントごとの `gh auth token` を並べて実行し、取れたトークンを保存する。取れなかったアカウントを返す。
+    private func fetchTokens(for accounts: [Account], using client: GhClient) async -> Set<AccountID> {
+        let fetched = await withTaskGroup(of: (AccountID, AccessToken?).self) { group in
             for account in accounts {
                 group.addTask { (account.id, await client.token(host: account.host, user: account.user)) }
             }
@@ -153,5 +143,14 @@ actor AccountDiscovery: AccountDiscovering {
             }
             return results
         }
+        var failed: Set<AccountID> = []
+        for (id, token) in fetched {
+            if let token {
+                await credentials.set(token, for: id)
+            } else {
+                failed.insert(id)
+            }
+        }
+        return failed
     }
 }

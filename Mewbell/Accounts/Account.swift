@@ -51,8 +51,9 @@ struct Account: Hashable, Sendable, Identifiable {
     /// `github.com` を先頭に残りのホストを名前順に、同じホストではアクティブなユーザーを先頭に残りを名前順に並べる。
     static func accounts(from hostsFile: HostsFile) -> [Account] {
         let hosts = hostsFile.hosts.sorted { lhs, rhs in
-            if (lhs.name == "github.com") != (rhs.name == "github.com") {
-                return lhs.name == "github.com"
+            let lhsIsDotCom = HostKind(host: lhs.name) == .gitHubDotCom
+            if lhsIsDotCom != (HostKind(host: rhs.name) == .gitHubDotCom) {
+                return lhsIsDotCom
             }
             return lhs.name < rhs.name
         }

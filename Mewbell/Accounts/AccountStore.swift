@@ -7,11 +7,12 @@ import os
 @Observable
 final class AccountStore {
     private(set) var state: DiscoveryState
-    private(set) var isReloading = false
 
-    @ObservationIgnored private static let logger = Logger(subsystem: "com.codingfeline.mewbell", category: "Accounts")
+    @ObservationIgnored private static let logger = Logger(category: "Accounts")
     @ObservationIgnored private let discovery: (any AccountDiscovering)?
-    @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    private var reloadTask: Task<Void, Never>?
+
+    var isReloading: Bool { reloadTask != nil }
 
     /// `discovery` が nil のときは読み込みを行わない（テストのホストや SwiftUI プレビュー用）。
     init(discovery: (any AccountDiscovering)?, state: DiscoveryState = .checking) {
@@ -27,7 +28,6 @@ final class AccountStore {
     func reload() {
         guard let discovery, reloadTask == nil else { return }
         Self.logger.info("Reloading gh accounts")
-        isReloading = true
         // 一覧が出ていないときは、確認中の表示にする
         if !state.hasAccounts {
             state = .checking
@@ -36,7 +36,6 @@ final class AccountStore {
             await discovery.reload { state in
                 await self.apply(state)
             }
-            isReloading = false
             reloadTask = nil
         }
     }
@@ -51,6 +50,8 @@ final class AccountStore {
     }
 
     private func apply(_ state: DiscoveryState) {
+        // 変わっていなければ代入しない（ポップオーバーを開くたびに一覧を描き直さないため）
+        guard self.state != state else { return }
         self.state = state
     }
 }

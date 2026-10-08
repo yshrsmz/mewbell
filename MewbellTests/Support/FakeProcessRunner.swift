@@ -8,13 +8,13 @@ final class FakeProcessRunner: ProcessRunning {
     typealias Handler = @Sendable (ProcessRequest) throws -> ProcessOutput
 
     private let handler: Handler
-    private let recorded = Mutex<[ProcessRequest]>([])
+    private let recorded = LockedValue<[ProcessRequest]>([])
 
     init(handler: @escaping Handler) {
         self.handler = handler
     }
 
-    var requests: [ProcessRequest] { recorded.withLock { $0 } }
+    var requests: [ProcessRequest] { recorded.value }
 
     func run(_ request: ProcessRequest) async throws -> ProcessOutput {
         recorded.withLock { $0.append(request) }
@@ -61,5 +61,9 @@ final class LockedValue<Value: Sendable>: Sendable {
     var value: Value {
         get { mutex.withLock { $0 } }
         set { mutex.withLock { $0 = newValue } }
+    }
+
+    func withLock<Result: Sendable>(_ body: (inout Value) -> Result) -> Result {
+        mutex.withLock { body(&$0) }
     }
 }

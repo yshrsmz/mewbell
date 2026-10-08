@@ -111,18 +111,6 @@ final class DiscoveryFixture: Sendable {
     }
 }
 
-/// `reload` が渡した状態を順に記録する。
-final class StateRecorder: Sendable {
-    private let states = Mutex<[DiscoveryState]>([])
-
-    var all: [DiscoveryState] { states.withLock { $0 } }
-    var last: DiscoveryState? { all.last }
-
-    func record(_ state: DiscoveryState) {
-        states.withLock { $0.append(state) }
-    }
-}
-
 struct AccountDiscoveryTests {
     private let fixture: DiscoveryFixture
     private let twoAccounts = """
@@ -140,10 +128,10 @@ struct AccountDiscoveryTests {
         fixture = try DiscoveryFixture()
     }
 
-    private func reload(_ discovery: AccountDiscovery) async -> StateRecorder {
-        let recorder = StateRecorder()
-        await discovery.reload { recorder.record($0) }
-        return recorder
+    private func reload(_ discovery: AccountDiscovery) async -> [DiscoveryState] {
+        let states = LockedValue<[DiscoveryState]>([])
+        await discovery.reload { state in states.withLock { $0.append(state) } }
+        return states.value
     }
 
     private func status(_ host: String, _ user: String, _ state: TokenState, active: Bool = true) -> AccountStatus {
@@ -151,43 +139,43 @@ struct AccountDiscoveryTests {
     }
 
     @Test func reportsMissingGh() async {
-        let recorder = await reload(fixture.discovery(candidates: ["/nonexistent/gh"]))
-        #expect(recorder.last == .ghNotFound)
+        let states = await reload(fixture.discovery(candidates: ["/nonexistent/gh"]))
+        #expect(states.last == .ghNotFound)
     }
 
     @Test func reportsAnOutdatedGh() async throws {
         fixture.setVersion("gh version 2.39.2 (2023-11-14)\n")
         try fixture.writeHosts(twoAccounts)
-        let recorder = await reload(fixture.discovery())
-        #expect(recorder.last == .ghOutdated(version: GhVersion(major: 2, minor: 39, patch: 2)))
+        let states = await reload(fixture.discovery())
+        #expect(states.last == .ghOutdated(version: GhVersion(major: 2, minor: 39, patch: 2)))
         #expect(fixture.tokenRequests.isEmpty)
     }
 
     @Test func reportsNotLoggedInWithoutHostsFile() async {
-        let recorder = await reload(fixture.discovery())
-        #expect(recorder.last == .notLoggedIn)
+        let states = await reload(fixture.discovery())
+        #expect(states.last == .notLoggedIn)
     }
 
     @Test func reportsAnUnreadableHostsFile() async throws {
         try fixture.writeHosts("github.com: [unclosed")
-        let recorder = await reload(fixture.discovery())
-        #expect(recorder.last == .hostsFileUnreadable(path: fixture.configDirectory.appending(path: "hosts.yml").path))
+        let states = await reload(fixture.discovery())
+        #expect(states.last == .hostsFileUnreadable(path: fixture.configDirectory.appending(path: "hosts.yml").path))
     }
 
     @Test func reportsAnUnreadableHostsFileEvenWhenGhCannotStart() async throws {
         // gh は hosts.yml を解釈できないと --version でも失敗する
         fixture.setVersion("")
         try fixture.writeHosts("github.com: [unclosed")
-        let recorder = await reload(fixture.discovery())
-        #expect(recorder.last == .hostsFileUnreadable(path: fixture.configDirectory.appending(path: "hosts.yml").path))
+        let states = await reload(fixture.discovery())
+        #expect(states.last == .hostsFileUnreadable(path: fixture.configDirectory.appending(path: "hosts.yml").path))
     }
 
     @Test func fetchesTokensForEveryAccount() async throws {
         try fixture.writeHosts(twoAccounts)
         fixture.setFailing(["dave"])
-        let recorder = await reload(fixture.discovery())
+        let states = await reload(fixture.discovery())
         #expect(
-            recorder.all == [
+            states == [
                 .accounts([status("github.com", "alice", .fetching), status("ghe.example.com", "dave", .fetching)]),
                 .accounts([status("github.com", "alice", .ready), status("ghe.example.com", "dave", .unavailable)]),
             ])
@@ -202,9 +190,9 @@ struct AccountDiscoveryTests {
         let discovery = fixture.discovery()
         _ = await reload(discovery)
         fixture.setFailing([])
-        let recorder = await reload(discovery)
+        let states = await reload(discovery)
         #expect(
-            recorder.last
+            states.last
                 == .accounts([status("github.com", "alice", .ready), status("ghe.example.com", "dave", .ready)]))
         let aliceRequests = fixture.tokenRequests.filter { $0.last == "alice" }
         let daveRequests = fixture.tokenRequests.filter { $0.last == "dave" }
@@ -218,8 +206,8 @@ struct AccountDiscoveryTests {
         let discovery = fixture.discovery()
         _ = await reload(discovery)
         try fixture.writeHosts("github.com:\n    users:\n        alice:\n    user: alice\n")
-        let recorder = await reload(discovery)
-        #expect(recorder.last == .accounts([status("github.com", "alice", .ready)]))
+        let states = await reload(discovery)
+        #expect(states.last == .accounts([status("github.com", "alice", .ready)]))
         #expect(await fixture.credentials.contains(AccountID(host: "github.com", user: "alice")))
         #expect(await !fixture.credentials.contains(AccountID(host: "ghe.example.com", user: "dave")))
     }
@@ -229,8 +217,8 @@ struct AccountDiscoveryTests {
         let discovery = fixture.discovery()
         _ = await reload(discovery)
         try FileManager.default.removeItem(at: fixture.configDirectory.appending(path: "hosts.yml"))
-        let recorder = await reload(discovery)
-        #expect(recorder.last == .notLoggedIn)
+        let states = await reload(discovery)
+        #expect(states.last == .notLoggedIn)
         #expect(await !fixture.credentials.contains(AccountID(host: "github.com", user: "alice")))
     }
 }
