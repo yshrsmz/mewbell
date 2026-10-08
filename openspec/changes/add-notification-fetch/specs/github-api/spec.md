@@ -123,7 +123,7 @@ Mewbell は API のエラーレスポンスのボディを UI に出してはな
 
 ### Requirement: スコープの確認
 
-Mewbell は、トークンを受け取ってから最初の `200` のレスポンスの `X-OAuth-Scopes` ヘッダーを読み、`repo` も `notifications` も含まれていなければ「スコープ不足」として扱わなければならない（MUST）。ヘッダーが無いとき（classic 系でないトークン）も「スコープ不足」として扱わなければならない（MUST）。「スコープ不足」のとき、そのレスポンスのスレッドを一覧に出してはならない（MUST NOT）。
+Mewbell は、トークンを受け取ってから最初の `200` のレスポンスの `X-OAuth-Scopes` ヘッダーを読み、`repo` も `notifications` も含まれていなければ「スコープ不足」として扱わなければならない（MUST）。ヘッダーが無いとき（classic 系でないトークン）も「スコープ不足」として扱わなければならない（MUST）。「スコープ不足」のとき、そのレスポンスのスレッドを一覧に出してはならない（MUST NOT）。レート制限でない `403` のレスポンスに `X-OAuth-Scopes` があり、`repo` も `notifications` も含まれていないときも「スコープ不足」として扱わなければならない（MUST）。
 
 #### Scenario: repo スコープがある
 
@@ -136,6 +136,12 @@ Mewbell は、トークンを受け取ってから最初の `200` のレスポ�
 - **GIVEN** `X-OAuth-Scopes` が `notifications`
 - **WHEN** Mewbell がスコープを確かめる
 - **THEN** スコープは足りているとして扱う
+
+#### Scenario: スコープが無くて 403 が返る
+
+- **GIVEN** `GET /notifications` が `403` と `X-OAuth-Scopes: gist, read:org` を返す（レート制限のヘッダーは無い）
+- **WHEN** Mewbell がレスポンスを受け取る
+- **THEN** 「スコープ不足」になる
 
 #### Scenario: どちらも無い
 

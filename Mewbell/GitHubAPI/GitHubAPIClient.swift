@@ -39,8 +39,8 @@ enum NotificationsFetchResult: Sendable, Equatable {
     case unauthorized
     /// レート制限の 403（`retryAt` まで待つ）
     case rateLimited(retryAt: Date)
-    /// レート制限でない 403
-    case forbidden
+    /// レート制限でない 403。`X-OAuth-Scopes` があれば、スコープ不足かどうかの判断に使う
+    case forbidden(scopes: OAuthScopes)
     /// 422
     case invalidRequest
     case failed(FetchFailure)
@@ -161,7 +161,9 @@ struct GitHubAPIClient: Sendable {
                     .map(Date.init(timeIntervalSince1970:))
                 return .rateLimited(retryAt: reset ?? now())
             }
-            return response.statusCode == 429 ? .rateLimited(retryAt: now()) : .forbidden
+            return response.statusCode == 429
+                ? .rateLimited(retryAt: now())
+                : .forbidden(scopes: OAuthScopes(header: response.header("X-OAuth-Scopes")))
         case 422:
             return .invalidRequest
         default:

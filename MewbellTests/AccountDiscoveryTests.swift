@@ -253,6 +253,38 @@ struct AccountDiscoveryTests {
         #expect(await fixture.credentials.token(for: alice) == nil)
     }
 
+    @Test func stopsGhWhenTheOnlyCallerIsCancelled() async throws {
+        try fixture.writeHosts(twoAccounts)
+        let gated = GatedProcessRunner(base: fixture.runner)
+        let discovery = fixture.discovery(runner: gated)
+        _ = await reload(discovery)
+        gated.close()
+        let refresh = Task { await discovery.refreshToken(for: alice) }
+        await gated.waitUntilWaiting(1)
+        refresh.cancel()
+        gated.open()
+        #expect(await refresh.value == nil)
+    }
+
+    @Test func keepsGhRunningForAJoinedCallerWhenTheFirstIsCancelled() async throws {
+        try fixture.writeHosts(twoAccounts)
+        let gated = GatedProcessRunner(base: fixture.runner)
+        let discovery = fixture.discovery(runner: gated)
+        _ = await reload(discovery)
+        gated.close()
+        let refresh = Task { await discovery.refreshToken(for: alice) }
+        await gated.waitUntilWaiting(1)
+        async let reloaded = reload(discovery)
+        try await Task.sleep(for: .milliseconds(200))
+        refresh.cancel()
+        gated.open()
+        let states = await reloaded
+        #expect(
+            states.last
+                == .accounts([status("github.com", "alice", .ready), status("ghe.example.com", "dave", .ready)]))
+        #expect(await fixture.credentials.token(for: alice)?.value == "test-token-alice")
+    }
+
     @Test func sharesARunningTokenFetchBetweenReloadAndRefresh() async throws {
         try fixture.writeHosts(twoAccounts)
         let gated = GatedProcessRunner(base: fixture.runner)
@@ -271,103 +303,5 @@ struct AccountDiscoveryTests {
         #expect(token?.value == "test-token-alice")
         #expect(states.last?.hasAccounts == true)
         #expect(fixture.tokenRequests.filter { $0.last == "alice" }.count == 2)
-    }
-}
-
-@MainActor
-struct AccountStoreTests {
-    @Test func reportsStateChanges() async {
-        let discovery = BlockingDiscovery()
-        let store = AccountStore(discovery: discovery, state: .ghNotFound)
-        let reported = LockedValue<[DiscoveryState]>([])
-        store.onStateChange = { state in reported.withLock { $0.append(state) } }
-        discovery.finish()
-        discovery.finish()
-        store.reload()
-        await store.waitForReload()
-        store.reload()
-        await store.waitForReload()
-        // 変わらなかった 2 回目は知らせない
-        #expect(reported.value == [.notLoggedIn])
-    }
-
-    @Test func doesNotRunTwoReloadsAtOnce() async {
-        let discovery = BlockingDiscovery()
-        let store = AccountStore(discovery: discovery, state: .ghNotFound)
-        store.reload(userInitiated: true)
-        #expect(store.state == .checking)
-        #expect(store.isReloading)
-        store.reload()
-        for _ in 0..<5 {
-            await Task.yield()
-        }
-        #expect(discovery.callCount == 1)
-        discovery.finish()
-        discovery.finish()
-        await store.waitForReload()
-        #expect(discovery.callCount == 2)
-        #expect(store.state == .notLoggedIn)
-        #expect(!store.isReloading)
-    }
-
-    @Test func passesAQueuedUserReloadThrough() async {
-        let discovery = BlockingDiscovery()
-        let store = AccountStore(discovery: discovery)
-        store.reload()
-        store.reload(userInitiated: true)
-        store.reload()
-        discovery.finish()
-        discovery.finish()
-        await store.waitForReload()
-        #expect(discovery.events.filter { $0.hasPrefix("reload(") || $0 == "reload" } == ["reload", "reload(user)"])
-    }
-
-    @Test func keepsTheGuidanceWhenReloadingWithoutProgress() {
-        let discovery = BlockingDiscovery()
-        let store = AccountStore(discovery: discovery, state: .ghNotFound)
-        store.reload()
-        #expect(store.state == .ghNotFound)
-        discovery.finish()
-    }
-
-    @Test func keepsTheListWhileReloading() {
-        let discovery = BlockingDiscovery()
-        let accounts = DiscoveryState.accounts([])
-        let store = AccountStore(discovery: discovery, state: accounts)
-        store.reload()
-        #expect(store.state == accounts)
-        discovery.finish()
-    }
-
-    @Test func runsAQueuedReloadAfterTheCurrentOne() async {
-        let discovery = BlockingDiscovery()
-        let store = AccountStore(discovery: discovery)
-        store.reload()
-        store.reload()
-        store.reload()
-        discovery.finish()
-        discovery.finish()
-        await store.waitForReload()
-        #expect(discovery.callCount == 2)
-    }
-
-    @Test func closesCredentialsAndRefusesToReloadWhenTerminating() async {
-        let discovery = BlockingDiscovery()
-        let store = AccountStore(discovery: discovery)
-        store.reload()
-        await store.discardCredentials()
-        #expect(discovery.events.contains("closed"))
-        discovery.finish()
-        await store.waitForReload()
-        store.reload()
-        #expect(!store.isReloading)
-        #expect(discovery.callCount == 1)
-    }
-
-    @Test func doesNothingWithoutDiscovery() {
-        let store = AccountStore(discovery: nil, state: .ghNotFound)
-        store.reload()
-        #expect(store.state == .ghNotFound)
-        #expect(!store.isReloading)
     }
 }

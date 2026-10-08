@@ -138,6 +138,15 @@ actor AccountPoller {
             let delay = PollSchedule.afterRateLimit(retryAt: retryAt, now: now())
             state.phase = retrying(after: delay, rateLimited: true)
             return .wait(delay)
+        case .forbidden(let scopes) where scopes.scopes != nil && !scopes.allowsNotifications:
+            Self.logger.error("\(self.accountID) was refused for lacking the repo and notifications scopes")
+            await stop(as: .scopeInsufficient)
+            return .stop
+        case .failed(.noToken):
+            // 読み直しや取り直しの途中で一時的にトークンが無いだけのことが多いので、待ち時間は延ばさない
+            let delay = PollSchedule.afterSuccess(pollInterval: nil)
+            state.phase = retrying(after: delay, rateLimited: false)
+            return .wait(delay)
         case .forbidden, .invalidRequest, .failed:
             consecutiveFailures += 1
             let delay = PollSchedule.afterFailure(consecutiveFailures: consecutiveFailures)

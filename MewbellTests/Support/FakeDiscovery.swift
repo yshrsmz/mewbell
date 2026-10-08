@@ -43,6 +43,8 @@ final class GatedProcessRunner: ProcessRunning {
                 if passes { continuation.resume() }
             }
         }
+        // 待っている間に取得がキャンセルされていたら、gh が止められたものとして失敗させる
+        try Task.checkCancellation()
         return try await base.run(request)
     }
 }

@@ -34,20 +34,23 @@ final class NotificationStore {
         }
     }
 
-    /// トークンが「使える」アカウントのポーラーを起動し、一覧から消えたアカウントと「トークンを取れない」アカウントの
-    /// ポーラーを止めて状態を消す。すでにポーラーがあるアカウント（止まっているものを含む）はそのままにする。
-    /// トークンの取得中（401 の後の取り直しや、トークンを捨てた後の読み直し）のアカウントのポーラーも残す
+    /// トークンが「使える」アカウントのポーラーを起動し、一覧から消えたアカウントのポーラーを止めて状態を消す
+    /// （全体の状態が「アカウントあり」以外になったら、すべて止める）。すでにポーラーがあるアカウントは、
+    /// トークンの取得中や「トークンを取れない」の間もそのままにする
     /// （作り直すと、止めたポーリングが勝手に再開したり、取り直しと重なったりするため）。
     func sync(with state: DiscoveryState) {
         guard let makePoller else { return }
         let statuses: [AccountStatus] = if case .accounts(let statuses) = state { statuses } else { [] }
-        let keptIDs = Set(statuses.filter { $0.tokenState != .unavailable }.map(\.id))
+        let keptIDs = Set(statuses.map(\.id))
         for id in pollers.keys where !keptIDs.contains(id) {
             pollers.removeValue(forKey: id)?.poller.stop()
             feeds[id] = nil
         }
         for account in statuses.filter({ $0.tokenState == .ready }).map(\.account) where pollers[account.id] == nil {
-            guard let endpoints = APIEndpoints(host: account.host) else { continue }
+            guard let endpoints = APIEndpoints(host: account.host) else {
+                Self.logger.error("Could not derive the API endpoints of \(account.id)")
+                continue
+            }
             let generation = nextGeneration
             nextGeneration += 1
             let id = account.id

@@ -175,6 +175,22 @@ struct AccountPollerTests {
         #expect(fixture.sleeper.durations.isEmpty)
     }
 
+    @Test func stopsWhenA403SaysTheScopesAreInsufficient() async {
+        fixture.respond([HTTPResponse(statusCode: 403, headers: ["X-OAuth-Scopes": "gist, read:org"])])
+        fixture.poller.start()
+        await waitUntil { self.fixture.last?.phase == .scopeInsufficient }
+        #expect(fixture.last?.phase == .scopeInsufficient)
+        #expect(fixture.sleeper.durations.isEmpty)
+    }
+
+    @Test func keepsRetryingAForbiddenResponseWithoutScopes() async {
+        fixture.respond([HTTPResponse(statusCode: 403)])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        #expect(fixture.sleeper.durations == [.seconds(60)])
+        fixture.poller.stop()
+    }
+
     @Test func startsTheBackoffOverAfterResuming() async {
         // 通信の失敗が 2 回続いた後、スコープ不足で止まる
         fixture.respond([])
@@ -199,13 +215,16 @@ struct AccountPollerTests {
         fixture.respond([PollerFixture.ok(1...1)])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
+        fixture.sleeper.advance()
+        await fixture.sleeper.waitForSleeps(2)
         #expect(fixture.transport.requests.isEmpty)
-        #expect(fixture.sleeper.durations == [.seconds(60)])
+        // 失敗の回数に数えないので、待ち時間は延びない
+        #expect(fixture.sleeper.durations == [.seconds(60), .seconds(60)])
         #expect(
             fixture.last?.phase == .retrying(nextAttempt: PollerFixture.now.addingTimeInterval(60), rateLimited: false))
         fixture.tokens.set("test-token-alice", for: PollerFixture.alice)
         fixture.sleeper.advance()
-        await fixture.sleeper.waitForSleeps(2)
+        await fixture.sleeper.waitForSleeps(3)
         #expect(fixture.transport.requests.count == 1)
         #expect(fixture.last?.phase == .loaded(updatedAt: PollerFixture.now))
         fixture.poller.stop()
@@ -280,18 +299,23 @@ struct NotificationStoreTests {
         store.stopAll()
     }
 
-    @Test func stopsPollersForAccountsThatAreGoneOrUnavailable() async {
+    @Test func stopsPollersForAccountsThatAreGone() async {
         tokens.set("test-token-alice", for: alice)
         tokens.set("test-token-bob", for: bob)
         let store = makeStore()
         store.sync(with: .accounts([status("alice", .ready), status("bob", .ready)]))
         await sleeper.waitForSleeps(2)
+        // トークンを取れなくなっただけのアカウントのポーラーは残す
         store.sync(with: .accounts([status("alice", .unavailable)]))
+        #expect(store.feeds[bob] == nil)
+        #expect(store.feeds[alice]?.threads.count == 1)
+        store.sync(with: .accounts([status("alice", .ready)]))
+        #expect(created.value == [alice, bob])
+        store.sync(with: .notLoggedIn)
         #expect(store.feeds.isEmpty)
         store.sync(with: .accounts([status("alice", .ready)]))
         #expect(store.feeds[alice] == .loading)
-        store.sync(with: .notLoggedIn)
-        #expect(store.feeds.isEmpty)
+        store.stopAll()
     }
 
     /// alice のトークンが 401 になり、取り直せずに「認証エラー」で止まった store を作る。
@@ -308,6 +332,7 @@ struct NotificationStoreTests {
         #expect(store.feeds[alice]?.phase == .unauthorized)
         // ポップオーバーを開いた読み直しで、トークンを持たない alice が取得中を経て「使える」に戻る
         store.sync(with: .accounts([status("alice", .fetching), status("bob", .fetching)]))
+        store.sync(with: .accounts([status("alice", .unavailable), status("bob", .fetching)]))
         tokens.set("bad-token", for: alice)
         store.sync(with: .accounts([status("alice", .ready), status("bob", .fetching)]))
         try? await Task.sleep(for: .milliseconds(50))

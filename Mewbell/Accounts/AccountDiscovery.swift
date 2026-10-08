@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import os
 
 /// アカウントごとのトークンの状態。
@@ -53,7 +54,7 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     /// `gh --version` で対応を確かめた gh の実体のパス
     private var verifiedGhPath: URL?
     /// アカウントごとの走っている `gh auth token`（読み直しと取り直しで共有する）
-    private var inFlightTokenFetches: [AccountID: Task<AccessToken?, Never>] = [:]
+    private var inFlightTokenFetches: [AccountID: TokenFetch] = [:]
     /// 最後の読み直しで `hosts.yml` にあったアカウント。ここに無いアカウントのトークンは保存しない
     /// （取得の途中でアカウントが消えたときに、捨てたトークンを書き戻さないため）
     private var knownAccountIDs: Set<AccountID> = []
@@ -127,14 +128,18 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     /// 取得を始めた呼び出し元がキャンセルされたら gh も止める（合流しただけの呼び出し元のキャンセルでは止めない）。
     private func fetchToken(for id: AccountID, using client: GhClient) async -> AccessToken? {
         if let running = inFlightTokenFetches[id] {
-            return await running.value
+            running.isShared.withLock { $0 = true }
+            return await running.task.value
         }
-        let task = Task { await client.token(host: id.host, user: id.user) }
-        inFlightTokenFetches[id] = task
+        let fetch = TokenFetch(task: Task { await client.token(host: id.host, user: id.user) })
+        inFlightTokenFetches[id] = fetch
         let token = await withTaskCancellationHandler {
-            await task.value
+            await fetch.task.value
         } onCancel: {
-            task.cancel()
+            // 合流した呼び出し元がいれば、その結果を奪わないよう gh は止めない
+            if !fetch.isShared.withLock({ $0 }) {
+                fetch.task.cancel()
+            }
         }
         inFlightTokenFetches[id] = nil
         guard let token, knownAccountIDs.contains(id) else { return nil }
@@ -197,5 +202,15 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
             }
             return failed
         }
+    }
+}
+
+/// 走っている `gh auth token` と、ほかの呼び出し元が合流したかどうか。
+private final class TokenFetch: Sendable {
+    let task: Task<AccessToken?, Never>
+    let isShared = Mutex(false)
+
+    init(task: Task<AccessToken?, Never>) {
+        self.task = task
     }
 }

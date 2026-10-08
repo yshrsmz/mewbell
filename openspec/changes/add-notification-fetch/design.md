@@ -66,7 +66,7 @@ GitHub の Notifications API の前提:
       case notModified(pollInterval: Int?)
       case unauthorized                 // 401
       case rateLimited(retryAt: Date)   // 403 + X-RateLimit-Remaining: 0 / Retry-After、または 429
-      case forbidden                    // それ以外の 403
+      case forbidden(scopes: OAuthScopes)  // それ以外の 403（`X-OAuth-Scopes` にスコープが無ければスコープ不足として止める）
       case invalidRequest               // 422
       case failed(FetchFailure)         // 通信・タイムアウト・その他の状態コード・ボディ超過・リダイレクト・URL 拒否・デコード失敗
   }
@@ -107,13 +107,14 @@ GitHub の Notifications API の前提:
 
 - 成功（`updated` / `notModified`）: `max(60, X-Poll-Interval ?? 60)` 秒。失敗の回数を 0 に戻す
 - `rateLimited(retryAt)`: `max(60, retryAt - now)` 秒。上限は設けない（`X-RateLimit-Reset` は最大 1 時間先）。`Retry-After` があればそちらを優先する
-- その他の失敗（トークンが無かったときを含む）: `min(60 × 2^(n−1), 900)` 秒（n は連続した失敗の回数）
+- トークンが無かった: 60 秒。失敗の回数には数えない
+- その他の失敗: `min(60 × 2^(n−1), 900)` 秒（n は連続した失敗の回数）
 - `now` は注入する（テストで固定する）
 
 ### D6. トークンの取り直しと読み直しの共有
 
 - `CredentialStore.remove(_ id:)` を足す
-- `AccountDiscovery` に `inFlightTokenFetches: [AccountID: Task<AccessToken?, Never>]` を持たせ、`reload` のトークン取得と `refreshToken(for:)` の両方がこれを通るようにする。同じアカウントの取得が走っていれば、その `Task` の結果を待つ（accounts spec の「重なったら共有」）
+- `AccountDiscovery` に `inFlightTokenFetches: [AccountID: Task<AccessToken?, Never>]` を持たせ、`reload` のトークン取得と `refreshToken(for:)` の両方がこれを通るようにする。同じアカウントの取得が走っていれば、その `Task` の結果を待つ（accounts spec の「重なったら共有」）。取得を始めた呼び出し元がキャンセルされたら gh も止めるが、合流した呼び出し元がいれば止めない
 - `refreshToken(for:)` は、`CredentialStore` から古いトークンを捨て、検証済みの gh のパス（`verifiedGhPath`）で `gh auth token` を実行し、取れたら保存して返す。gh のパスがまだ確かめられていない（読み直しの途中など）ときは nil を返す
 - 取り直しに失敗しても `AccountStore` のトークンの状態（「使える」）はすぐには変えない。ポーラーが「認証エラー」を出す。次の読み直しで、トークンを持っていないアカウントとして gh が呼ばれ、状態が直る
 - 代替案: 401 のときに `AccountStore.reload()` を呼ぶ → gh の検出や `hosts.yml` の読み取りまでやり直すうえ、どのアカウントのためかを渡せない。採らない
@@ -128,7 +129,7 @@ GitHub の Notifications API の前提:
 | `URLSessionTransport` | `Sendable` な final class（`URLSession` を持つだけ） | URLSession の delegate キュー |
 | `AccountDiscovery`、`CredentialStore` | actor（M1 のまま） | gh の実行とトークンの保持 |
 
-- `AccountStore` は状態が変わったときに `onStateChange` を呼び、`AppDelegate` がそれを `NotificationStore.sync(with:)` につなぐ。`sync` は `.accounts` のうち `tokenState == .ready` のアカウントにポーラーを起動し、一覧から消えた・`.unavailable` になった・全体の状態が `.accounts` 以外になったアカウントのポーラーを止めて `FeedState` を消す。`.fetching` のアカウント（401 の後の取り直し中や、トークンを捨てた後の読み直し中）のポーラーは残す。すでにポーラーがあるアカウントはそのままにする。「スコープ不足」「認証エラー」で止まっているポーラーも、アカウントが「使える」と報告され続けている間は残し、`sync` では再開しない（再開は `resumeStopped()` だけ。401 の後にトークンを持たなくなったアカウントは、ポップオーバーを開いたときの読み直しで gh からトークンを取得し直すが、それでもポーリングは止まったまま）
+- `AccountStore` は状態が変わったときに `onStateChange` を呼び、`AppDelegate` がそれを `NotificationStore.sync(with:)` につなぐ。`sync` は `.accounts` のうち `tokenState == .ready` のアカウントにポーラーを起動し、一覧から消えた・全体の状態が `.accounts` 以外になったアカウントのポーラーを止めて `FeedState` を消す。`.fetching` や `.unavailable` になったアカウント（401 の後の取り直し中や、トークンを捨てた後の読み直し中など）のポーラーは残す（作り直すと、止めたポーリングが勝手に再開するため）すでにポーラーがあるアカウントはそのままにする。「スコープ不足」「認証エラー」で止まっているポーラーも、アカウントが「使える」と報告され続けている間は残し、`sync` では再開しない（再開は `resumeStopped()` だけ。401 の後にトークンを持たなくなったアカウントは、ポップオーバーを開いたときの読み直しで gh からトークンを取得し直すが、それでもポーリングは止まったまま）
 - 再読み込みボタンは `AccountStore.reload(userInitiated: true)` と `NotificationStore.resumeStopped()` を呼ぶ。`resumeStopped()` は「スコープ不足」「認証エラー」のポーラーだけに `resume()` を送る。ポップオーバーを開いたときは `AccountStore.reload()` だけを呼ぶ
 - 終了時は `applicationShouldTerminate` で `NotificationStore.stopAll()`（すべてのポーラーを止めて状態を消す）→ `AccountStore.discardCredentials()` の順にする
 

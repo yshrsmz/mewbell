@@ -32,7 +32,11 @@ struct AccountSectionView: View {
             header
             switch status.tokenState {
             case .fetching:
-                EmptyView()
+                // 401 の後などにトークンを取り直している間も、それまでの状態を出し続ける
+                if let feed {
+                    FeedStatusView(account: account, phase: feed.phase)
+                    threads(feed)
+                }
             case .unavailable:
                 Text("Could not get a token from gh. Log in again with:")
                     .font(.caption)
