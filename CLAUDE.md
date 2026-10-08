@@ -65,7 +65,7 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEW
 - **ホスト種別の判定**: `github.com` → `https://api.github.com`、`*.ghe.com` → `https://api.<host>`、それ以外 → `https://<host>/api/v3`
 - **スコープ確認**: 初回レスポンスの `X-OAuth-Scopes` に `repo` も `notifications` も無いアカウントは「スコープ不足」にして止め、`gh auth refresh -s repo` を案内する
 - gh が無い／未ログインのときはインストール・`gh auth login` の案内画面を出すだけ。フォールバックの認証経路は作らない
-- gh のパスは `/opt/homebrew/bin/gh`, `/usr/local/bin/gh` の順に探し、見つからなければログインシェル経由で `command -v gh` を 1 回だけ試す。設定で上書き可
+- gh のパスは `/opt/homebrew/bin/gh`, `/usr/local/bin/gh` の順に探し、見つからなければログインシェル経由で `command -v gh` を試す。自動では起動ごとに 1 回だけで、見つかっていなければユーザーが再読み込みを押したときだけ探し直す。設定で上書き可
 - 新着通知は 1 スレッド 1 通知。通知 ID は `<host>/<user>/<threadId>`。既読・Done にしたスレッドの通知は取り下げる
 - 通知クリックは「ブラウザで開く → `PATCH /notifications/threads/{id}` で既読」
 - UI の一覧はアカウント → リポジトリの 2 段グルーピング。既定は `participating=false`（設定で切替）

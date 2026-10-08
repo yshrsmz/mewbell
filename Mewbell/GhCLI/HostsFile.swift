@@ -63,6 +63,14 @@ struct HostsFile: Sendable, Equatable {
 
     /// ファイルを読む。ファイルが無いときは nil（未ログイン）。
     static func load(from url: URL) throws(LoadError) -> HostsFile? {
+        // 通常ファイル以外（FIFO など）は開かない。FIFO は開くだけで止まり、アプリを終了できなくなる
+        var info = stat()
+        guard stat(url.path, &info) == 0 else {
+            if errno == ENOENT { return nil }
+            throw .unreadable
+        }
+        guard info.st_mode & S_IFMT == S_IFREG else { throw .unreadable }
+
         let handle: FileHandle
         do {
             handle = try FileHandle(forReadingFrom: url)

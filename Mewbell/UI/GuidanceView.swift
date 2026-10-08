@@ -29,9 +29,13 @@ struct GuidanceView: View {
             case .ghOutdated(let version):
                 title("gh is too old", systemImage: "exclamationmark.triangle")
                 Text(
-                    "Found \(version.map { "gh \($0)" } ?? "a gh whose version could not be read"). "
-                        + "Mewbell needs gh \(GhVersion.minimumSupported) or later.")
+                    "Found gh \(version.description). Mewbell needs gh \(GhVersion.minimumSupported.description) or later."
+                )
                 CommandRow(command: "brew upgrade gh")
+            case .ghUnavailable:
+                title("Could not run gh", systemImage: "exclamationmark.triangle")
+                Text("gh did not respond as expected. Check that this command works, then reload.")
+                CommandRow(command: "gh --version")
             case .hostsFileUnreadable(let path):
                 title("Cannot read gh's account list", systemImage: "exclamationmark.triangle")
                 Text("Could not read \(path). Check your gh login with:")
@@ -64,6 +68,10 @@ struct GuidanceView: View {
 
 #Preview("gh outdated") {
     GuidanceView(state: .ghOutdated(version: GhVersion(major: 2, minor: 39, patch: 2))).padding().frame(width: 320)
+}
+
+#Preview("gh unavailable") {
+    GuidanceView(state: .ghUnavailable).padding().frame(width: 320)
 }
 
 #Preview("hosts.yml unreadable") {

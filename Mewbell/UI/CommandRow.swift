@@ -19,6 +19,10 @@ struct CommandRow: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(command, forType: .string)
                 copied = true
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    copied = false
+                }
             } label: {
                 Image(systemName: copied ? "checkmark" : "doc.on.doc")
                     .frame(width: 16)

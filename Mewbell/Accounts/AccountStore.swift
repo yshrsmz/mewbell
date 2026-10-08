@@ -13,6 +13,8 @@ final class AccountStore {
     private var reloadTask: Task<Void, Never>?
     /// 読み直している間に要求が来たか（終わった後にもう一度読み直す）
     @ObservationIgnored private var reloadRequested = false
+    /// 読み直している間に来た要求に、ユーザーの再読み込みが含まれるか
+    @ObservationIgnored private var queuedReloadIsUserInitiated = false
     /// 終了処理を始めたか（以後は読み直さない）
     @ObservationIgnored private var isTerminating = false
 
@@ -30,26 +32,29 @@ final class AccountStore {
 
     /// 読み直す。読み直している間に呼ばれたときは、同じアカウントの gh を同時に走らせないよう、
     /// 今の読み直しが終わってからもう一度読み直す（ログイン直後に開いたポップオーバーの要求を取りこぼさないため）。
-    /// `showsProgress` が true（再読み込みボタン）なら、一覧が出ていないときに確認中の表示にする。
-    /// ポップオーバーを開いたときは今の表示を残す（開くたびに案内がちらつかないように）。
-    func reload(showsProgress: Bool = false) {
+    /// `userInitiated` が true（再読み込みボタン）なら、一覧が出ていないときに確認中の表示にし、
+    /// 見つかっていない gh をログインシェルで探し直す。
+    /// ポップオーバーを開いたとき（false）は今の表示を残す（開くたびに案内がちらつかないように）。
+    func reload(userInitiated: Bool = false) {
         guard let discovery, !isTerminating else { return }
         guard reloadTask == nil else {
             reloadRequested = true
+            queuedReloadIsUserInitiated = queuedReloadIsUserInitiated || userInitiated
             return
         }
         reloadRequested = false
+        queuedReloadIsUserInitiated = false
         Self.logger.info("Reloading gh accounts")
-        if showsProgress && !state.hasAccounts {
+        if userInitiated && !state.hasAccounts {
             state = .checking
         }
         reloadTask = Task {
-            await discovery.reload { state in
+            await discovery.reload(userInitiated: userInitiated) { state in
                 await self.apply(state)
             }
             reloadTask = nil
             if reloadRequested {
-                reload()
+                reload(userInitiated: queuedReloadIsUserInitiated)
             }
         }
     }

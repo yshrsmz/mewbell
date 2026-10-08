@@ -80,7 +80,9 @@ actor GhLocator {
     }
 
     /// 使える gh の実体のパス。`overridePath` があるときは、それだけを確かめる（M4 で設定から渡す）。
-    func locate(overridePath: String? = nil) async -> URL? {
+    /// ログインシェルでの検索は自動では 1 回だけ行う。`retryLoginShell` が true（ユーザーが再読み込みを押した）で、
+    /// 前回の検索で見つからなかったときに限り、もう一度検索する。
+    func locate(overridePath: String? = nil, retryLoginShell: Bool = false) async -> URL? {
         if let overridePath {
             return ExecutableValidator.validate(overridePath)
         }
@@ -88,6 +90,11 @@ actor GhLocator {
             if let url = ExecutableValidator.validate(candidate) {
                 return url
             }
+        }
+        if retryLoginShell, let previous = loginShellSearch,
+            await previous.value.flatMap(ExecutableValidator.validate) == nil
+        {
+            loginShellSearch = nil
         }
         let search = loginShellSearch ?? Task { await searchLoginShell() }
         loginShellSearch = search

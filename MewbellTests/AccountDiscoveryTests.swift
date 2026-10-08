@@ -140,7 +140,7 @@ struct AccountDiscoveryTests {
 
     private func reload(_ discovery: AccountDiscovery) async -> [DiscoveryState] {
         let states = LockedValue<[DiscoveryState]>([])
-        await discovery.reload { state in states.withLock { $0.append(state) } }
+        await discovery.reload(userInitiated: false) { state in states.withLock { $0.append(state) } }
         return states.value
     }
 
@@ -159,6 +159,15 @@ struct AccountDiscoveryTests {
         let states = await reload(fixture.discovery())
         #expect(states.last == .ghOutdated(version: GhVersion(major: 2, minor: 39, patch: 2)))
         #expect(fixture.tokenRequests.isEmpty)
+    }
+
+    @Test func reportsAGhThatCannotRunAndChecksAgainNextTime() async throws {
+        try fixture.writeHosts(twoAccounts)
+        fixture.setVersion("")
+        let discovery = fixture.discovery()
+        #expect(await reload(discovery).last == .ghUnavailable)
+        fixture.setVersion("gh version 2.102.0 (2026-09-30)\n")
+        #expect(await reload(discovery).last?.hasAccounts == true)
     }
 
     @Test func reportsNotLoggedInWithoutHostsFile() async {
@@ -244,8 +253,9 @@ final class BlockingDiscovery: AccountDiscovering {
     /// 読み込みの終了と破棄が起きた順
     var events: [String] { recordedEvents.withLock { $0 } }
 
-    func reload(update: @escaping @Sendable (DiscoveryState) async -> Void) async {
+    func reload(userInitiated: Bool, update: @escaping @Sendable (DiscoveryState) async -> Void) async {
         calls.withLock { $0 += 1 }
+        recordedEvents.withLock { $0.append(userInitiated ? "reload(user)" : "reload") }
         await withCheckedContinuation { continuation in
             let resumeNow = gate.withLock { gate in
                 if gate.permits > 0 {
@@ -285,7 +295,7 @@ struct AccountStoreTests {
     @Test func doesNotRunTwoReloadsAtOnce() async {
         let discovery = BlockingDiscovery()
         let store = AccountStore(discovery: discovery, state: .ghNotFound)
-        store.reload(showsProgress: true)
+        store.reload(userInitiated: true)
         #expect(store.state == .checking)
         #expect(store.isReloading)
         store.reload()
@@ -299,6 +309,18 @@ struct AccountStoreTests {
         #expect(discovery.callCount == 2)
         #expect(store.state == .notLoggedIn)
         #expect(!store.isReloading)
+    }
+
+    @Test func passesAQueuedUserReloadThrough() async {
+        let discovery = BlockingDiscovery()
+        let store = AccountStore(discovery: discovery)
+        store.reload()
+        store.reload(userInitiated: true)
+        store.reload()
+        discovery.finish()
+        discovery.finish()
+        await store.waitForReload()
+        #expect(discovery.events.filter { $0.hasPrefix("reload(") || $0 == "reload" } == ["reload", "reload(user)"])
     }
 
     @Test func keepsTheGuidanceWhenReloadingWithoutProgress() {

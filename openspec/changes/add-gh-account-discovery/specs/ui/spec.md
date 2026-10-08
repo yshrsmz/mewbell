@@ -27,6 +27,7 @@
 - 確認中: 進行中であることを示す表示
 - gh が見つからない: gh のインストール方法（`brew install gh`）と、`https://cli.github.com/` をブラウザで開くボタン
 - gh が古い: 検出したバージョン、必要なバージョン（2.40.0 以上）、更新方法（`brew upgrade gh`）
+- gh を実行できない: gh が期待どおりに応答しなかったことと、手元で確かめるコマンド（`gh --version`）。確かめた後に再読み込みするよう促す
 - `hosts.yml` を読めない: 読もうとしたファイルのパスと、`gh auth status` で状態を確かめるよう促す文
 - 未ログイン: `gh auth login`（GHE の場合は `gh auth login --hostname <host>`）でログインするよう促す文
 

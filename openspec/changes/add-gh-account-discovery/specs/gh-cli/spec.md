@@ -8,7 +8,7 @@ Mewbell が gh CLI を安全に見つけて実行し、gh にログイン済み�
 
 ### Requirement: gh 実行ファイルの検出
 
-Mewbell は gh の実行ファイルを、`/opt/homebrew/bin/gh`、`/usr/local/bin/gh` の順に探さなければならない（MUST）。どちらにも使える gh が無いときに限り、ユーザーのログインシェル（ユーザーアカウントに登録されたシェルで、`/etc/shells` に載っているもの）を対話モードのログインシェルとして起動して（`~/.zshrc` などで通した PATH も拾うため）`command -v gh` を実行し、その出力の最後の空でない行をパスの候補にしなければならない（MUST）。ログインシェルでの検索は、アプリを起動してから終了するまでに 1 回だけでなければならない（MUST）。上書き用のパスが与えられたときは、それだけを候補にしなければならない（MUST）。
+Mewbell は gh の実行ファイルを、`/opt/homebrew/bin/gh`、`/usr/local/bin/gh` の順に探さなければならない（MUST）。どちらにも使える gh が無いときに限り、ユーザーのログインシェル（ユーザーアカウントに登録されたシェルで、`/etc/shells` に載っているもの）を対話モードのログインシェルとして起動して（`~/.zshrc` などで通した PATH も拾うため）`command -v gh` を実行し、その出力の最後の空でない行をパスの候補にしなければならない（MUST）。ログインシェルでの検索は、自動では（起動時やポップオーバーを開いたときは）アプリを起動してから終了するまでに 1 回だけでなければならない（MUST）。ユーザーが「再読み込み」を押したときは、前回の検索で使える gh が見つかっていない場合に限り、もう一度検索してよい（MAY）。上書き用のパスが与えられたときは、それだけを候補にしなければならない（MUST）。
 
 #### Scenario: Homebrew（Apple Silicon）の gh を見つける
 
@@ -24,12 +24,24 @@ Mewbell は gh の実行ファイルを、`/opt/homebrew/bin/gh`、`/usr/local/b
 - **WHEN** Mewbell が gh を探す
 - **THEN** 最後の行の `/Users/me/.local/bin/gh` を候補として検証する
 
-#### Scenario: ログインシェルでの検索は 1 回だけ
+#### Scenario: 自動ではログインシェルでの検索は 1 回だけ
 
 - **GIVEN** ログインシェルでの検索で gh が見つからなかった
-- **WHEN** ユーザーが「再読み込み」を押す
+- **WHEN** ユーザーがポップオーバーを開き直す
 - **THEN** `/opt/homebrew/bin/gh` と `/usr/local/bin/gh` は確かめ直す
 - **AND** ログインシェルは起動しない
+
+#### Scenario: 再読み込みではログインシェルで探し直す
+
+- **GIVEN** ログインシェルでの検索で gh が見つからず、ユーザーがその後 `~/.local/bin` に gh を入れた
+- **WHEN** ユーザーが「再読み込み」を押す
+- **THEN** ログインシェルでもう一度 `command -v gh` を実行し、見つけた gh を使う
+
+#### Scenario: 見つかった後は探し直さない
+
+- **GIVEN** ログインシェルでの検索で gh が見つかっている
+- **WHEN** ユーザーが「再読み込み」を押す
+- **THEN** ログインシェルは起動しない
 
 ### Requirement: gh 実行ファイルの検証
 
@@ -49,7 +61,7 @@ Mewbell は、候補のパスが次のすべてを満たすときにだけ gh �
 
 ### Requirement: gh のバージョン確認
 
-Mewbell は `gh auth token` を実行する前に `gh --version` でバージョンを確かめ、2.40.0 未満のとき（`gh auth token --user` が使えないとき）は「gh が古い」状態にし、トークンの取得を行ってはならない（MUST NOT）。バージョンを読み取れないときも同じく「gh が古い」状態にしなければならない（MUST）。ただし、gh は `hosts.yml` を解釈できないと `gh --version` でも失敗するため、バージョンの確認より先に `hosts.yml` を読み、読めないときは「gh が古い」ではなく「hosts.yml を読めない」状態にしなければならない（MUST）。
+Mewbell は `gh auth token` を実行する前に `gh --version` でバージョンを確かめ、バージョンを読めて 2.40.0 未満のとき（`gh auth token --user` が使えないとき）は「gh が古い」状態にし、トークンの取得を行ってはならない（MUST NOT）。`gh --version` が失敗したとき（タイムアウト、起動の失敗、終了コードが 0 以外）とバージョンを読み取れないときは、「gh が古い」ではなく「gh を実行できない」状態にし、トークンの取得を行ってはならない（MUST NOT）。この結果は覚えず、次の読み直しで確かめ直さなければならない（MUST）（初回起動の検査で遅れたなど、一時的な失敗のことがあるため）。また、gh は `hosts.yml` を解釈できないと `gh --version` でも失敗するため、バージョンの確認より先に `hosts.yml` を読み、読めないときは「hosts.yml を読めない」状態にしなければならない（MUST）。
 
 #### Scenario: 古い gh
 
@@ -57,6 +69,13 @@ Mewbell は `gh auth token` を実行する前に `gh --version` でバージョ
 - **WHEN** Mewbell が gh を確かめる
 - **THEN** 「gh が古い」状態になり、検出したバージョンと更新方法（`brew upgrade gh`）を案内する
 - **AND** `gh auth token` は実行しない
+
+#### Scenario: gh --version が一時的に失敗する
+
+- **GIVEN** `hosts.yml` は読めるが、`gh --version` が 5 秒以内に終わらない
+- **WHEN** Mewbell が gh を確かめる
+- **THEN** 「gh を実行できない」状態になり、「gh が古い」にはならない
+- **AND** 次にポップオーバーを開いたときに `gh --version` をもう一度実行する
 
 #### Scenario: hosts.yml が壊れていて gh が起動できない
 

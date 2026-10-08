@@ -20,7 +20,10 @@ enum DiscoveryState: Sendable, Equatable {
     case checking
     case ghNotFound
     /// `version` は読み取れたときだけ入る
-    case ghOutdated(version: GhVersion?)
+    /// バージョンを読めて、対応する版より古い
+    case ghOutdated(version: GhVersion)
+    /// `gh --version` が失敗した、またはバージョンを読めなかった（一時的な失敗のこともあるので、次の読み直しで確かめ直す）
+    case ghUnavailable
     case hostsFileUnreadable(path: String)
     case notLoggedIn
     case accounts([AccountStatus])
@@ -33,7 +36,8 @@ enum DiscoveryState: Sendable, Equatable {
 /// gh の検出からトークンの取得までを行う。`AccountStore` から差し替えられるようにプロトコルにする。
 protocol AccountDiscovering: Sendable {
     /// 読み直し、途中と最後の状態を `update` に渡す。
-    func reload(update: @escaping @Sendable (DiscoveryState) async -> Void) async
+    /// `userInitiated` はユーザーが再読み込みを押したとき true（見つかっていない gh をログインシェルで探し直す）。
+    func reload(userInitiated: Bool, update: @escaping @Sendable (DiscoveryState) async -> Void) async
     /// トークンをすべて捨て、以後は受け取らない（アプリの終了時）。
     func closeCredentials() async
 }
@@ -80,8 +84,8 @@ actor AccountDiscovery: AccountDiscovering {
             credentials: credentials)
     }
 
-    func reload(update: @escaping @Sendable (DiscoveryState) async -> Void) async {
-        let state = await discover(update: update)
+    func reload(userInitiated: Bool, update: @escaping @Sendable (DiscoveryState) async -> Void) async {
+        let state = await discover(userInitiated: userInitiated, update: update)
         // アカウントを使えない状態になったら、持っているトークンをすべて捨てる
         if !state.hasAccounts {
             await credentials.removeAll()
@@ -93,8 +97,10 @@ actor AccountDiscovery: AccountDiscovering {
         await credentials.close()
     }
 
-    private func discover(update: @Sendable (DiscoveryState) async -> Void) async -> DiscoveryState {
-        guard let ghPath = await locator.locate(overridePath: overridePath()) else {
+    private func discover(
+        userInitiated: Bool, update: @Sendable (DiscoveryState) async -> Void
+    ) async -> DiscoveryState {
+        guard let ghPath = await locator.locate(overridePath: overridePath(), retryLoginShell: userInitiated) else {
             verifiedGhPath = nil
             return .ghNotFound
         }
@@ -112,7 +118,8 @@ actor AccountDiscovery: AccountDiscovering {
         if verifiedGhPath != ghPath {
             verifiedGhPath = nil
             let version = await client.version()
-            guard let version, version.isSupported else { return .ghOutdated(version: version) }
+            guard let version else { return .ghUnavailable }
+            guard version.isSupported else { return .ghOutdated(version: version) }
             verifiedGhPath = ghPath
         }
 

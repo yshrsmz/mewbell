@@ -10,7 +10,8 @@ struct GhClient: Sendable {
     /// `GhEnvironment.make(from:)` で作った環境
     let environment: [String: String]
 
-    /// `gh --version` の結果。実行できない・読めないときは nil。
+    /// `gh --version` で読んだバージョン。実行できない（タイムアウト・起動失敗・終了コードが 0 以外）とき、
+    /// バージョンを読めないときは nil。
     func version() async -> GhVersion? {
         guard let output = await run(["--version"], timeout: .seconds(5), stdoutLimit: 4 * 1024),
             output.exitCode == 0

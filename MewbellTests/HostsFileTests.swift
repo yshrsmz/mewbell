@@ -158,6 +158,13 @@ struct HostsFileTests {
         #expect(throws: HostsFile.LoadError.unreadable) { try HostsFile.load(from: URL(filePath: path)) }
     }
 
+    @Test func loadRejectsAFifoWithoutBlocking() throws {
+        let directory = try TemporaryDirectory()
+        let path = directory.url.appending(path: "hosts.yml").path
+        #expect(mkfifo(path, 0o600) == 0)
+        #expect(throws: HostsFile.LoadError.unreadable) { try HostsFile.load(from: URL(filePath: path)) }
+    }
+
     @Test func loadRejectsAHugeFile() throws {
         let directory = try TemporaryDirectory()
         let path = try directory.makeFile("hosts.yml", contents: String(repeating: "#", count: HostsFile.sizeLimit + 1))

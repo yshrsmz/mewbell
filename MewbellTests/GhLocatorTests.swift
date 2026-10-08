@@ -151,6 +151,24 @@ struct GhLocatorTests {
         #expect(runner.requests.count == 1)
     }
 
+    @Test func searchesAgainOnlyWhenTheUserAsksAndNothingWasFound() async throws {
+        let answer = LockedValue("")
+        let runner = FakeProcessRunner { _ in FakeProcessRunner.output(answer.value) }
+        let locator = locator(candidates: [], runner: runner)
+        #expect(await locator.locate() == nil)
+        #expect(await locator.locate() == nil)
+        #expect(runner.requests.count == 1)
+
+        // gh を入れた後、ユーザーが再読み込みを押す
+        answer.value = try directory.makeFile("custom/gh") + "\n"
+        #expect(await locator.locate(retryLoginShell: true) != nil)
+        #expect(runner.requests.count == 2)
+
+        // 見つかった後は、再読み込みでも探し直さない
+        #expect(await locator.locate(retryLoginShell: true) != nil)
+        #expect(runner.requests.count == 2)
+    }
+
     @Test func reusesTheLoginShellResultWithoutSearchingAgain() async throws {
         let ghFile = try directory.makeFile("custom/gh")
         let runner = FakeProcessRunner { _ in FakeProcessRunner.output("\(ghFile)\n") }

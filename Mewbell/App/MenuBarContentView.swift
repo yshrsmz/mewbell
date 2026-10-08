@@ -11,7 +11,7 @@ struct MenuBarContentView: View {
                     .font(.headline)
                 Spacer()
                 Button {
-                    store.reload(showsProgress: true)
+                    store.reload(userInitiated: true)
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
