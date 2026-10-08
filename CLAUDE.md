@@ -79,5 +79,6 @@ GitHub 以外のフォージ、Windows / Linux、コメント本文の表示や�
 ## コミットと PR
 
 - Conventional Commits（`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`）。1 change = 1 PR を基本にし、PR 本文に対応する `openspec/changes/<change>/` を書く
+- `/opsx:propose` で proposal / specs / design / tasks が揃い `openspec validate --strict` が通ったら、change 名のブランチを切って artifact をコミット・push し、**draft PR** を作る。実装（`/opsx:apply`）は同じブランチに積み、レビュー（`.claude/rules/review-process.md`）と archive を終えてから ready にする
 - AI 生成コードを含む PR はその旨を書く
 - main への直接 push はしない
