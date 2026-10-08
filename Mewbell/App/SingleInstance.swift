@@ -53,7 +53,7 @@ enum SingleInstance {
     /// プロセスが終わるまでロックを持ち続けるために保持しておく。
     @MainActor private static var lock: SingleInstanceLock?
 
-    private static let logger = Logger(subsystem: "com.codingfeline.mewbell", category: "SingleInstance")
+    private static let logger = Logger(category: "SingleInstance")
 
     /// ほかの Mewbell がロックを持っていれば、このプロセスを終了する。
     /// ロックファイルを開けないなどのエラーでは終了せず、記録したうえで起動を続ける
@@ -64,10 +64,7 @@ enum SingleInstance {
     @MainActor
     static func terminateIfAnotherInstanceIsRunning() {
         guard lock == nil else { return }
-        let environment = ProcessInfo.processInfo.environment
-        guard environment["XCTestConfigurationFilePath"] == nil,
-            environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1"
-        else { return }
+        guard !LaunchContext.isTestHostOrPreview else { return }
         guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
             logger.error("Could not lock: no bundle identifier")
             return

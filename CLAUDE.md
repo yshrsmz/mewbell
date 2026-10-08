@@ -49,8 +49,8 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test
 bash scripts/run.sh              # ビルドして起動する（起動中の Mewbell は終了させる）
 
 # push 前の確認: 警告をエラー扱いにして Debug と Release をビルドする
-xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build
-xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build
+xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug MEWBELL_WARNINGS_AS_ERRORS=YES build
+xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEWBELL_WARNINGS_AS_ERRORS=YES build
 ```
 
 - 確認は `bash scripts/lint.sh`（`swift-format lint` と `swiftlint`）。整形は `bash scripts/format.sh`。CI（GitHub Actions）は macOS ランナーが高価なので ubuntu だけを使い、lint と `openspec validate` だけを回す。`xcodebuild` のビルドとテストは CI で回らないので、push 前に手元で必ず通す（テスト、lint、警告をエラー扱いにした Debug と Release のビルド）
@@ -65,7 +65,7 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release SWI
 - **ホスト種別の判定**: `github.com` → `https://api.github.com`、`*.ghe.com` → `https://api.<host>`、それ以外 → `https://<host>/api/v3`
 - **スコープ確認**: 初回レスポンスの `X-OAuth-Scopes` に `repo` も `notifications` も無いアカウントは「スコープ不足」にして止め、`gh auth refresh -s repo` を案内する
 - gh が無い／未ログインのときはインストール・`gh auth login` の案内画面を出すだけ。フォールバックの認証経路は作らない
-- gh のパスは `/opt/homebrew/bin/gh`, `/usr/local/bin/gh` の順に探し、見つからなければログインシェル経由で `command -v gh` を 1 回だけ試す。設定で上書き可
+- gh のパスは `/opt/homebrew/bin/gh`, `/usr/local/bin/gh` の順に探し、見つからなければログインシェル経由で `command -v gh` を試す。自動では起動ごとに 1 回だけで、見つかっていなければユーザーが再読み込みを押したときだけ探し直す。設定で上書き可
 - 新着通知は 1 スレッド 1 通知。通知 ID は `<host>/<user>/<threadId>`。既読・Done にしたスレッドの通知は取り下げる
 - 通知クリックは「ブラウザで開く → `PATCH /notifications/threads/{id}` で既読」
 - UI の一覧はアカウント → リポジトリの 2 段グルーピング。既定は `participating=false`（設定で切替）
@@ -79,5 +79,6 @@ GitHub 以外のフォージ、Windows / Linux、コメント本文の表示や�
 ## コミットと PR
 
 - Conventional Commits（`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`）。1 change = 1 PR を基本にし、PR 本文に対応する `openspec/changes/<change>/` を書く
+- `/opsx:propose` で proposal / specs / design / tasks が揃い `openspec validate --strict` が通ったら、change 名のブランチを切って artifact をコミット・push し、**draft PR** を作る。実装（`/opsx:apply`）は同じブランチに積み、レビュー（`.claude/rules/review-process.md`）と archive を終えてから ready にする
 - AI 生成コードを含む PR はその旨を書く
 - main への直接 push はしない

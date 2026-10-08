@@ -10,6 +10,15 @@
       "Base",
     ],
   },
+  "packages": [
+    {
+      "kind": "remote",
+      "repository": "https://github.com/jpsim/Yams.git",
+      "version": {
+        "version": "6.2.2",
+      },
+    },
+  ],
   "files": [
     { "kind": "folder", "path": "Mewbell", "target-membership": [ "Mewbell" ] },
     { "kind": "folder", "path": "MewbellTests", "target-membership": [ "MewbellTests" ] },
@@ -32,6 +41,13 @@
         "compile-sources",
         "frameworks",
         "resources",
+      ],
+      "package-product-members": [
+        {
+          "package": "Yams",
+          "product-name": "Yams",
+          "build-phase": { "build-phase": "frameworks" },
+        },
       ],
       "build-settings": {
         "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
@@ -140,6 +156,7 @@
     "GCC_WARN_UNUSED_VARIABLE": "YES",
     "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
     "MACOSX_DEPLOYMENT_TARGET": "26.0",
+    "MEWBELL_WARNINGS_AS_ERRORS": "NO",
     "MTL_ENABLE_DEBUG_INFO[config=Debug]": "INCLUDE_SOURCE",
     "MTL_ENABLE_DEBUG_INFO[config=Release]": "NO",
     "MTL_FAST_MATH": "YES",
@@ -150,6 +167,7 @@
     "SWIFT_COMPILATION_MODE[config=Release]": "wholemodule",
     "SWIFT_OPTIMIZATION_LEVEL[config=Debug]": "-Onone",
     "SWIFT_STRICT_CONCURRENCY": "complete",
+    "SWIFT_TREAT_WARNINGS_AS_ERRORS": "$(MEWBELL_WARNINGS_AS_ERRORS)",
     "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
     "SWIFT_VERSION": "6.0",
   },

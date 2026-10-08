@@ -3,7 +3,9 @@
 macOS のメニューバーに常駐し、複数の GitHub アカウント（github.com / GHE Cloud データレジデンシー `*.ghe.com` / GHES 3.13+）の通知をまとめて受け取るアプリです。認証には [gh CLI](https://cli.github.com/) のログイン情報をそのまま使い、アプリ独自のログイン（PAT の入力や OAuth App）は持ちません。
 
 > [!NOTE]
-> 開発中です。現在はメニューバーに常駐して終了できるだけの状態です（マイルストーン M0）。
+> 開発中です。現在は gh CLI にログイン済みのアカウントをメニューバーのポップオーバーに一覧できる状態です（マイルストーン M1）。通知の取得はまだできません。
+>
+> gh 2.40.0 以降が必要です（`gh auth token --user` を使うため）。
 
 ## 動作環境
 
@@ -31,8 +33,8 @@ bash scripts/format.sh       # swift-format で整形する
 bash scripts/run.sh          # ビルドして起動する（起動中の Mewbell は終了させる）
 
 # push 前の確認: 警告をエラー扱いにして Debug と Release をビルドする
-xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build
-xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build
+xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug MEWBELL_WARNINGS_AS_ERRORS=YES build
+xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEWBELL_WARNINGS_AS_ERRORS=YES build
 ```
 
 CI（GitHub Actions）は ubuntu で lint と OpenSpec の検証だけを回します。ビルドとテストは CI で実行されないので、push する前に手元でテスト、lint、警告をエラー扱いにした Debug と Release のビルドを通してください。
