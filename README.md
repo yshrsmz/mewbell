@@ -8,7 +8,7 @@ macOS のメニューバーに常駐し、複数の GitHub アカウント（git
 ## 動作環境
 
 - macOS 26 以降
-- 開発には Xcode 27.2 以降が必要です（プロジェクトは JSON 形式の `project.xcproj`）
+- 開発には Xcode 27.2 以降が必要です（プロジェクトは JSON 形式の `project.xcproj`。2026 年 10 月時点では beta）
 
 ## 開発
 

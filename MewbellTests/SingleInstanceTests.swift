@@ -46,9 +46,9 @@ final class SingleInstanceLockTests {
 
     @Test func reportsFailureWhenTheLockFileCannotBeOpened() throws {
         // ロックファイルの置き場所に通常ファイルがあり、ディレクトリを作れない
-        let blocker = FileManager.default.temporaryDirectory.appending(path: "MewbellTests-\(UUID().uuidString)")
+        let blocker = directory.appending(path: "blocker")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try Data().write(to: blocker)
-        defer { try? FileManager.default.removeItem(at: blocker) }
         let lock = SingleInstanceLock(fileURL: blocker.appending(path: "instance.lock"))
         guard case .failed = lock.tryAcquire() else {
             Issue.record("expected .failed")

@@ -50,7 +50,7 @@ Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプ�
 | `ENABLE_HARDENED_RUNTIME` | `YES` と設定する（緩める entitlement は付けない）。実際の値は Release が `YES`、Debug は `ENABLE_PREVIEWS=YES` のため Xcode が自動で `NO` にする |
 | `INFOPLIST_KEY_LSUIElement` | `YES` |
 | `GENERATE_INFOPLIST_FILE` | `YES`（Info.plist ファイルは置かない） |
-| `CODE_SIGN_IDENTITY` | `-`（ad-hoc。M5 まで署名しない）。`CODE_SIGN_STYLE` は `Manual` |
+| `CODE_SIGN_IDENTITY` | `-`（ad-hoc 署名。Developer ID での署名は M5 まで行わない）。`CODE_SIGN_STYLE` は `Manual` |
 | `CODE_SIGN_INJECT_BASE_ENTITLEMENTS` | Release だけ `NO`（Release に `get-task-allow` を入れず、デバッガからのアタッチを防ぐ） |
 | `SWIFT_TREAT_WARNINGS_AS_ERRORS` | 設定しない（Debug・Release とも既定の `NO`）。push 前の最終確認で、Debug と Release の両方のビルドに `xcodebuild` の引数で `YES` を渡す（CI では xcodebuild を回さないため） |
 | `INFOPLIST_KEY_CFBundleDisplayName` | `Mewbell` |
@@ -60,7 +60,7 @@ Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプ�
 
 ### D2. UI は `MenuBarExtra(.window)` の 1 シーンだけ
 
-`@main struct MewbellApp: App` に `MenuBarExtra("Mewbell", systemImage: "cat.fill")` を置き、`.menuBarExtraStyle(.window)` にする。中身の `MenuBarContentView` は「Mewbell」の `Text` と Quit の `Button` だけを持つ。Quit は `NSApplication.shared.terminate(nil)` を呼び、`.keyboardShortcut("q")` を付ける。
+`@main struct MewbellApp: App` に `MenuBarExtra("Mewbell", systemImage: "cat.fill")` を置き、`.menuBarExtraStyle(.window)` にする。中身の `MenuBarContentView` が持つ要素は「Mewbell」の `Text` と Quit の `Button` だけにする（間の `Divider` と幅の指定はレイアウトのため）。Quit は `NSApplication.shared.terminate(nil)` を呼び、`.keyboardShortcut("q")` を付ける。
 
 - アイコンはテンプレート画像として描画される SF Symbol（`cat.fill`）を使い、ライト／ダークの両方に追従させる
 - 代替案: `.menu` スタイル → M2 以降で一覧を表示するため、最初から `.window` にしておく
@@ -69,10 +69,11 @@ Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプ�
 
 ### D2a. 二重起動の防止
 
-`MewbellApp.init()` で、`~/Library/Application Support/<Bundle ID>/instance.lock`（Bundle ID は `Bundle.main` から取る。値は `com.codingfeline.mewbell`）にファイルロック（`flock(LOCK_EX | LOCK_NB)`）を取る。取れなければほかの Mewbell が動いているので、そのまま `exit` する。シーンを作る前に確かめるので、アイコンが一瞬出てから消えることもない。ロックはプロセスが終わるまで持ち続ける。すでにロックを持っているときに呼ばれても何もしない（同じプロセスで取り直すと、自分のロックに阻まれて終了してしまうため）。
+`MewbellApp.init()` で、`~/Library/Application Support/<Bundle ID>/instance.lock`（Bundle ID は `Bundle.main` から取る。値は `com.codingfeline.mewbell`）にファイルロック（`flock(LOCK_EX | LOCK_NB)`）を取る。取れなければほかの Mewbell が動いているので、os_log に記録して終了コード 0 で `exit` する。シーンを作る前に確かめるので、アイコンが一瞬出てから消えることもない。ロックはプロセスが終わるまで持ち続ける。すでにロックを持っているときに呼ばれても何もしない（同じプロセスで取り直すと、自分のロックに阻まれて終了してしまうため）。
 
 - ロックは OS がまとめて取得するので、同時に起動しても片方しか取れない。プロセスが終われば（クラッシュしても）ロックは自動で外れ、ロックファイルは次の起動で使い回すので後片付けも要らない
 - ロックの取得と解放は `SingleInstanceLock` に切り出し、一時ディレクトリのロックファイルを使ってユニットテストする（`flock` はファイルを開いた単位で効くので、同じプロセスの中でも 2 つ目の取得が失敗することを確かめられる）
+- ロックファイルは所有者だけが読み書きできる権限（0600）で作り、`O_CLOEXEC` で開いて子プロセス（M1 以降の gh）に引き継がない。`O_NOFOLLOW` でシンボリックリンクをたどらず、ロックファイルの場所にシンボリックリンクがあればエラーとして扱う（リンク先のファイルを作ったりロックしたりしない）
 - ロックの結果は「取れた」「ほかが持っている」「エラー（ファイルを開けないなど）」の 3 つに分ける。エラーのとき（ほかに Bundle ID や Application Support の場所を取れないときも含む）は終了せず、os_log に記録して起動を続ける（ロックファイルの置き場所が壊れているだけで、アプリが毎回黙って終了するのを避けるため。二重起動を防げない方がまだ被害が小さい）
 - テストのホストや SwiftUI プレビューとして起動されたとき（環境変数 `XCTestConfigurationFilePath` がある、または `XCODE_RUNNING_FOR_PREVIEWS=1` のとき）はロックを取らない。起動中の Mewbell があってもテストやプレビューを動かせ、その間に普段使いの Mewbell を起動しても終了しないようにするため
 - 先に動いている方を前面に出す処理はしない。`LSUIElement` のアプリを前面に出しても表示されるものがないため
@@ -114,10 +115,11 @@ M1 以降の方針としてここに書いておく: gh の実行は `GhCommandR
 
 - `runs-on: ubuntu-24.04`
 - ジョブの流れ: checkout → swift-format（`swift` イメージ）→ swiftlint（`ghcr.io/realm/swiftlint` イメージ）→ mise のセットアップ（Node だけ）→ `npm ci --ignore-scripts` → `npx openspec validate --all --strict`
-- **xcodebuild のビルドとテストは CI では回さない**（SwiftUI / AppKit は Linux でビルドできない）。手元で `xcodebuild test` と Debug / Release のビルドを通してから push する。tasks.md の最終確認にも入れる
+- **xcodebuild のビルドとテストは CI では回さない**（SwiftUI / AppKit は Linux でビルドできない）。手元でテスト、lint、警告をエラー扱いにした Debug と Release のビルドを通してから push する。tasks.md の最終確認にも入れる
 - Action はタグではなくコミット SHA で固定する（`actions/checkout` v7.0.1、`jdx/mise-action` v5.0.0）。mise 本体もバージョンと sha256 で固定する
 - ワークフローに `permissions: contents: read` を明示し、checkout は `persist-credentials: false` にする。トリガーは `pull_request` と `push` だけにし、`pull_request_target` は使わない。シークレットは渡さない
-- main への push では、実行中の CI をキャンセルしない（コミットごとの結果を残す）
+- main への push では、実行中の CI をキャンセルしない（コミットごとの結果を残す）。PR では、新しいコミットが来たら実行中の CI をキャンセルする
+- ジョブには `timeout-minutes: 15` を付け、止まったジョブがランナーを使い続けないようにする
 
 ### D7. ビルド出力の置き場所
 
@@ -136,7 +138,7 @@ M0 ではトークンを取得も保持も送信もしない。gh サブプロ�
 
 ## Risks / Trade-offs
 
-- [CI でビルドとテストを回さない] → macOS 固有のビルドエラーやテストの失敗は CI では見つからない。push の前に手元で `xcodebuild test` と Release のビルドを通すことを tasks.md と PR の Test plan で確かめる。必要になったら、macOS ランナーを手動実行（`workflow_dispatch`）のジョブとして足す
+- [CI でビルドとテストを回さない] → macOS 固有のビルドエラーやテストの失敗は CI では見つからない。push の前に手元でテスト、lint、警告をエラー扱いにした Debug と Release のビルドを通すことを tasks.md と PR の Test plan で確かめる。必要になったら、macOS ランナーを手動実行（`workflow_dispatch`）のジョブとして足す
 - [Xcode 27.2 は 2026-10 時点で beta] → 手元は Xcode-beta.app で作業する。正式版が出たら入れ替える
 - [手元の Xcode が 27.0] → 実装の最初のタスクで 27.2 に更新し、`xcode-select` の切り替えとライセンス同意をする（sudo が要るのでユーザーが行う）。27.0 のままでも `.xcproj` は開けるが、プロジェクトを作る作業は 27.2 でしかできない
 - [`.xcproj` の形式はまだ新しく、ツールの対応が追いついていない] → `xcodebuild` が CLI で開けることを毎回確かめる（CLAUDE.md の約束どおり）。CLI や直接編集でうまくいかない場合は Xcode の GUI で設定を変える

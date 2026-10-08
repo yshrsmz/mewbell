@@ -6,6 +6,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 configuration="${1:-Debug}"
+case "$configuration" in
+  Debug | Release) ;;
+  *)
+    echo "使い方: bash scripts/build.sh [Debug|Release]" >&2
+    exit 2
+    ;;
+esac
 derived_data="build/DerivedData"
 
 xcodebuild \

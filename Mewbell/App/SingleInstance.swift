@@ -87,6 +87,7 @@ enum SingleInstance {
         case .acquired:
             self.lock = lock
         case .heldByAnotherInstance:
+            logger.info("Another instance is running; exiting")
             exit(EXIT_SUCCESS)
         case .failed(let error):
             logger.error("Could not lock \(lockURL.path): errno \(error)")
