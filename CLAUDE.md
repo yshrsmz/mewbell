@@ -44,9 +44,9 @@ Mewbell/
 ## ビルドとテスト
 
 ```bash
-xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug build
+bash scripts/build.sh            # build/Debug/Mewbell.app を作る（Release は引数に Release）
 xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test
-open build/Debug/Mewbell.app     # 手元で起動して確認（パスはスキーム設定に合わせる）
+bash scripts/run.sh              # ビルドして起動する（起動中の Mewbell は終了させる）
 ```
 
 - `swift-format` でフォーマット、`swiftlint` で lint（`bash scripts/lint.sh`）。CI（GitHub Actions）は macOS ランナーが高価なので ubuntu だけを使い、lint と `openspec validate` だけを回す。`xcodebuild` のビルドとテストは CI で回らないので、push 前に手元で必ず通す

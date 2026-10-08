@@ -60,16 +60,26 @@ enum SingleInstance {
     /// （誤って起動できなくなるよりは、二重起動を防げない方が被害が小さい）。
     /// テストのホストや SwiftUI プレビューとして起動されたときはロックを取らない（起動中の Mewbell があっても
     /// テストやプレビューを動かせるように、また、その間に普段使いの Mewbell を起動しても終了しないように）。
+    /// 2 回目以降の呼び出しでは何もしない（同じプロセスで取り直すと、自分のロックに阻まれて終了してしまうため）。
     @MainActor
     static func terminateIfAnotherInstanceIsRunning() {
+        guard lock == nil else { return }
         let environment = ProcessInfo.processInfo.environment
         guard environment["XCTestConfigurationFilePath"] == nil,
-            environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1",
-            let bundleIdentifier = Bundle.main.bundleIdentifier,
+            environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1"
+        else { return }
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
+            logger.error("Could not lock: no bundle identifier")
+            return
+        }
+        guard
             let applicationSupport = FileManager.default.urls(
                 for: .applicationSupportDirectory, in: .userDomainMask
             ).first
-        else { return }
+        else {
+            logger.error("Could not lock: no Application Support directory")
+            return
+        }
 
         let lockURL = applicationSupport.appending(path: bundleIdentifier).appending(path: "instance.lock")
         let lock = SingleInstanceLock(fileURL: lockURL)

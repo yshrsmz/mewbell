@@ -29,8 +29,9 @@
 
 ## Impact
 
-- 追加されるもの: `Mewbell.xcodeproj/`、`Mewbell/App/`、`MewbellTests/`、`LICENSE`、`README.md`、`.swift-format`、`.swiftlint.yml`、`.github/workflows/`
+- 追加されるもの: `Mewbell.xcodeproj/`、`Mewbell/App/`、`Mewbell/Assets.xcassets`、`MewbellTests/`、`scripts/`、`LICENSE`、`README.md`、`.swift-format`、`.swiftlint.yml`、`mise.toml`、`mise.lock`、`.github/workflows/`
 - 変更されるもの: `.gitignore`
-- 外部依存: アプリのランタイム依存は追加しない（Yams の導入は M1）。開発ツールとして `swift-format`（Xcode 同梱）と `swiftlint` を使う
+- 外部依存: アプリのランタイム依存は追加しない（Yams の導入は M1）。開発ツールとして `swift-format`（Xcode 同梱）と `swiftlint`、それらと Node.js を固定する `mise` を使う
 - 開発環境の前提: Xcode 27.2 以降が必要。現在の手元環境は Xcode 27.0 で、ライセンスに未同意、`xcode-select` は CommandLineTools を指している。実装の前に Xcode の更新と切り替えが必要（tasks の先頭に置く）
+- セキュリティ: トークン・gh サブプロセス・ネットワーク・URL を開く処理のいずれにも触れない。Hardened Runtime、ATS、CI の権限と Action の固定など、後から変えにくい土台の設定だけを決める（design.md「セキュリティ」）
 - CI: ubuntu ランナーだけを使う。macOS 固有のビルドとテストは CI では確かめられないので、push 前に手元で通す

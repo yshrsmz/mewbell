@@ -8,6 +8,7 @@
 mkdir Mewbell && cd Mewbell && git init
 cp <このフォルダ>/CLAUDE.md .
 mkdir -p openspec && cp <このフォルダ>/openspec/config.yaml openspec/
+cp <このフォルダ>/package.json <このフォルダ>/package-lock.json .
 
 # OpenSpec CLI はグローバルに入れず、package.json でバージョン固定してプロジェクトローカルに入れる
 npm ci --ignore-scripts
@@ -50,13 +51,13 @@ Claude Code を repo 直下で開き、まず探索せずに change を起こす
 | M2 | `add-notification-fetch` | GitHubAPI クライアント、ホスト種別判定、ポーリング（304 / X-Poll-Interval）、一覧（アカウント→リポジトリ）、クリックで開く |
 | M3 | `add-system-notifications` | UNUserNotificationCenter、1 スレッド 1 通知、クリックで開いて既読、未読バッジ |
 | M4 | `add-settings-and-actions` | Done、全既読、participating 切替、アカウント ON/OFF、ログイン時起動、Diagnostics 表示 |
-| M5 | `add-distribution`（任意） | ビルドスクリプト、署名、Sparkle、Homebrew Cask |
+| M5 | `add-distribution`（任意） | 配布用のビルド、署名、Sparkle、Homebrew Cask |
 
 1 change が大きくなりそうなら分割する（例: M2 を `add-github-api-client` と `add-notification-list` に）。
 
 ## 4. 運用メモ
 
-- `openspec status --change <name>` で artifact の進捗、`openspec validate` で spec の形式チェック
+- `npx openspec status --change <name>` で artifact の進捗、`npx openspec validate` で spec の形式チェック
 - `CLAUDE.md` は「どう作るか」の約束、`openspec/specs/` は「何を満たすか」の正本。重複させない
 - Claude Code の `/compact` 前に tasks.md のチェックを更新しておくと、文脈が切れても再開しやすい
 - 設計判断の経緯は claude.ai 側のドキュメント「Mac 用 GitHub 通知アプリ：既存プロダクト調査と要件整理」にある。必要なら README から参照する

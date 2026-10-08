@@ -14,11 +14,10 @@ macOS のメニューバーに常駐し、複数の GitHub アカウント（git
 
 ### 前提ツール
 
-- [mise](https://mise.jdx.dev/): swiftlint のバージョンを固定しています
-- Node.js: 仕様管理の [OpenSpec](https://github.com/Fission-AI/OpenSpec) CLI に使います
+- [mise](https://mise.jdx.dev/): swiftlint と Node.js（仕様管理の [OpenSpec](https://github.com/Fission-AI/OpenSpec) CLI に使う）のバージョンを固定しています
 
 ```bash
-mise install                 # mise.toml / mise.lock の swiftlint を入れる
+mise install                 # mise.toml / mise.lock の swiftlint と Node.js を入れる
 npm ci --ignore-scripts      # OpenSpec CLI をプロジェクトローカルに入れる
 ```
 
@@ -28,7 +27,7 @@ npm ci --ignore-scripts      # OpenSpec CLI をプロジェクトローカルに
 bash scripts/build.sh        # build/Debug/Mewbell.app を作る（Release は引数に Release）
 xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test
 bash scripts/lint.sh         # swift-format（Xcode 同梱）と swiftlint
-bash scripts/run.sh          # ビルドして起動する
+bash scripts/run.sh          # ビルドして起動する（起動中の Mewbell は終了させる）
 ```
 
 CI（GitHub Actions）は ubuntu で lint と OpenSpec の検証だけを回します。ビルドとテストは CI で実行されないので、push する前に手元で通してください。

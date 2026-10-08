@@ -15,7 +15,7 @@
 
 **Goals:**
 
-- `xcodebuild build` / `xcodebuild test` / lint を手元で同じコマンドで回せる。lint は CI（ubuntu）でも同じツール・同じ引数で回す（手元は `scripts/lint.sh`、CI は Docker イメージ）
+- `xcodebuild build` / `xcodebuild test` / lint を手元で同じコマンドで回せる。lint は CI（ubuntu）でも同じ引数で回す（手元は `scripts/lint.sh`、CI は Docker イメージ。swift-format のバージョンの違いは D5）
 - M1 以降で `CLAUDE.md` の目標構成（`Mewbell/App/`, `Mewbell/GhCLI/` …）にファイルを足していけるディレクトリとグループ構成にする
 - Swift 6 の strict concurrency を最初から有効にし、後から警告を潰す作業を発生させない
 
@@ -42,17 +42,21 @@ Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプ�
 | --- | --- |
 | `PRODUCT_BUNDLE_IDENTIFIER` | `com.codingfeline.mewbell`（テストは `com.codingfeline.mewbell.tests`） |
 | `MACOSX_DEPLOYMENT_TARGET` | `26.0` |
-| `SWIFT_VERSION` | `6` |
+| `SWIFT_VERSION` | `6.0` |
 | `SWIFT_STRICT_CONCURRENCY` | `complete` |
 | `SWIFT_DEFAULT_ACTOR_ISOLATION` | 指定しない（テンプレートの `MainActor` を消し、`nonisolated` 既定に戻す。`@MainActor` は明示する方針のため） |
 | `SWIFT_APPROACHABLE_CONCURRENCY` | `YES`（テンプレートの既定を維持） |
 | `ENABLE_APP_SANDBOX` | `NO`（entitlements ファイルも作らない） |
-| `ENABLE_HARDENED_RUNTIME` | `YES`（緩める entitlement は付けない）。ただし Debug は `ENABLE_PREVIEWS=YES` のため Xcode が自動で `NO` にする。Release は `YES` |
+| `ENABLE_HARDENED_RUNTIME` | `YES` と設定する（緩める entitlement は付けない）。実際の値は Release が `YES`、Debug は `ENABLE_PREVIEWS=YES` のため Xcode が自動で `NO` にする |
 | `INFOPLIST_KEY_LSUIElement` | `YES` |
 | `GENERATE_INFOPLIST_FILE` | `YES`（Info.plist ファイルは置かない） |
 | `CODE_SIGN_IDENTITY` | `-`（ad-hoc。M5 まで署名しない）。`CODE_SIGN_STYLE` は `Manual` |
 | `CODE_SIGN_INJECT_BASE_ENTITLEMENTS` | Release だけ `NO`（Release に `get-task-allow` を入れず、デバッガからのアタッチを防ぐ） |
-| `SWIFT_TREAT_WARNINGS_AS_ERRORS` | Debug は `NO`。push 前の最終確認で `xcodebuild` の引数に `YES` を渡す（CI では xcodebuild を回さないため） |
+| `SWIFT_TREAT_WARNINGS_AS_ERRORS` | 設定しない（Debug・Release とも既定の `NO`）。push 前の最終確認で、Debug と Release の両方のビルドに `xcodebuild` の引数で `YES` を渡す（CI では xcodebuild を回さないため） |
+| `INFOPLIST_KEY_CFBundleDisplayName` | `Mewbell` |
+| `INFOPLIST_KEY_LSApplicationCategoryType` | `public.app-category.developer-tools` |
+| `INFOPLIST_KEY_NSHumanReadableCopyright` | `Copyright © 2026 Yasuhiro Shimizu. MIT License.` |
+| `MARKETING_VERSION` | `0.1.0`（v1 までは 0.x にする） |
 
 ### D2. UI は `MenuBarExtra(.window)` の 1 シーンだけ
 
@@ -84,7 +88,7 @@ Xcode 27.2 の macOS App テンプレート（SwiftUI / Swift Testing）でプ�
 
 ### D4. テストでの差し替え
 
-M0 にはネットワークも gh サブプロセスもないので、差し替える対象はない。`MewbellTests` には Swift Testing（`import Testing`）のダミーテストを 1 つだけ置き、テストターゲットとスキームが正しく構成されていることだけを確かめる。
+M0 にはネットワークも gh サブプロセスもないので、差し替える対象はない。`MewbellTests` には Swift Testing（`import Testing`）で、テストターゲットとスキームが正しく構成されていることを確かめるダミーテストを 1 つ置く。ほかに D2a の `SingleInstanceLock` のユニットテストを置く。
 
 M1 以降の方針としてここに書いておく: gh の実行は `GhCommandRunning` のようなプロトコル、HTTP は `HTTPTransport` のようなプロトコルの裏に置き、テストではフェイク実装を注入する（実際の名前とシグネチャは各 change の design で決める）。
 
@@ -95,13 +99,13 @@ M1 以降の方針としてここに書いておく: gh の実行は `GhCommandR
 - **swift-format**: 手元では Xcode 27 に同梱されている `xcrun swift-format` を使う。CI（Linux）では Swift の公式 Docker イメージ `swift:6.3.2-noble`（digest で固定）に同梱の `swift-format` を `docker run` で使う
   - 手元（Swift 6.4）とバージョンがずれるのは、6.4 のイメージが公開から 7 日の下限を満たしていなかったため。両方で同じ結果になることを確かめた。ずれが出たら 6.4 のイメージに上げる
 - **swiftlint**: 手元ではリポジトリ直下の `mise.toml` で `swiftlint = "0.65.1"`（2026-08-21 公開）に固定し、`mise.lock` でチェックサムも固定して `mise exec -- swiftlint` で呼ぶ。CI では同じ 0.65.1 の公式 Docker イメージ `ghcr.io/realm/swiftlint`（digest で固定）を `docker run` で使う
-  - CI で mise を使わない理由: Linux 版の swiftlint は Swift ツールチェーンの SourceKit を必要とするため Swift のコンテナで動かす必要があるが、Swift のイメージには curl も wget もなく mise を取得できない。apt で curl を入れる方法は、パッケージのバージョンを固定できないので採らない
+  - CI の swiftlint で mise を使わない理由: Linux 版の swiftlint は Swift ツールチェーンの SourceKit を必要とするため Swift のコンテナで動かす必要があるが、Swift のイメージには curl も wget もなく mise を取得できない。apt で curl を入れる方法は、パッケージのバージョンを固定できないので採らない
   - 代替案: Homebrew → バージョンを固定できない。採らない
   - 代替案: SwiftPM のビルドツールプラグイン（SwiftLintPlugins）→ プロジェクトに SwiftPM 依存が入り、プラグインの信頼確認がビルドのたびに必要になる。採らない
   - 代替案: GitHub Releases の `portable_swiftlint.zip` を SHA-256 を確かめてダウンロードするスクリプト → これでも要件は満たせるが、mise ならバージョン固定とチェックサム検証をまとめて任せられる
 - **Node.js**（OpenSpec CLI 用）: `mise.toml` で `node = "26.9.0"` に固定する
 - `swift-format` と `swiftlint` はルールが重なるので、整形（import の並びを含む）は `swift-format` に任せ、swiftlint では整形系のルール（`trailing_whitespace`、`opening_brace`、`sorted_imports` など）を無効にする
-- 手元の呼び出しは `scripts/lint.sh` にまとめる（`swift-format lint --strict -r Mewbell MewbellTests` と `swiftlint lint --strict`）。CI は同じ引数で各イメージを呼ぶ。対象や引数を変えるときは `scripts/lint.sh` と `ci.yml` の両方を直す
+- 手元の呼び出しは `scripts/lint.sh` にまとめる（`swift-format lint --strict --recursive Mewbell MewbellTests` と `swiftlint lint --strict --quiet`）。CI は同じ引数で各イメージを呼ぶ。対象や引数を変えるときは `scripts/lint.sh` と `ci.yml` の両方を直す
 
 ### D6. CI
 
@@ -116,13 +120,15 @@ M1 以降の方針としてここに書いておく: gh の実行は `GhCommandR
 
 ### D7. ビルド出力の置き場所
 
-CLAUDE.md の `open build/Debug/Mewbell.app` に合わせるため、`scripts/build.sh` では `-derivedDataPath build/DerivedData` を渡し、ビルドが終わったら `build/Debug/Mewbell.app` にコピーする。`build/` は `.gitignore` に入れる。
+起動するアプリの場所を DerivedData に依存させず `build/Debug/Mewbell.app` に固定するため、`scripts/build.sh` では `-derivedDataPath build/DerivedData` を渡し、ビルドが終わったら `build/Debug/Mewbell.app` にコピーする。`build/` は `.gitignore` に入れる。
+
+`scripts/run.sh` は、ビルドした後に起動中の Mewbell を場所を問わず `pkill -x Mewbell` で終了させてから `build/Debug/Mewbell.app` を開く。二重起動の防止（D2a）があるため、普段使いの Mewbell が動いたままだと新しいビルドがすぐに終了し、古いビルドのまま確認してしまうのを避けるため。5 秒待っても終了しなければ、エラーで止まる。
 
 ## セキュリティ
 
 M0 ではトークンを取得も保持も送信もしない。gh サブプロセスもネットワーク通信もないので、トークンの流れはまだない（取得は M1、送信は M2 で設計する）。それでも、後から変えると影響が大きい土台の設定はここで決めておく（`.claude/rules/security.md` の「アプリとビルドの設定」「依存とサプライチェーン」に対応）。
 
-- Hardened Runtime を最初から有効にし、緩める entitlement を付けない（D1）。App Sandbox が無効な分、コード注入への耐性は Hardened Runtime で確保する
+- Hardened Runtime を最初から有効にし、緩める entitlement を付けない（D1）。Debug のビルドだけは Xcode がプレビューのために自動で無効にし、`get-task-allow` も入る。配布物になる Release は有効で、`get-task-allow` も入れない。App Sandbox が無効な分、コード注入への耐性は Hardened Runtime で確保する
 - Info.plist に ATS の例外を入れない。`GENERATE_INFOPLIST_FILE` で生成される内容に `NSAppTransportSecurity` が含まれないことを確かめる
 - CI は読み取り権限だけで動かし、Action はコミット SHA で固定する（D6）
 - アプリのランタイム依存は追加しない。開発ツール（swiftlint、OpenSpec CLI）はバージョンを固定し、`mise.lock` / `package-lock.json` をコミットする
