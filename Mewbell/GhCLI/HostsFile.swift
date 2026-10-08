@@ -75,12 +75,7 @@ struct HostsFile: Sendable, Equatable {
         do {
             handle = try FileHandle(forReadingFrom: url)
         } catch {
-            let nsError = error as NSError
-            let missing =
-                (nsError.domain == NSCocoaErrorDomain
-                    && [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(nsError.code))
-                || (nsError.domain == NSPOSIXErrorDomain && nsError.code == Int(ENOENT))
-            if missing { return nil }
+            // 無いことは直前の stat で確かめているので、ここでの失敗（直前に消えた場合も含む）は読めない扱いにする
             throw .unreadable
         }
         defer { try? handle.close() }

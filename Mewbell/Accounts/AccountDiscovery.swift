@@ -19,7 +19,6 @@ struct AccountStatus: Sendable, Equatable, Identifiable {
 enum DiscoveryState: Sendable, Equatable {
     case checking
     case ghNotFound
-    /// `version` は読み取れたときだけ入る
     /// バージョンを読めて、対応する版より古い
     case ghOutdated(version: GhVersion)
     /// `gh --version` が失敗した、またはバージョンを読めなかった（一時的な失敗のこともあるので、次の読み直しで確かめ直す）
