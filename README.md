@@ -27,6 +27,7 @@ npm ci --ignore-scripts      # OpenSpec CLI をプロジェクトローカルに
 bash scripts/build.sh        # build/Debug/Mewbell.app を作る（Release は引数に Release）
 xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test
 bash scripts/lint.sh         # swift-format（Xcode 同梱）と swiftlint
+bash scripts/format.sh       # swift-format で整形する
 bash scripts/run.sh          # ビルドして起動する（起動中の Mewbell は終了させる）
 
 # push 前の確認: 警告をエラー扱いにして Debug と Release をビルドする
