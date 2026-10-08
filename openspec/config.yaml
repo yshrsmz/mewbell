@@ -1,0 +1,43 @@
+# OpenSpec project config (OPSX). `openspec init --tools claude` でも生成されるが、
+# このファイルをそのまま置けばよい。context は全 artifact に、rules は該当 artifact にだけ注入される。
+schema: spec-driven
+
+context: |
+  Mewbell: macOS 26+ のメニューバー常駐 GitHub 通知クライアント。Swift 6 / SwiftUI、App Sandbox なし、MIT、public。
+  中核の価値: gh CLI の認証情報（~/.config/gh/hosts.yml + `gh auth token --hostname --user`）を再利用し、
+  PAT / GitHub App が使えないガバナンス下の GHE 環境でも動くこと。アプリ独自の認証導線は持たない。
+  対象ホスト: github.com、GHE Cloud データレジデンシー (*.ghe.com → api.<host>)、GHES 3.13+ (<host>/api/v3)。
+  API: GitHub REST Notifications API のみ。classic 系トークン限定（gh の OAuth トークン gho_ は可、Fine-grained PAT 不可）。
+  ポーリングは If-Modified-Since / 304 / X-Poll-Interval (下限 60s) を守る。トークンはリクエストごとに付与し永続化しない。
+  モジュール: GhCLI / AccountStore / GitHubAPI / Poller / Notifier / Diagnostics / UI。
+  決定済み UI: 一覧はアカウント→リポジトリの 2 段、既定 participating=false、新着は 1 スレッド 1 通知、
+  クリックで「ブラウザで開く → 既読」。gh 未検出 / 未ログイン / スコープ不足は案内画面のみ。
+  マイルストーン: M0 土台 → M1 gh 連携 → M2 通知取得 → M3 macOS 通知と既読 → M4 設定と操作 → M5 配布(任意)。
+  Language: Japanese
+  All artifacts must be written in Japanese.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+  （補足: GIVEN/WHEN/THEN とコード識別子も英語のまま。）
+  やらないこと: 他フォージ、Windows/Linux、コメント表示・返信、自前 OAuth App、PAT 入力、Keychain 直読み、App Store。
+
+rules:
+  proposal:
+    - どのマイルストーン (M0〜M5) に属する change かを明記する
+    - トークンの扱いに触れる変更は、永続化しない方針を守っていることを書く
+    - トークン・gh サブプロセス・ネットワーク・URL を開く処理に触れるかどうかを Impact に明記する（.claude/rules/security.md が適用される）
+    - 既存の spec（openspec/specs/）と矛盾しないかを確認し、矛盾する場合は MODIFIED として扱う
+  specs:
+    - Requirement は SHALL / MUST で書き、各 Requirement に少なくとも 1 つの Scenario を Given/When/Then で付ける
+    - capability は gh-cli, accounts, github-api, polling, notifications, ui, diagnostics のいずれかに揃える（新設は proposal で理由を書く）
+    - 外部 API のエンドポイントとステータスコード (200 / 304 / 401 / 403 / 422) を明示する
+    - トークンを扱う capability では、トークンが漏れない・意図しないホストへ送られないことを Requirement と Scenario で明示する
+  design:
+    - actor / @MainActor の境界と、どのスレッドで何が動くかを書く
+    - ネットワークと gh サブプロセスをテストでどう差し替えるか（プロトコルで抽象化）を書く
+    - 外部依存を追加する場合は理由と代替案を書く
+    - 「セキュリティ」の節を必ず設ける。トークンの流れ（どこで取得し、どこに保持し、どこへ送り、いつ破棄するか）と、.claude/rules/security.md の各項目への対応を書く。該当しない場合はその理由を書く
+  tasks:
+    - 1 タスクは 1〜2 時間で終わる粒度に分ける
+    - 各タスクにテスト（ユニットまたは手動確認手順）を含める
+    - セキュリティ上の約束（伏せ字・環境変数の除去・オリジン検査など）を確かめるテストを、その実装と同じタスクグループに入れる
+    - 最後に「ビルドが通る・テストが通る・手元で起動して確認した」を必ず含める
+    - その後に、別コンテキストの opus サブエージェントで simplify と code-review（effort medium）を実行し、指摘に対応するタスクを含める（.claude/rules/review-process.md）
