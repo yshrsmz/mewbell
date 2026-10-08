@@ -175,6 +175,23 @@ struct AccountPollerTests {
         #expect(fixture.sleeper.durations.isEmpty)
     }
 
+    @Test func waitsWithoutSendingWhenThereIsNoToken() async {
+        await fixture.tokens.discardToken(for: PollerFixture.alice)
+        fixture.respond([PollerFixture.ok(1...1)])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        #expect(fixture.transport.requests.isEmpty)
+        #expect(fixture.sleeper.durations == [.seconds(60)])
+        #expect(
+            fixture.last?.phase == .retrying(nextAttempt: PollerFixture.now.addingTimeInterval(60), rateLimited: false))
+        fixture.tokens.set("test-token-alice", for: PollerFixture.alice)
+        fixture.sleeper.advance()
+        await fixture.sleeper.waitForSleeps(2)
+        #expect(fixture.transport.requests.count == 1)
+        #expect(fixture.last?.phase == .loaded(updatedAt: PollerFixture.now))
+        fixture.poller.stop()
+    }
+
     @Test func stopsAsUnauthorizedWhenTheTokenCannotBeRefreshed() async {
         fixture.respond([HTTPResponse(statusCode: 401)])
         fixture.poller.start()
@@ -207,7 +224,11 @@ struct AccountPollerTests {
 
 @MainActor
 struct NotificationStoreTests {
-    private let transport = FakeHTTPTransport { _ in PollerFixture.ok(1...1) }
+    /// `bad-token` には 401、それ以外には 200 を返す
+    private let transport = FakeHTTPTransport { request in
+        request.value(forHTTPHeaderField: "Authorization") == "Bearer bad-token"
+            ? HTTPResponse(statusCode: 401) : PollerFixture.ok(1...1)
+    }
     private let tokens = FakeTokenProvider()
     private let sleeper = ManualSleeper()
     private let created = LockedValue<[AccountID]>([])
@@ -254,28 +275,53 @@ struct NotificationStoreTests {
         #expect(store.feeds.isEmpty)
     }
 
-    @Test func keepsExistingPollersIncludingStoppedOnes() async {
-        let store = makeStore()  // alice のトークンが無いので、ポーラーは「認証エラー」で止まる
-        store.sync(with: .accounts([status("alice", .ready)]))
+    /// alice のトークンが 401 になり、取り直せずに「認証エラー」で止まった store を作る。
+    private func storeWithUnauthorizedAlice(otherAccounts: [AccountStatus] = []) async -> NotificationStore {
+        tokens.set("bad-token", for: alice)
+        let store = makeStore()
+        store.sync(with: .accounts([status("alice", .ready)] + otherAccounts))
         await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.phase == .unauthorized } }
+        return store
+    }
+
+    @Test func keepsStoppedPollersWhileTheTokenIsFetchedAgain() async {
+        let store = await storeWithUnauthorizedAlice()
+        #expect(store.feeds[alice]?.phase == .unauthorized)
+        // ポップオーバーを開いた読み直しで、トークンを持たない alice が取得中を経て「使える」に戻る
+        store.sync(with: .accounts([status("alice", .fetching), status("bob", .fetching)]))
+        tokens.set("bad-token", for: alice)
         store.sync(with: .accounts([status("alice", .ready), status("bob", .fetching)]))
+        try? await Task.sleep(for: .milliseconds(50))
         #expect(created.value == [alice])
         #expect(store.feeds[alice]?.phase == .unauthorized)
-        #expect(tokens.refreshCount.value == 0)
+        #expect(transport.requests.count == 1)
+        #expect(tokens.refreshCount.value == 1)
+    }
+
+    @Test func keepsRunningPollersWhileTheTokenIsFetched() async {
+        tokens.set("test-token-alice", for: alice)
+        let store = makeStore()
+        store.sync(with: .accounts([status("alice", .ready)]))
+        await sleeper.waitForSleeps(1)
+        store.sync(with: .accounts([status("alice", .fetching)]))
+        store.sync(with: .accounts([status("alice", .ready)]))
+        #expect(created.value == [alice])
+        #expect(store.feeds[alice]?.threads.count == 1)
+        #expect(transport.requests.count == 1)
+        store.stopAll()
     }
 
     @Test func resumesOnlyStoppedPollers() async {
         tokens.set("test-token-bob", for: bob)
-        tokens.refreshedValue.value = "test-token-alice"
-        let store = makeStore()
-        store.sync(with: .accounts([status("alice", .ready), status("bob", .ready)]))
-        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.phase == .unauthorized } }
+        let store = await storeWithUnauthorizedAlice(otherAccounts: [status("bob", .ready)])
         await sleeper.waitForSleeps(1)
+        tokens.refreshedValue.value = "test-token-alice"
         store.resumeStopped()
         #expect(store.feeds[alice] == .loading)
         await sleeper.waitForSleeps(2)
-        #expect(tokens.refreshCount.value == 1)
-        #expect(transport.requests.count == 2)
+        #expect(tokens.refreshCount.value == 2)
+        #expect(transport.requests.count == 3)
+        #expect(store.feeds[alice]?.threads.count == 1)
         store.stopAll()
     }
 

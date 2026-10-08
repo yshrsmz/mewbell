@@ -69,7 +69,7 @@ Mewbell は API へのリクエストのリダイレクト（3xx の `Location`�
 
 ### Requirement: 通知の取得
 
-Mewbell は `GET <API ベース URL>/notifications` に `all=false`、`participating=false`、`per_page=50` を付けて、未読の通知スレッドを取得しなければならない（SHALL）。レスポンスの `Link` ヘッダーに `rel="next"` があるときは、そのページを順にたどらなければならない（SHALL）。1 回の取得でたどるのは 10 ページまでとし、それを超える分は取得しなくてよい（MAY）。スレッドからは ID、理由（`reason`）、更新日時（`updated_at`）、件名（`subject.title`）、種類（`subject.type`）、件名の API URL（`subject.url`、無いこともある）、リポジトリの `owner/name`（`repository.full_name`）を読み取り、必須の値が欠けているか `full_name` が `owner/name` の形でないスレッドは読み飛ばさなければならない（MUST）。1 ページのレスポンスボディが上限のサイズ（5 MiB）を超えたら、その回の取得は失敗として扱わなければならない（MUST）。
+Mewbell は `GET <API ベース URL>/notifications` に `all=false`、`participating=false`、`per_page=50` を付けて、未読の通知スレッドを取得しなければならない（SHALL）。レスポンスの `Link` ヘッダーに `rel="next"` があるときは、そのページを順にたどらなければならない（SHALL）。1 回の取得でたどるのは 10 ページまでとし、それを超える分は取得しなくてよい（MAY）。ページの間で同じ ID のスレッドが返ったときは、最初のものだけを残さなければならない（MUST）。スレッドからは ID、理由（`reason`）、更新日時（`updated_at`）、件名（`subject.title`）、種類（`subject.type`）、件名の API URL（`subject.url`、無いこともある）、リポジトリの `owner/name`（`repository.full_name`）を読み取り、必須の値が欠けているか `full_name` が `owner/name` の形でないスレッドは読み飛ばさなければならない（MUST）。1 ページのレスポンスボディが上限のサイズ（5 MiB）を超えたら、その回の取得は失敗として扱わなければならない（MUST）。
 
 #### Scenario: 2 ページの通知
 
@@ -91,6 +91,7 @@ Mewbell は `GET /notifications` のレスポンスを次のように扱わな�
 - `304`: 変化なしとして扱う（1 ページ目に `If-Modified-Since` を付けたときだけ起こる）
 - `401`: 認証の失敗（トークンが無効）として扱う
 - `403`: `X-RateLimit-Remaining: 0` または `Retry-After` があればレート制限として扱い、`Retry-After` の秒数か `X-RateLimit-Reset` の時刻を返す。それ以外は拒否として扱う
+- `429`: レート制限（二次レート制限）として扱い、`Retry-After` があればその秒数を返す
 - `422`: リクエストの誤りとして扱う
 - それ以外の状態コード、通信の失敗、タイムアウト（30 秒）: 一時的な失敗として扱う
 
@@ -107,6 +108,12 @@ Mewbell は API のエラーレスポンスのボディを UI に出してはな
 - **GIVEN** API が `403` と `X-RateLimit-Remaining: 0`、`X-RateLimit-Reset: <10 分後の時刻>` を返す
 - **WHEN** Mewbell がレスポンスを受け取る
 - **THEN** その結果は「レート制限」になり、10 分後の時刻が得られる
+
+#### Scenario: 429
+
+- **GIVEN** API が `429` と `Retry-After: 600` を返す
+- **WHEN** Mewbell がレスポンスを受け取る
+- **THEN** その結果は「レート制限」になり、600 秒後の時刻が得られる
 
 #### Scenario: 422
 

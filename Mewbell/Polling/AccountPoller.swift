@@ -81,13 +81,15 @@ actor AccountPoller {
             refreshedToken = true
         }
         while !Task.isCancelled {
-            guard let token = await tokens.currentToken(for: accountID) else {
+            // トークンが無いのは、読み直しが一時的にトークンを捨てたときなど。失敗として待ってから確かめ直す
+            let result: NotificationsFetchResult
+            if let token = await tokens.currentToken(for: accountID) {
+                result = await client.fetchNotifications(
+                    endpoints: endpoints, token: token, ifModifiedSince: lastModified)
+            } else {
                 Self.logger.error("No token for \(self.accountID)")
-                await stop(as: .unauthorized)
-                return
+                result = .failed(.noToken)
             }
-            let result = await client.fetchNotifications(
-                endpoints: endpoints, token: token, ifModifiedSince: lastModified)
             guard !Task.isCancelled else { return }
 
             switch await handle(result, refreshedToken: refreshedToken) {

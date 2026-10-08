@@ -28,6 +28,8 @@ enum FetchFailure: Error, Equatable, Sendable {
     case network(code: Int)
     case unexpectedStatus(Int)
     case malformedBody
+    /// トークンをメモリに持っていなかった（送っていない）
+    case noToken
 }
 
 enum NotificationsFetchResult: Sendable, Equatable {
@@ -71,6 +73,7 @@ struct GitHubAPIClient: Sendable {
         guard var url = components?.url else { return .failed(.rejectedURL) }
 
         var threads: [NotificationThread] = []
+        var seenIDs: Set<String> = []
         var firstResponse: HTTPResponse?
         var page = 1
         while true {
@@ -91,10 +94,11 @@ struct GitHubAPIClient: Sendable {
                 return classifyFailure(response)
             }
             guard let pageThreads = NotificationThread.decodeList(from: response.body) else {
-                Self.logger.error("Could not decode notifications page \(page)")
+                Self.logger.error("Could not decode notifications page \(page, privacy: .private)")
                 return .failed(.malformedBody)
             }
-            threads += pageThreads
+            // ページの取得の間に新着があると、ページの境目がずれて同じスレッドが 2 回返ることがある
+            threads += pageThreads.filter { seenIDs.insert($0.id).inserted }
             let first = firstResponse ?? response
             firstResponse = first
             guard page < Self.pageLimit, let next = LinkHeader.nextURL(in: response.header("Link")) else {
@@ -128,7 +132,7 @@ struct GitHubAPIClient: Sendable {
         let path = url.path()
         do {
             let response = try await transport.send(request, bodyLimit: Self.bodyLimit)
-            Self.logger.info("GET \(path) on \(endpoints.host) returned \(response.statusCode)")
+            Self.logger.info("GET \(path) on \(endpoints.host) returned \(response.statusCode, privacy: .private)")
             if (300..<400).contains(response.statusCode) && response.statusCode != 304 {
                 return .failure(.redirect)
             }
@@ -147,7 +151,7 @@ struct GitHubAPIClient: Sendable {
         switch response.statusCode {
         case 401:
             return .unauthorized
-        case 403:
+        case 403, 429:
             if let seconds = response.header("Retry-After").flatMap({ Int($0) }) {
                 return .rateLimited(retryAt: now().addingTimeInterval(TimeInterval(max(seconds, 0))))
             }
@@ -157,7 +161,7 @@ struct GitHubAPIClient: Sendable {
                     .map(Date.init(timeIntervalSince1970:))
                 return .rateLimited(retryAt: reset ?? now())
             }
-            return .forbidden
+            return response.statusCode == 429 ? .rateLimited(retryAt: now()) : .forbidden
         case 422:
             return .invalidRequest
         default:

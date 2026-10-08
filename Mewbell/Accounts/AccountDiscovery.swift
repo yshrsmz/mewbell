@@ -39,9 +39,6 @@ protocol AccountDiscovering: Sendable {
     func reload(userInitiated: Bool, update: @escaping @Sendable (DiscoveryState) async -> Void) async
     /// トークンをすべて捨て、以後は受け取らない（アプリの終了時）。
     func closeCredentials() async
-    /// アカウントのトークンを捨てて gh から取り直し、取れたトークンを返す（API が 401 を返したときなど）。
-    /// 同じアカウントの取得が走っていれば、その結果を共有する。
-    func refreshToken(for id: AccountID) async -> AccessToken?
 }
 
 actor AccountDiscovery: AccountDiscovering, TokenProviding {
@@ -109,6 +106,8 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         await credentials.remove(id)
     }
 
+    /// アカウントのトークンを捨てて gh から取り直し、取れたトークンを返す（API が 401 を返したときなど）。
+    /// 同じアカウントの取得が走っていれば、その結果を共有する。
     func refreshToken(for id: AccountID) async -> AccessToken? {
         await credentials.remove(id)
         guard let ghPath = verifiedGhPath else {

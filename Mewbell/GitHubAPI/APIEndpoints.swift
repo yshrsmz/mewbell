@@ -50,7 +50,11 @@ struct APIEndpoints: Sendable, Equatable {
         else { return nil }
         let path = components.percentEncodedPath
         let basePath = base.percentEncodedPath
-        guard !path.split(separator: "/").contains(where: { $0 == ".." || $0 == "." }) else { return nil }
+        // `%2e%2e` や `%2f` のように符号化されたドットセグメント・区切り文字も、サーバー側で正規化されうるので拒否する
+        let decodedSegments = components.path.split(separator: "/", omittingEmptySubsequences: false)
+        guard !decodedSegments.contains(where: { $0 == ".." || $0 == "." }),
+            !path.lowercased().contains("%2f"), !path.lowercased().contains("%5c")
+        else { return nil }
         guard basePath.isEmpty || path == basePath || path.hasPrefix(basePath + "/") else { return nil }
         return path.dropFirst(basePath.count).split(separator: "/").map(String.init)
     }

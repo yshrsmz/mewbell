@@ -74,6 +74,10 @@ struct AccountSectionView: View {
         switch status.tokenState {
         case .fetching:
             ProgressView().controlSize(.mini)
+        case .ready where feed?.phase.isStopped == true:
+            // トークンは持っているが、API に使えなかった
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+                .help("Stopped")
         case .ready:
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                 .help("Ready")
@@ -139,7 +143,7 @@ struct ThreadRow: View {
                     HStack(spacing: 4) {
                         Text(NotificationGrouping.reasonText(thread.reason))
                         Text("·")
-                        Text(thread.updatedAt, style: .relative)
+                        RelativeTimeText(date: thread.updatedAt)
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -165,6 +169,18 @@ struct ThreadRow: View {
     }
 }
 
+/// 「5 min. ago」のような相対時刻。ポップオーバーを開いている間も 30 秒ごとに更新する。
+private struct RelativeTimeText: View {
+    let date: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            Text(date, format: .relative(presentation: .named, unitsStyle: .abbreviated))
+                .id(context.date)
+        }
+    }
+}
+
 /// 通知の取得の状態と、止まっているときの案内。API のエラー出力は表示しない。
 struct FeedStatusView: View {
     let account: Account
@@ -182,8 +198,7 @@ struct FeedStatusView: View {
             case .loaded(let date):
                 HStack(spacing: 4) {
                     Text("Updated")
-                    Text(date, style: .relative)
-                    Text("ago")
+                    RelativeTimeText(date: date)
                 }
                 .foregroundStyle(.secondary)
             case .retrying(let nextAttempt, let rateLimited):

@@ -82,10 +82,6 @@ final class BlockingDiscovery: AccountDiscovering {
         recordedEvents.withLock { $0.append("closed") }
     }
 
-    func refreshToken(for id: AccountID) async -> AccessToken? {
-        nil
-    }
-
     /// 待っている読み込みを 1 つ進める（待っていなければ、次の読み込みをすぐ通す）。
     func finish() {
         let waiter = gate.withLock { gate -> CheckedContinuation<Void, Never>? in

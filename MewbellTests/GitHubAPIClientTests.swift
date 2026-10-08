@@ -153,6 +153,23 @@ struct GitHubAPIClientTests {
         #expect(transport.requests.count == 1)
     }
 
+    @Test func dropsThreadsRepeatedAcrossPages() async {
+        let transport = FakeHTTPTransport { request in
+            if request.url?.query()?.contains("page=2") == true {
+                return Self.ok(FakeHTTPTransport.page(3...5))
+            }
+            return Self.ok(
+                FakeHTTPTransport.page(1...3), ["Link": #"<https://api.github.com/notifications?page=2>; rel="next""#])
+        }
+        let result = await client(transport).fetchNotifications(
+            endpoints: github, token: aliceToken, ifModifiedSince: nil)
+        if case .updated(let threads, _, _, _) = result {
+            #expect(threads.map(\.id) == ["1", "2", "3", "4", "5"])
+        } else {
+            Issue.record("unexpected result \(result)")
+        }
+    }
+
     @Test func stopsAtTheTenthPage() async {
         let transport = FakeHTTPTransport { request in
             let page = Int(request.url?.query()?.split(separator: "page=").last ?? "1") ?? 1
@@ -191,6 +208,8 @@ struct GitHubAPIClientTests {
         ),
         (403, ["Retry-After": "300"], .rateLimited(retryAt: Date(timeIntervalSince1970: 1_791_461_100))),
         (403, ["X-RateLimit-Remaining": "4999"], .forbidden),
+        (429, ["Retry-After": "600"], .rateLimited(retryAt: Date(timeIntervalSince1970: 1_791_461_400))),
+        (429, [:], .rateLimited(retryAt: Date(timeIntervalSince1970: 1_791_460_800))),
         (422, [:], .invalidRequest),
         (302, ["Location": "https://evil.example.com/"], .failed(.redirect)),
         (304, [:], .failed(.unexpectedStatus(304))),

@@ -34,22 +34,19 @@ final class NotificationStore {
         }
     }
 
-    /// トークンが「使える」アカウントのポーラーを起動し、それ以外のポーラーを止めて状態を消す。
-    /// すでにポーラーがあるアカウント（止まっているものを含む）はそのままにする。
+    /// トークンが「使える」アカウントのポーラーを起動し、一覧から消えたアカウントと「トークンを取れない」アカウントの
+    /// ポーラーを止めて状態を消す。すでにポーラーがあるアカウント（止まっているものを含む）はそのままにする。
+    /// トークンの取得中（401 の後の取り直しや、トークンを捨てた後の読み直し）のアカウントのポーラーも残す
+    /// （作り直すと、止めたポーリングが勝手に再開したり、取り直しと重なったりするため）。
     func sync(with state: DiscoveryState) {
         guard let makePoller else { return }
-        let ready: [Account] =
-            if case .accounts(let statuses) = state {
-                statuses.filter { $0.tokenState == .ready }.map(\.account)
-            } else {
-                []
-            }
-        let readyIDs = Set(ready.map(\.id))
-        for id in pollers.keys where !readyIDs.contains(id) {
+        let statuses: [AccountStatus] = if case .accounts(let statuses) = state { statuses } else { [] }
+        let keptIDs = Set(statuses.filter { $0.tokenState != .unavailable }.map(\.id))
+        for id in pollers.keys where !keptIDs.contains(id) {
             pollers.removeValue(forKey: id)?.poller.stop()
             feeds[id] = nil
         }
-        for account in ready where pollers[account.id] == nil {
+        for account in statuses.filter({ $0.tokenState == .ready }).map(\.account) where pollers[account.id] == nil {
             guard let endpoints = APIEndpoints(host: account.host) else { continue }
             let generation = nextGeneration
             nextGeneration += 1

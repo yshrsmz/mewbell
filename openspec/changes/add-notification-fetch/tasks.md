@@ -32,8 +32,8 @@
 
 - [x] 5.1 `NotificationGrouping.groups(from:)` を実装する（リポジトリは最新のスレッドの更新日時順、スレッドは更新日時順）と、理由の表示名の対応を作る。確認: 並び順と、知らない `reason` の表示名のテストが通る
 - [x] 5.2 `ThreadWebURL` を実装する（design.md D8）。確認: PR・Issue・Commit（github.com、`*.ghe.com`、GHES の `/api/v3`）、Release・Discussion、`subject.url` が `null`・別ホスト・`http`・リポジトリ名が一致しない・番号が数字でない・SHA が 16 進でない、の各ケースで ui spec どおりの URL（または代用のリポジトリのページ）になり、結果がすべて `https` でアカウントのホストを指すテストが通る
-- [ ] 5.3 `AccountSectionView`、`ThreadRow`、`FeedStatusView` を実装する（取得中・取得できた・失敗して待っている（レート制限を含む）・スコープ不足（アクティブ / アクティブでない）・認証エラー・未読 0 件・トークンを取れない）。`AccountListView` を消す。確認: 各状態と 2 アカウント・複数リポジトリを含む SwiftUI プレビューを表示して ui spec と照らし、スコープ不足の案内のコマンドを `pbpaste` で確かめる
-- [ ] 5.4 `MenuBarContentView` を `NotificationListView`（スクロール、最大 480pt、幅 380pt）にし、スレッドのクリックで `ThreadWebURL` の URL を `NSWorkspace` で開く。確認: プレビューで見出しと Quit がスクロールの外に残ることを確かめる
+- [x] 5.3 `AccountSectionView`、`ThreadRow`、`FeedStatusView` を実装する（取得中・取得できた・失敗して待っている（レート制限を含む）・スコープ不足（アクティブ / アクティブでない）・認証エラー・未読 0 件・トークンを取れない）。`AccountListView` を消す。確認: 各状態と 2 アカウント・複数リポジトリを含む SwiftUI プレビューを表示して ui spec と照らし、スコープ不足の案内のコマンドを `pbpaste` で確かめる
+- [x] 5.4 `MenuBarContentView` を `NotificationListView`（スクロール、最大 480pt、幅 380pt）にし、スレッドのクリックで `ThreadWebURL` の URL を `NSWorkspace` で開く。確認: プレビューで見出しと Quit がスクロールの外に残ることを確かめる
 - [x] 5.5 `AppDelegate` で `NotificationStore` を持ち、`AccountStore.onStateChange` を `sync(with:)` に、再読み込みボタンを `resumeStopped()` に、終了処理を `stopAll()` → `discardCredentials()` の順につなぐ。テストのホストとプレビューではポーリングを始めない。確認: `AccountStore` の状態を変えると `sync` が呼ばれるテストが通り、`bash scripts/run.sh` で起動して自分のアカウントの通知が一覧に出る
 - [x] 5.6 README の注記を M2 の状態に更新し、取得する通知の範囲（未読・`participating=false`）とポーリングの間隔（`X-Poll-Interval`、下限 60 秒）を書く。確認: README の差分を読む
 

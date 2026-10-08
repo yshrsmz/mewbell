@@ -36,6 +36,10 @@ struct APIEndpointsTests {
         ("ghe.example.com", "https://ghe.example.com/other", false),
         ("ghe.example.com", "https://ghe.example.com/api/v30/notifications", false),
         ("ghe.example.com", "https://ghe.example.com/api/v3/../login", false),
+        ("ghe.example.com", "https://ghe.example.com/api/v3/%2e%2e/%2E%2E/login", false),
+        ("ghe.example.com", "https://ghe.example.com/api/v3/%2e/notifications", false),
+        ("ghe.example.com", "https://ghe.example.com/api/v3/..%2f..%2flogin", false),
+        ("ghe.example.com", "https://ghe.example.com/api/v3/..%5C..%5Clogin", false),
     ])
     func checksTheRequestURL(_ host: String, _ url: String, _ allowed: Bool) throws {
         let endpoints = try #require(APIEndpoints(host: host))

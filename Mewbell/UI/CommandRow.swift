@@ -12,8 +12,7 @@ struct CommandRow: View {
             Text(command)
                 .font(.system(.callout, design: .monospaced))
                 .textSelection(.enabled)
-                .lineLimit(1)
-                .truncationMode(.middle)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 NSPasteboard.general.clearContents()
