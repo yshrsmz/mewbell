@@ -64,10 +64,7 @@ enum SingleInstance {
     @MainActor
     static func terminateIfAnotherInstanceIsRunning() {
         guard lock == nil else { return }
-        let environment = ProcessInfo.processInfo.environment
-        guard environment["XCTestConfigurationFilePath"] == nil,
-            environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1"
-        else { return }
+        guard !LaunchContext.isTestHostOrPreview else { return }
         guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
             logger.error("Could not lock: no bundle identifier")
             return

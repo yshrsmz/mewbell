@@ -50,7 +50,7 @@ M0 の時点で、アプリは `Mewbell/App/` の 3 ファイル（`MewbellApp`�
 | `GhCLI/` | `GhClient` | 上の部品を使って `gh --version` と `gh auth token` を実行する |
 | `Accounts/` | `HostKind`、`AccountID`、`Account` | アカウントの値型（`AccountID` は `<host>/<user>`、ホストは小文字） |
 | `Accounts/` | `CredentialStore`（actor） | `AccountID` → `AccessToken` の辞書。トークンを持つのはここだけ |
-| `Accounts/` | `AccountDiscovery`（actor） | 検出 → バージョン確認 → `hosts.yml` → トークン取得の流れと、前回の結果との差分（D7） |
+| `Accounts/` | `AccountDiscovery`（actor、`AccountDiscovering` に準拠） | 検出 → バージョン確認 → `hosts.yml` → トークン取得の流れと、前回の結果との差分（D7） |
 | `Accounts/` | `AccountStore`（`@MainActor @Observable`） | UI に見せる状態（全体の状態とアカウントの行）と、読み直しの起動・重複の抑止 |
 | `UI/` | `AccountListView`、`GuidanceView`、`CommandRow` | 一覧、案内、コマンドとコピーボタンの行 |
 
@@ -84,6 +84,7 @@ Yams の追加:
 
 - `https://github.com/jpsim/Yams` を `exactVersion: 6.2.2` で `Mewbell` ターゲットにだけ追加する（2026-05-26 公開、MIT。ターゲットは C の `CYaml` と Swift の `Yams` だけで、ビルドツールプラグインやマクロは無い）
 - `Mewbell.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` をコミットする（`.gitignore` は `xcuserdata/` だけを除外しているので対象外にならない）
+- push 前の警告をエラー扱いにしたビルドは、`SWIFT_TREAT_WARNINGS_AS_ERRORS=YES` をコマンドラインで渡す方式をやめる。コマンドラインの設定は Yams のターゲットにも掛かり、パッケージに付く `-suppress-warnings` と衝突してビルドが止まるため。代わりにプロジェクトの設定を `SWIFT_TREAT_WARNINGS_AS_ERRORS = $(MEWBELL_WARNINGS_AS_ERRORS)`（既定 `NO`）にし、`MEWBELL_WARNINGS_AS_ERRORS=YES` を渡す。Yams は別プロジェクトなので、この変数を参照しない。CLAUDE.md と README のコマンドも合わせて変える
 
 ### D5. 子プロセスの環境
 
@@ -101,15 +102,15 @@ Yams の追加:
 
 ### D7. 読み込みの流れと差分
 
-`AccountDiscovery.reload()` は次の順に進み、途中の状態を `AsyncStream` で `AccountStore` に流す。
+`AccountDiscovery.reload(update:)` は次の順に進み、途中と最後の状態を `update` コールバックで `AccountStore` に渡す（`AccountStore` は `@MainActor` で受け取って反映する）。
 
 1. `GhLocator` で gh を探す。無ければ「gh が見つからない」にして `CredentialStore` を空にする
-2. gh のパスが前回と違う（または初回）なら `gh --version`（タイムアウト 5 秒）を実行し、2.40.0 未満か読めなければ「gh が古い」にして `CredentialStore` を空にする
-3. `hosts.yml` を読む。読めなければ「`hosts.yml` を読めない」、アカウントが 0 件なら「未ログイン」にして、どちらも `CredentialStore` を空にする
+2. `hosts.yml` を読む。読めなければ「`hosts.yml` を読めない」にして `CredentialStore` を空にする（gh は `hosts.yml` を解釈できないと `gh --version` でも失敗するので、バージョンより先に確かめる。手元の gh 2.102.0 で確認）
+3. gh のパスが前回と違う（または初回）なら `gh --version`（タイムアウト 5 秒）を実行し、2.40.0 未満か読めなければ「gh が古い」にする。続いて、アカウントが 0 件なら「未ログイン」にする。どちらも `CredentialStore` を空にする
 4. 前回の一覧と比べ、消えたアカウントのトークンを `CredentialStore` から捨てる
 5. トークンを持っていないアカウント（新しいもの、前回失敗したもの）について `gh auth token --hostname <host> --user <user>`（タイムアウト 10 秒）を並べて実行し、結果を `CredentialStore` と状態に反映する
 
-起動時の読み込みは `MewbellApp` で `AccountStore` を作ったときに始める。テストのホストや SwiftUI プレビューとして起動されたとき（`SingleInstance` と同じ環境変数の判定）は自動で始めない。ポップオーバーを開いたことは、`MenuBarContentView` の `onAppear` で `AccountStore.reload()` を呼んで知る。アプリの終了時は `NSApplication.willTerminateNotification` で `CredentialStore` を空にする。
+起動時の読み込みは `MewbellApp` で `AccountStore` を作ったときに始める。テストのホストや SwiftUI プレビューとして起動されたとき（`SingleInstance` と同じ環境変数の判定）は自動で始めない。ポップオーバーを開いたことは、`MenuBarContentView` の `onAppear` で `AccountStore.reload()` を呼んで知る。アプリの終了時は `AppDelegate.applicationShouldTerminate` で `.terminateLater` を返し、`CredentialStore` を空にしてから終了する（`willTerminateNotification` では actor の処理を待てないため）。起動時の読み込みも `AppDelegate.applicationDidFinishLaunching` から始め、`AccountStore` は `AppDelegate` が持つ。
 
 ### D8. 画面
 
@@ -131,7 +132,7 @@ Yams の追加:
 - 取得: `GhClient` が `gh auth token --hostname <host> --user <user>` の標準出力から受け取り、すぐ `AccessToken` にする
 - 保持: `CredentialStore`（actor）の辞書にだけ置く。`AccountStore`・View・ログには渡さない
 - 送信: M1 では送らない。M2 で、`AccountID` に対応するホストの API ベースへのリクエストにだけ付ける
-- 破棄: アカウントが `hosts.yml` から消えたとき、全体の状態が「アカウントあり」以外になったとき、アプリの終了時（`willTerminateNotification`）
+- 破棄: アカウントが `hosts.yml` から消えたとき、全体の状態が「アカウントあり」以外になったとき、アプリの終了時（`applicationShouldTerminate`）
 
 `.claude/rules/security.md` への対応:
 

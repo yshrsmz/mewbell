@@ -49,7 +49,7 @@ Mewbell は、候補のパスが次のすべてを満たすときにだけ gh �
 
 ### Requirement: gh のバージョン確認
 
-Mewbell は gh を使う前に `gh --version` でバージョンを確かめ、2.40.0 未満のとき（`gh auth token --user` が使えないとき）は「gh が古い」状態にし、アカウントの読み取りとトークンの取得を行ってはならない（MUST NOT）。バージョンを読み取れないときも同じく「gh が古い」状態にしなければならない（MUST）。
+Mewbell は `gh auth token` を実行する前に `gh --version` でバージョンを確かめ、2.40.0 未満のとき（`gh auth token --user` が使えないとき）は「gh が古い」状態にし、トークンの取得を行ってはならない（MUST NOT）。バージョンを読み取れないときも同じく「gh が古い」状態にしなければならない（MUST）。ただし、gh は `hosts.yml` を解釈できないと `gh --version` でも失敗するため、バージョンの確認より先に `hosts.yml` を読み、読めないときは「gh が古い」ではなく「hosts.yml を読めない」状態にしなければならない（MUST）。
 
 #### Scenario: 古い gh
 
@@ -57,6 +57,12 @@ Mewbell は gh を使う前に `gh --version` でバージョンを確かめ、2
 - **WHEN** Mewbell が gh を確かめる
 - **THEN** 「gh が古い」状態になり、検出したバージョンと更新方法（`brew upgrade gh`）を案内する
 - **AND** `gh auth token` は実行しない
+
+#### Scenario: hosts.yml が壊れていて gh が起動できない
+
+- **GIVEN** `hosts.yml` が YAML として解釈できず、`gh --version` も設定の読み込みに失敗して終了コード 1 で終わる
+- **WHEN** Mewbell が gh を確かめる
+- **THEN** 「hosts.yml を読めない」状態になり、「gh が古い」にはならない
 
 #### Scenario: 対応するバージョン
 

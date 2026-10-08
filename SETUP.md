@@ -50,7 +50,7 @@ Claude Code を repo 直下で開き、まず探索せずに change を起こす
 | M1 | `add-gh-account-discovery` | gh 検出、hosts.yml 解析、`gh auth token` 実行、アカウント一覧表示、未検出/未ログイン案内 |
 | M2 | `add-notification-fetch` | GitHubAPI クライアント、ホスト種別判定、ポーリング（304 / X-Poll-Interval）、一覧（アカウント→リポジトリ）、クリックで開く |
 | M3 | `add-system-notifications` | UNUserNotificationCenter、1 スレッド 1 通知、クリックで開いて既読、未読バッジ |
-| M4 | `add-settings-and-actions` | Done、全既読、participating 切替、アカウント ON/OFF、ログイン時起動、Diagnostics 表示 |
+| M4 | `add-settings-and-actions` | Done、全既読、participating 切替、アカウント ON/OFF、ログイン時起動、Diagnostics 表示、gh のパスの上書き（設定画面と UserDefaults。M1 の検出処理は上書きパスを受け取れる） |
 | M5 | `add-distribution`（任意） | 配布用のビルド、署名、Sparkle、Homebrew Cask |
 
 1 change が大きくなりそうなら分割する（例: M2 を `add-github-api-client` と `add-notification-list` に）。

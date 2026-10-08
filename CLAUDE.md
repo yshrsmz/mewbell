@@ -49,8 +49,8 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test
 bash scripts/run.sh              # ビルドして起動する（起動中の Mewbell は終了させる）
 
 # push 前の確認: 警告をエラー扱いにして Debug と Release をビルドする
-xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build
-xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release SWIFT_TREAT_WARNINGS_AS_ERRORS=YES build
+xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug MEWBELL_WARNINGS_AS_ERRORS=YES build
+xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEWBELL_WARNINGS_AS_ERRORS=YES build
 ```
 
 - 確認は `bash scripts/lint.sh`（`swift-format lint` と `swiftlint`）。整形は `bash scripts/format.sh`。CI（GitHub Actions）は macOS ランナーが高価なので ubuntu だけを使い、lint と `openspec validate` だけを回す。`xcodebuild` のビルドとテストは CI で回らないので、push 前に手元で必ず通す（テスト、lint、警告をエラー扱いにした Debug と Release のビルド）
