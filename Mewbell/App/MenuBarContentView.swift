@@ -20,7 +20,7 @@ struct MenuBarContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(store.isReloading)
-                .help("Reload gh accounts and resume stopped accounts")
+                .help("Reload gh accounts, resume stopped accounts, and fully refetch notifications on the next poll")
                 .accessibilityLabel("Reload")
             }
 

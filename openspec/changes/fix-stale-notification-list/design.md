@@ -26,14 +26,14 @@
 
 `AccountPoller` に次の 2 つを持たせる。
 
-- `lastUnconditionalFetch: Date?`: 条件なしで全ページを取り終えた時刻
+- `lastFullFetch: Date?`: 最後に `200` で全ページを取り終えた時刻（条件付きでも `200` なら一覧はすべて取り直されるので、条件の有無は問わない）
 - `unconditionalRequested`: 次の取得を条件なしにする印（再読み込みで立てる）
 
-取得の直前に印を読んで下ろし、印が立っていたか、`lastUnconditionalFetch` が無いか 5 分以上前なら `If-Modified-Since` を付けない。`lastModified` が nil のとき（最初の取得、トークンの取り直しの後、止めた後）は、もともと条件なしになる。`lastModified` が入るのは条件なしの取得の `updated` だけで、そのとき `lastUnconditionalFetch` も入るので、トークンの取り直しや停止で `lastUnconditionalFetch` を消す必要はない。
+取得の直前に印を読んで下ろし、印が立っていたか、`lastFullFetch` が無いか 5 分以上前なら（時計が戻って差が負になったときも） `If-Modified-Since` を付けない。`lastModified` が nil のとき（最初の取得、トークンの取り直しの後、止めた後）は、もともと条件なしになる。`lastModified` と `lastFullFetch` はどちらも `updated` で入るので、トークンの取り直しや停止で `lastModified` を消せば、`lastFullFetch` を消さなくても次は条件なしになる。
 
-条件なしの取得で `updated` を受け取ったら、`lastUnconditionalFetch = now()` にする。取り終えられなかったときは時刻を変えないので、5 分を過ぎた分の取得は次もまた条件なしになる。印を立てた取得が取り終えられなかったときは、印を立て直す。印を送る前に下ろすのは、取得の途中で押された再読み込みを、その前に始めた取得の成功で消さないため。
+`updated` を受け取ったら、条件の有無にかかわらず `lastFullFetch = now()` にする。取り終えられなかったときは時刻を変えないので、5 分を過ぎた分の取得は次もまた条件なしになる。印を立てた取得が取り終えられなかったときは、印を立て直す。印を送る前に下ろすのは、取得の途中で押された再読み込みを、その前に始めた取得の成功で消さないため。
 
-判断をポーラーの中に閉じ込めるのは、`lastModified` と同じ actor の状態で、取得のループだけが読み書きするから。時刻は今ある `now` を使うので、テストでは固定できる。スリープから戻ったときも、壁時計の差で判断するので 5 分を過ぎていれば条件なしになる。
+判断をポーラーの中に閉じ込めるのは、`lastModified` と同じ actor の状態で、取得のループだけが読み書きするから。時刻は今ある `now` を使うので、テストでは固定できる。スリープから戻ったときも、壁時計の差で判断するので 5 分を過ぎていれば条件なしになる。時計が戻って差が負になったときも条件なしにする（戻った分だけ取り直しが遅れないように）。
 
 代わりの案:
 
@@ -54,7 +54,7 @@ CLAUDE.md の「ポーリングは API の指示に従う」に「5 分ごとと
 
 ## スレッドとアクター
 
-- 判断と状態（`lastModified`、`lastUnconditionalFetch`）は `AccountPoller`（actor）の中だけで読み書きする
+- 判断と状態（`lastModified`、`lastFullFetch`）は `AccountPoller`（actor）の中だけで読み書きする
 - 再読み込みの印は `nonisolated` の `Atomic<Bool>` に置き、`@MainActor` の `NotificationStore` から同期的に立てる。読むのはポーラーのループだけ
 - ネットワークは今までどおり `GitHubAPIClient` が `HTTPTransport` 経由で送る。テストは `FakeHTTPTransport` で `If-Modified-Since` の有無を確かめ、時刻は `now` の差し替え、待ちは `ManualSleeper` で進める
 

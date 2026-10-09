@@ -28,7 +28,7 @@ actor AccountPoller {
     /// 最後にすべてのページを取り終えた 200 の `Last-Modified`
     private var lastModified: String?
     /// 最後に条件なしで全ページを取り終えた時刻
-    private var lastUnconditionalFetch: Date?
+    private var lastFullFetch: Date?
     /// 今のトークンでスコープを確かめたか
     private var scopesVerified = false
     private var consecutiveFailures = 0
@@ -123,7 +123,7 @@ actor AccountPoller {
         }
     }
 
-    /// 1 回の取得をする。再読み込みの後と、最後の条件なしの取得から間隔がたった後は `If-Modified-Since` を付けない。
+    /// 1 回の取得をする。再読み込みの後と、最後に 200 で一覧を取り直してから間隔がたった後は `If-Modified-Since` を付けない。
     private func fetch(with token: AccessToken) async -> NotificationsFetchResult {
         // 印は送る前に下ろす（取得中に押された再読み込みを、その前に始めた取得で消さないため）
         let requested = unconditionalRequested.exchange(false, ordering: .relaxed)
@@ -135,9 +135,8 @@ actor AccountPoller {
         let result = await client.fetchNotifications(
             endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince)
         if case .updated = result {
-            if ifModifiedSince == nil {
-                lastUnconditionalFetch = now()
-            }
+            // 条件付きでも 200 なら全ページを取り直しているので、条件なしと同じく一覧は最新になる
+            lastFullFetch = now()
         } else if requested {
             // 取り終えられなかったので、次の取得もまた条件なしにする
             unconditionalRequested.store(true, ordering: .relaxed)
@@ -145,10 +144,13 @@ actor AccountPoller {
         return result
     }
 
-    /// 最後の条件なしの取得から間隔がたったか。`lastModified` が nil の間はどのみち条件なしになり、
-    /// `lastModified` が入る 200 は条件なしの取得なので、ここで時刻も入る（トークンの取り直しなどで時刻を消す必要はない）
+    /// 最後に 200 で一覧を取り直してから間隔がたったか。時計が戻ったとき（差が負）も、たったものとして扱う
+    /// （戻った分だけ取り直しが遅れないように）。`lastModified` と `lastFullFetch` はどちらも 200 で入るので、
+    /// トークンの取り直しや停止で `lastModified` を消せば、時刻を消さなくても次は条件なしになる
     private var periodicUnconditionalFetchIsDue: Bool {
-        lastUnconditionalFetch.map { now().timeIntervalSince($0) >= Self.unconditionalFetchInterval } ?? true
+        guard let lastFullFetch else { return true }
+        let elapsed = now().timeIntervalSince(lastFullFetch)
+        return elapsed >= Self.unconditionalFetchInterval || elapsed < 0
     }
 
     /// 取得の結果を状態に反映し、次にすることを決める。`refreshedToken` は直前にトークンを取り直したか。
