@@ -13,14 +13,15 @@ struct MenuBarContentView: View {
                 Spacer()
                 Button {
                     store.reload(userInitiated: true)
-                    notifications.resumeStopped()
+                    // 止まっているアカウントに印を立てないよう、再開より先に呼ぶ
                     notifications.requestUnconditionalFetch()
+                    notifications.resumeStopped()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.borderless)
                 .disabled(store.isReloading)
-                .help("Reload gh accounts, resume stopped accounts, and fully refetch notifications on the next poll")
+                .help("Reload gh accounts, resume stopped accounts, and fully refetch at the next poll")
                 .accessibilityLabel("Reload")
             }
 
