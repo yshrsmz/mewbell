@@ -323,7 +323,10 @@ extension AccountPoller {
         // 取得の状態は、トークンを待っている間に変わることがあるので待った後に見る
         guard let token = await tokens.currentToken(for: accountID), case .loaded = state.phase,
             !state.threads.isEmpty
-        else { return }
+        else {
+            Self.logger.info("Skipped marking all threads of \(self.accountID) as read: no token or no loaded list")
+            return
+        }
         // `last_read_at` は秒までしか送らないので、隠す範囲も秒に揃える
         let cutoff = Date(timeIntervalSince1970: newest.timeIntervalSince1970.rounded(.down))
         let serial = readThroughCount
