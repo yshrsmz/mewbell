@@ -10,8 +10,12 @@ struct MewbellApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("Mewbell", systemImage: "cat.fill") {
-            MenuBarContentView(store: appDelegate.accountStore, notifications: appDelegate.notificationStore)
+        MenuBarExtra {
+            MenuBarContentView(
+                store: appDelegate.accountStore, notifications: appDelegate.notificationStore,
+                permission: appDelegate.notificationPermission)
+        } label: {
+            MenuBarLabel(notifications: appDelegate.notificationStore)
         }
         .menuBarExtraStyle(.window)
     }

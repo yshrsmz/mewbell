@@ -32,6 +32,18 @@ actor AccountPoller {
     /// 今のトークンでスコープを確かめたか
     private var scopesVerified = false
     private var consecutiveFailures = 0
+    /// 始めた取得の数（次に始める取得の番号）
+    private var fetchCount = 0
+    /// 既読にしたので、取得の結果から取り除いているスレッド
+    private var hidden: [String: HiddenUntil] = [:]
+
+    /// 既読にしたスレッドを、いつまで取得の結果から取り除くか。
+    private enum HiddenUntil {
+        /// 既読化のリクエストが終わるまで
+        case requestFinishes
+        /// この番号以降の取得の 200 が出るまで（既読化の後に始めた取得なら、結果をそのまま信じてよい）
+        case fetch(Int)
+    }
 
     init(
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,
@@ -65,6 +77,25 @@ actor AccountPoller {
 
     /// 次の取得を `If-Modified-Since` なしにする（再読み込みボタン）。取得を早めはしない。
     nonisolated func requestUnconditionalFetch() {
+        unconditionalRequested.store(true, ordering: .relaxed)
+    }
+
+    /// スレッドを既読にする。一覧からすぐに外し、既読化のリクエストを送り、次の取得を条件なしにする。
+    /// 止まっているときとトークンが無いときは送らない（次の条件なしの取得で、未読のままなら一覧に戻る）。
+    func markRead(threadID: String) async {
+        hidden[threadID] = .requestFinishes
+        if state.threads.contains(where: { $0.id == threadID }) {
+            state.threads.removeAll { $0.id == threadID }
+            await publish(state)
+        }
+        if !state.phase.isStopped, let token = await tokens.currentToken(for: accountID) {
+            let result = await client.markThreadRead(endpoints: endpoints, token: token, threadID: threadID)
+            if result != .read {
+                Self.logger.error("Could not mark a thread of \(self.accountID) as read: \(String(describing: result))")
+            }
+        }
+        // 既読化の結果が 304 に隠れないように、また失敗したスレッドが一覧に戻るように、次は条件なしで取り直す
+        hidden[threadID] = .fetch(fetchCount)
         unconditionalRequested.store(true, ordering: .relaxed)
     }
 
@@ -132,8 +163,15 @@ actor AccountPoller {
             Self.logger.info("Fetching \(self.accountID) without If-Modified-Since")
         }
         let ifModifiedSince = isDue ? nil : lastModified
-        let result = await client.fetchNotifications(
+        let number = fetchCount
+        fetchCount += 1
+        var result = await client.fetchNotifications(
             endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince)
+        if case .updated(let threads, let lastModified, let pollInterval, let scopes) = result {
+            result = .updated(
+                threads: revealOrHide(threads, fetchNumber: number), lastModified: lastModified,
+                pollInterval: pollInterval, scopes: scopes)
+        }
         // 止められた（再開で新しいループに替わった）後に返った結果では、状態を書き換えない
         guard !Task.isCancelled else { return result }
         if case .updated = result {
@@ -144,6 +182,15 @@ actor AccountPoller {
             unconditionalRequested.store(true, ordering: .relaxed)
         }
         return result
+    }
+
+    /// 既読化の後に始めた取得の結果なら隠すのをやめ、そうでなければ既読にしたスレッドを取り除く。
+    private func revealOrHide(_ threads: [NotificationThread], fetchNumber: Int) -> [NotificationThread] {
+        hidden = hidden.filter { _, until in
+            guard case .fetch(let first) = until else { return true }
+            return fetchNumber < first
+        }
+        return threads.filter { hidden[$0.id] == nil }
     }
 
     /// 最後に 200 で一覧を取り直してから間隔がたったか。時計が戻ったとき（差が負）も、たったものとして扱う
