@@ -29,7 +29,7 @@ final class SystemNotifier: ThreadNotifying {
         switch new.phase {
         case .loaded where old == nil || old?.phase == .loading:
             tracker.baseline(new.threads, for: account)
-            removeStaleDelivered(for: account, keeping: tracker.currentThreadIDs(for: account))
+            removeStaleDelivered(for: account, keeping: Set(new.threads.map(\.id)))
         case .loaded:
             guard old?.threads != new.threads else { return }
             let changes = tracker.update(new.threads, for: account)
@@ -61,12 +61,7 @@ final class SystemNotifier: ThreadNotifying {
 
     func retainOnly(_ accounts: Set<AccountID>) {
         let prefixes = accounts.map(ThreadNotificationContent.identifierPrefix(of:))
-        enqueue { center in
-            let stale = await center.deliveredIdentifiers().filter { identifier in
-                !prefixes.contains { identifier.hasPrefix($0) }
-            }
-            await center.removeDelivered(identifiers: stale)
-        }
+        removeDelivered { identifier in !prefixes.contains { identifier.hasPrefix($0) } }
     }
 
     /// 通知センターへの操作が終わるのを待つ（テスト用）。
@@ -77,11 +72,15 @@ final class SystemNotifier: ThreadNotifying {
     /// アカウントの出ている通知のうち、`keeping` に無いスレッドのものを取り下げる。
     private func removeStaleDelivered(for account: AccountID, keeping threadIDs: Set<String>) {
         let prefix = ThreadNotificationContent.identifierPrefix(of: account)
+        removeDelivered { identifier in
+            identifier.hasPrefix(prefix) && !threadIDs.contains(String(identifier.dropFirst(prefix.count)))
+        }
+    }
+
+    /// 出ている通知のうち、`isStale` に当てはまるものを取り下げる。
+    private func removeDelivered(where isStale: @escaping @Sendable (String) -> Bool) {
         enqueue { center in
-            let stale = await center.deliveredIdentifiers().filter { identifier in
-                identifier.hasPrefix(prefix) && !threadIDs.contains(String(identifier.dropFirst(prefix.count)))
-            }
-            await center.removeDelivered(identifiers: stale)
+            await center.removeDelivered(identifiers: center.deliveredIdentifiers().filter(isStale))
         }
     }
 

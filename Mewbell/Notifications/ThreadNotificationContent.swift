@@ -65,8 +65,10 @@ struct ThreadOpenRequest: Sendable, Equatable {
         else { return nil }
         if let url = (userInfo[Key.url] as? String).flatMap(URL.init(string:)), Self.isOpenable(url, host: host) {
             self.url = url
-        } else if let repository = (userInfo[Key.repository] as? String).flatMap(RepositoryName.init(fullName:)) {
-            self.url = endpoints.webBaseURL.appending(path: repository.owner).appending(path: repository.name)
+        } else if let repository = (userInfo[Key.repository] as? String).flatMap(RepositoryName.init(fullName:)),
+            let url = ThreadWebURL.repositoryPage(repository, endpoints: endpoints)
+        {
+            self.url = url
         } else {
             return nil
         }

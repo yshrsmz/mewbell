@@ -49,8 +49,4 @@ struct NotificationTracker {
         seen[account] = nil
         current[account] = nil
     }
-
-    func currentThreadIDs(for account: AccountID) -> Set<String> {
-        current[account] ?? []
-    }
 }
