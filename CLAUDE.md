@@ -56,6 +56,7 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEW
 - 確認は `bash scripts/lint.sh`（`swift-format lint` と `swiftlint`）。整形は `bash scripts/format.sh`。CI（GitHub Actions）は macOS ランナーが高価なので ubuntu だけを使い、lint と `openspec validate` だけを回す。`xcodebuild` のビルドとテストは CI で回らないので、push 前に手元で必ず通す（テスト、lint、警告をエラー扱いにした Debug と Release のビルド）
 - プロジェクトは Xcode 27.2 以降の JSON 形式（`project.xcproj`）。`project.pbxproj` には戻さない。ターゲット追加・ビルド設定の変更は `project.xcproj` を直接編集してよいが、編集後は必ず `xcodebuild` で開けることを確認する
 - `DerivedData`・`build/`・`xcuserdata/` はコミットしない
+- `SWIFT_APPROACHABLE_CONCURRENCY` が有効なので、nonisolated の async 関数は呼び出し元の actor の上で動く。テストの fake で `Thread.sleep` などの同期的な待ちを入れると、その actor（`AccountPoller` など）が塞がり、テストが止まる。応答を待たせたいときは async で中断させる（`FakeHTTPTransport` の `pausedMethod` を参照）
 
 ## 実装上の約束
 
