@@ -28,7 +28,7 @@ struct MarkThreadReadTests {
 
     private func markRead(
         _ response: HTTPResponse, endpoints: APIEndpoints? = nil, threadID: String = "123"
-    ) async -> (MarkReadResult, FakeHTTPTransport) {
+    ) async -> (ThreadActionResult, FakeHTTPTransport) {
         let transport = FakeHTTPTransport { _ in response }
         let result = await GitHubAPIClient(transport: transport).markThreadRead(
             endpoints: endpoints ?? github, token: token, threadID: threadID)
@@ -37,7 +37,7 @@ struct MarkThreadReadTests {
 
     @Test func buildsThePatchRequest() async throws {
         let (result, transport) = await markRead(HTTPResponse(statusCode: 205))
-        #expect(result == .read)
+        #expect(result == .succeeded)
         let request = try #require(transport.requests.first)
         #expect(request.httpMethod == "PATCH")
         #expect(request.url?.absoluteString == "https://api.github.com/notifications/threads/123")
@@ -46,6 +46,7 @@ struct MarkThreadReadTests {
         #expect(request.value(forHTTPHeaderField: "X-GitHub-Api-Version") == "2022-11-28")
         #expect(request.value(forHTTPHeaderField: "User-Agent")?.hasPrefix("Mewbell/") == true)
         #expect(request.value(forHTTPHeaderField: "If-Modified-Since") == nil)
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == nil)
         #expect(request.httpBody == nil)
     }
 
@@ -56,9 +57,9 @@ struct MarkThreadReadTests {
     }
 
     @Test(arguments: [
-        (HTTPResponse(statusCode: 205), MarkReadResult.read),
-        (HTTPResponse(statusCode: 304), .read),
-        (HTTPResponse(statusCode: 404), .read),
+        (HTTPResponse(statusCode: 205), ThreadActionResult.succeeded),
+        (HTTPResponse(statusCode: 304), .succeeded),
+        (HTTPResponse(statusCode: 404), .succeeded),
         (HTTPResponse(statusCode: 401), .unauthorized),
         (HTTPResponse(statusCode: 403, headers: ["X-RateLimit-Remaining": "0"]), .rateLimited),
         (HTTPResponse(statusCode: 403, headers: ["Retry-After": "60"]), .rateLimited),
@@ -69,7 +70,7 @@ struct MarkThreadReadTests {
         (HTTPResponse(statusCode: 500), .failed(.unexpectedStatus(500))),
         (HTTPResponse(statusCode: 307, headers: ["Location": "https://evil.example.com/"]), .failed(.redirect)),
     ])
-    func classifiesTheStatus(_ response: HTTPResponse, _ expected: MarkReadResult) async {
+    func classifiesTheStatus(_ response: HTTPResponse, _ expected: ThreadActionResult) async {
         let (result, _) = await markRead(response)
         #expect(result == expected)
     }

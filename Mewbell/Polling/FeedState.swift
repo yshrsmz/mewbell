@@ -27,4 +27,15 @@ struct FeedState: Sendable, Equatable {
     var threads: [NotificationThread]
 
     static let loading = FeedState(phase: .loading, threads: [])
+
+    /// 一覧のスレッドの `updated_at` の最大値（すべて既読の範囲）。
+    var newestUpdate: Date? {
+        threads.map(\.updatedAt).max()
+    }
+
+    /// 「すべて既読」を押せるか（取得できていて、一覧が 1 件以上あるとき）。
+    var canMarkAllRead: Bool {
+        guard case .loaded = phase else { return false }
+        return !threads.isEmpty
+    }
 }

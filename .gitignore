@@ -70,3 +70,6 @@ node_modules/
 # Build output
 build/
 DerivedData/
+
+# Local-only notes (handover など。コミットしない)
+*.local.md

@@ -5,8 +5,8 @@ import Foundation
 protocol ThreadNotifying: AnyObject {
     /// アカウントの `FeedState` が `old` から `new` に変わった。
     func feedChanged(for account: AccountID, from old: FeedState?, to new: FeedState)
-    /// スレッドを既読にした。
-    func threadRead(_ threadID: String, for account: AccountID)
+    /// スレッドを既読か Done にした。
+    func threadRemoved(_ threadID: String, for account: AccountID)
     /// アカウントのポーリングを止めた（一覧から消えた）。
     func accountRemoved(_ account: AccountID)
     /// `accounts` 以外のアカウントの通知をすべて取り下げる。
@@ -49,7 +49,7 @@ final class SystemNotifier: ThreadNotifying {
         }
     }
 
-    func threadRead(_ threadID: String, for account: AccountID) {
+    func threadRemoved(_ threadID: String, for account: AccountID) {
         tracker.remove(threadID, for: account)
         let identifier = ThreadNotificationContent.identifier(threadID: threadID, account: account)
         enqueue { center in await center.removeDelivered(identifiers: [identifier]) }

@@ -1,18 +1,32 @@
 import AppKit
 import SwiftUI
 
+/// 一覧での操作。`NotificationStore` に渡す。
+struct ThreadListActions {
+    /// スレッドがクリックされたとき（ブラウザで開いて既読にする）
+    var open: (NotificationThread, AccountID) -> Void
+    /// 開かずに既読にする
+    var markRead: (NotificationThread, AccountID) -> Void
+    var markDone: (NotificationThread, AccountID) -> Void
+    var markAllRead: (AccountID) -> Void
+
+    /// 何もしない（プレビュー用）。
+    static var none: ThreadListActions {
+        ThreadListActions(open: { _, _ in }, markRead: { _, _ in }, markDone: { _, _ in }, markAllRead: { _ in })
+    }
+}
+
 /// アカウントの区画をアカウントの並び順に並べる。トークンや API の URL は表示しない。
 struct NotificationListView: View {
     let statuses: [AccountStatus]
     let feeds: [AccountID: FeedState]
-    /// スレッドがクリックされたとき（ブラウザで開いて既読にする）
-    let open: (NotificationThread, AccountID) -> Void
+    let actions: ThreadListActions
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(statuses) { status in
-                    AccountSectionView(status: status, feed: feeds[status.id]) { open($0, status.id) }
+                    AccountSectionView(status: status, feed: feeds[status.id], actions: actions)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -26,7 +40,7 @@ struct NotificationListView: View {
 struct AccountSectionView: View {
     let status: AccountStatus
     let feed: FeedState?
-    let open: (NotificationThread) -> Void
+    let actions: ThreadListActions
 
     private var account: Account { status.account }
 
@@ -74,6 +88,13 @@ struct AccountSectionView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 0)
+            if status.tokenState == .ready, let feed, !feed.phase.isStopped {
+                MarkAllReadButton(
+                    count: feed.threads.count, newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead
+                ) {
+                    actions.markAllRead(account.id)
+                }
+            }
         }
     }
 
@@ -111,7 +132,10 @@ struct AccountSectionView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                             ForEach(group.threads) { thread in
-                                ThreadRow(thread: thread) { open(thread) }
+                                ThreadRow(
+                                    thread: thread, open: { actions.open(thread, account.id) },
+                                    markRead: { actions.markRead(thread, account.id) },
+                                    markDone: { actions.markDone(thread, account.id) })
                             }
                         }
                     }
@@ -120,62 +144,6 @@ struct AccountSectionView: View {
             }
         case .loading, .scopeInsufficient, .unauthorized:
             EmptyView()
-        }
-    }
-}
-
-/// スレッドの行。クリックでブラウザで開いて既読にする。
-struct ThreadRow: View {
-    let thread: NotificationThread
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: symbol)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 16)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(thread.title)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    HStack(spacing: 4) {
-                        Text(NotificationGrouping.reasonText(thread.reason))
-                        Text("·")
-                        RelativeTimeText(date: thread.updatedAt)
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
-            .padding(.vertical, 3)
-        }
-        .buttonStyle(.plain)
-        .help("Open in browser and mark as read")
-    }
-
-    private var symbol: String {
-        switch thread.kind {
-        case .pullRequest: "arrow.triangle.pull"
-        case .issue: "smallcircle.filled.circle"
-        case .commit: "point.3.connected.trianglepath.dotted"
-        case .release: "tag"
-        case .discussion: "bubble.left.and.bubble.right"
-        case .checkSuite, .other: "bell"
-        }
-    }
-}
-
-/// 「5 min. ago」のような相対時刻。ポップオーバーを開いている間も 30 秒ごとに更新する。
-private struct RelativeTimeText: View {
-    let date: Date
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { _ in
-            // 文字列にしてから渡す（時刻が進むと文字列が変わり、描き直される）
-            Text(date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))
         }
     }
 }
@@ -267,7 +235,7 @@ struct FeedStatusView: View {
                 threads: [thread("4", "acme/web", .discussion, "team_mention", minutesAgo: 600)].compactMap { $0 }),
             erin.id: FeedState(phase: .unauthorized, threads: []),
         ],
-        open: { _, _ in }
+        actions: .none
     )
     .padding()
     .frame(width: 380)
@@ -287,7 +255,7 @@ struct FeedStatusView: View {
             alice.id: FeedState(phase: .loaded(updatedAt: Date()), threads: []),
             bob.id: .loading,
         ],
-        open: { _, _ in }
+        actions: .none
     )
     .padding()
     .frame(width: 380)

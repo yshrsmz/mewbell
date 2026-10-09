@@ -80,6 +80,7 @@ struct GitHubAPIClientTests {
                     .init(name: "per_page", value: "50"),
                 ])
         #expect(request.httpMethod == "GET")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == nil)
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
         #expect(request.value(forHTTPHeaderField: "Accept") == "application/vnd.github+json")
         #expect(request.value(forHTTPHeaderField: "X-GitHub-Api-Version") == "2022-11-28")

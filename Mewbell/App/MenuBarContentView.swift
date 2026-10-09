@@ -33,9 +33,13 @@ struct MenuBarContentView: View {
             }
 
             if case .accounts(let statuses) = store.state {
-                NotificationListView(statuses: statuses, feeds: notifications.feeds) { thread, account in
-                    notifications.open(thread, in: account)
-                }
+                NotificationListView(
+                    statuses: statuses, feeds: notifications.feeds,
+                    actions: ThreadListActions(
+                        open: { notifications.open($0, in: $1) },
+                        markRead: { notifications.markRead($0, in: $1) },
+                        markDone: { notifications.markDone($0, in: $1) },
+                        markAllRead: { notifications.markAllRead(in: $0) }))
             } else {
                 GuidanceView(state: store.state)
             }
