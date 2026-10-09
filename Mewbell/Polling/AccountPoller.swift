@@ -7,6 +7,9 @@ actor AccountPoller {
     typealias Sleep = @Sendable (Duration) async throws -> Void
 
     private static let logger = Logger(category: "Polling")
+    /// 条件なしの取得の間隔。`Last-Modified` は未読の `updated_at` の最新値なので、それより古いスレッドの増減は
+    /// `304` に隠れる。その分のずれを、この間隔で取り直して直す
+    static let unconditionalFetchInterval: TimeInterval = 300
 
     let accountID: AccountID
     private let endpoints: APIEndpoints
@@ -18,10 +21,14 @@ actor AccountPoller {
 
     /// 走っているループ。actor に入らずに起動・停止できるように、ロックで持つ
     private nonisolated let loop = Mutex<Task<Void, Never>?>(nil)
+    /// 次の取得を条件なしにする印（再読み込み）。actor に入らずに立てられるように、アトミックに持つ
+    private nonisolated let unconditionalRequested = Atomic(false)
 
     private var state = FeedState.loading
     /// 最後にすべてのページを取り終えた 200 の `Last-Modified`
     private var lastModified: String?
+    /// 最後に 200 で全ページを取り終えた時刻（`If-Modified-Since` を付けた取得でも 200 なら一覧はすべて取り直される）
+    private var lastFullFetch: Date?
     /// 今のトークンでスコープを確かめたか
     private var scopesVerified = false
     private var consecutiveFailures = 0
@@ -56,6 +63,11 @@ actor AccountPoller {
         }
     }
 
+    /// 次の取得を `If-Modified-Since` なしにする（再読み込みボタン）。取得を早めはしない。
+    nonisolated func requestUnconditionalFetch() {
+        unconditionalRequested.store(true, ordering: .relaxed)
+    }
+
     nonisolated func stop() {
         loop.withLock { loop in
             loop?.cancel()
@@ -84,8 +96,7 @@ actor AccountPoller {
             // トークンが無いのは、読み直しが一時的にトークンを捨てたときなど。失敗として待ってから確かめ直す
             let result: NotificationsFetchResult
             if let token = await tokens.currentToken(for: accountID) {
-                result = await client.fetchNotifications(
-                    endpoints: endpoints, token: token, ifModifiedSince: lastModified)
+                result = await fetch(with: token)
             } else {
                 Self.logger.error("No token for \(self.accountID)")
                 result = .failed(.noToken)
@@ -110,6 +121,38 @@ actor AccountPoller {
                 }
             }
         }
+    }
+
+    /// 1 回の取得をする。再読み込みの後と、最後に 200 で一覧を取り直してから間隔がたった後は `If-Modified-Since` を付けない。
+    private func fetch(with token: AccessToken) async -> NotificationsFetchResult {
+        // 印は送る前に下ろす（取得中に押された再読み込みを、その前に始めた取得で消さないため）
+        let requested = unconditionalRequested.exchange(false, ordering: .relaxed)
+        let isDue = requested || periodicUnconditionalFetchIsDue
+        if isDue, lastModified != nil {
+            Self.logger.info("Fetching \(self.accountID) without If-Modified-Since")
+        }
+        let ifModifiedSince = isDue ? nil : lastModified
+        let result = await client.fetchNotifications(
+            endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince)
+        // 止められた（再開で新しいループに替わった）後に返った結果では、状態を書き換えない
+        guard !Task.isCancelled else { return result }
+        if case .updated = result {
+            // 条件付きでも 200 なら全ページを取り直しているので、条件なしと同じく一覧は最新になる
+            lastFullFetch = now()
+        } else if requested {
+            // 取り終えられなかったので、次の取得もまた条件なしにする
+            unconditionalRequested.store(true, ordering: .relaxed)
+        }
+        return result
+    }
+
+    /// 最後に 200 で一覧を取り直してから間隔がたったか。時計が戻ったとき（差が負）も、たったものとして扱う
+    /// （戻った分だけ取り直しが遅れないように）。`lastModified` と `lastFullFetch` はどちらも 200 で入るので、
+    /// トークンの取り直しや停止で `lastModified` を消せば、時刻を消さなくても次は条件なしになる
+    private var periodicUnconditionalFetchIsDue: Bool {
+        guard let lastFullFetch else { return true }
+        let elapsed = now().timeIntervalSince(lastFullFetch)
+        return elapsed >= Self.unconditionalFetchInterval || elapsed < 0
     }
 
     /// 取得の結果を状態に反映し、次にすることを決める。`refreshedToken` は直前にトークンを取り直したか。

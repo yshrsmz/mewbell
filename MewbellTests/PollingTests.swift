@@ -33,15 +33,23 @@ final class PollerFixture: Sendable {
     let tokens = FakeTokenProvider([alice: "test-token-alice"])
     let sleeper = ManualSleeper()
     let updates = LockedValue<[FeedState]>([])
+    /// ポーラーが見る時刻。テストで進められる
+    let clock = LockedValue(now)
     let poller: AccountPoller
 
     init() throws {
         let updates = updates
-        let now = Self.now
+        let clock = clock
         poller = AccountPoller(
             accountID: Self.alice, endpoints: try #require(APIEndpoints(host: "github.com")),
-            client: GitHubAPIClient(transport: transport, now: { now }), tokens: tokens, sleep: sleeper.sleep,
-            now: { now }, onUpdate: { state in updates.withLock { $0.append(state) } })
+            client: GitHubAPIClient(transport: transport, now: { clock.value }), tokens: tokens,
+            sleep: sleeper.sleep, now: { clock.value }, onUpdate: { state in updates.withLock { $0.append(state) } })
+    }
+
+    /// 時刻を進めてから、待っているポーラーを次の取得に進める。
+    func advance(by seconds: TimeInterval) {
+        clock.withLock { $0 = $0.addingTimeInterval(seconds) }
+        sleeper.advance()
     }
 
     var last: FeedState? { updates.value.last }
@@ -63,6 +71,8 @@ final class PollerFixture: Sendable {
             body: FakeHTTPTransport.page(ids))
     }
 
+    static let notModified = HTTPResponse(statusCode: 304)
+
     var ifModifiedSince: [String?] {
         transport.requests.map { $0.value(forHTTPHeaderField: "If-Modified-Since") }
     }
@@ -80,7 +90,7 @@ struct AccountPollerTests {
     }
 
     @Test func sendsIfModifiedSinceFromTheSecondFetch() async {
-        fixture.respond([PollerFixture.ok(1...3), HTTPResponse(statusCode: 304)])
+        fixture.respond([PollerFixture.ok(1...3), PollerFixture.notModified])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         #expect(
@@ -109,7 +119,7 @@ struct AccountPollerTests {
         await fixture.sleeper.waitForSleeps(1)
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
-        fixture.respond([HTTPResponse(statusCode: 304)])
+        fixture.respond([PollerFixture.notModified])
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(3)
         #expect(fixture.ifModifiedSince == [nil, "LM-1", nil, "LM-1"])
