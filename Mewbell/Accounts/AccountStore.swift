@@ -17,6 +17,8 @@ final class AccountStore {
     @ObservationIgnored private var queuedReloadIsUserInitiated = false
     /// 終了処理を始めたか（以後は読み直さない）
     @ObservationIgnored private var isTerminating = false
+    /// 状態が変わったときに呼ぶ（ポーラーの起動・停止に使う）
+    @ObservationIgnored var onStateChange: ((DiscoveryState) -> Void)?
 
     var isReloading: Bool { reloadTask != nil }
 
@@ -24,10 +26,6 @@ final class AccountStore {
     init(discovery: (any AccountDiscovering)?, state: DiscoveryState = .checking) {
         self.discovery = discovery
         self.state = state
-    }
-
-    static func live() -> AccountStore {
-        AccountStore(discovery: AccountDiscovery.live(credentials: CredentialStore()))
     }
 
     /// 読み直す。読み直している間に呼ばれたときは、同じアカウントの gh を同時に走らせないよう、
@@ -80,5 +78,8 @@ final class AccountStore {
         // 変わっていなければ代入しない（ポップオーバーを開くたびに一覧を描き直さないため）
         guard self.state != state else { return }
         self.state = state
+        // 終了処理を始めた後は、走っていた読み直しの結果でポーラーを作り直さない
+        guard !isTerminating else { return }
+        onStateChange?(state)
     }
 }

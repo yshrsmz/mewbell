@@ -3,9 +3,16 @@
 macOS のメニューバーに常駐し、複数の GitHub アカウント（github.com / GHE Cloud データレジデンシー `*.ghe.com` / GHES 3.13+）の通知をまとめて受け取るアプリです。認証には [gh CLI](https://cli.github.com/) のログイン情報をそのまま使い、アプリ独自のログイン（PAT の入力や OAuth App）は持ちません。
 
 > [!NOTE]
-> 開発中です。現在は gh CLI にログイン済みのアカウントをメニューバーのポップオーバーに一覧できる状態です（マイルストーン M1）。通知の取得はまだできません。
+> 開発中です。現在は gh CLI にログイン済みのアカウントごとに未読の通知を取得し、メニューバーのポップオーバーにアカウント → リポジトリの順で一覧できる状態です（マイルストーン M2）。macOS の通知と既読化はまだできません。
 >
 > gh 2.40.0 以降が必要です（`gh auth token --user` を使うため）。
+
+## 通知の取得
+
+- 取得するのは未読の通知だけです（`GET /notifications` に `all=false`、`participating=false`）。自分が関わっていないウォッチ中のリポジトリの通知も含みます
+- アカウントごとに独立してポーリングします。間隔は API の `X-Poll-Interval` に従い、60 秒より短くはしません。変化が無ければ `304 Not Modified` で済ませます
+- 通知をクリックすると、その Pull request や Issue をブラウザで開きます（既読にはしません）
+- gh のトークンに `repo` も `notifications` も無いアカウントは止まり、`gh auth refresh --hostname <host> --scopes repo` を案内します
 
 ## 動作環境
 

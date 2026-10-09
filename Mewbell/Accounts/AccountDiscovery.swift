@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import os
 
 /// アカウントごとのトークンの状態。
@@ -41,7 +42,7 @@ protocol AccountDiscovering: Sendable {
     func closeCredentials() async
 }
 
-actor AccountDiscovery: AccountDiscovering {
+actor AccountDiscovery: AccountDiscovering, TokenProviding {
     private static let logger = Logger(category: "Accounts")
 
     private let locator: GhLocator
@@ -52,6 +53,11 @@ actor AccountDiscovery: AccountDiscovering {
     private let overridePath: @Sendable () -> String?
     /// `gh --version` で対応を確かめた gh の実体のパス
     private var verifiedGhPath: URL?
+    /// アカウントごとの走っている `gh auth token`（読み直しと取り直しで共有する）
+    private var inFlightTokenFetches: [AccountID: TokenFetch] = [:]
+    /// 最後の読み直しで `hosts.yml` にあったアカウント。ここに無いアカウントのトークンは保存しない
+    /// （取得の途中でアカウントが消えたときに、捨てたトークンを書き戻さないため）
+    private var knownAccountIDs: Set<AccountID> = []
 
     init(
         locator: GhLocator,
@@ -87,6 +93,7 @@ actor AccountDiscovery: AccountDiscovering {
         let state = await discover(userInitiated: userInitiated, update: update)
         // アカウントを使えない状態になったら、持っているトークンをすべて捨てる
         if !state.hasAccounts {
+            knownAccountIDs = []
             await credentials.removeAll()
         }
         await update(state)
@@ -94,6 +101,53 @@ actor AccountDiscovery: AccountDiscovering {
 
     func closeCredentials() async {
         await credentials.close()
+    }
+
+    func currentToken(for id: AccountID) async -> AccessToken? {
+        await credentials.token(for: id)
+    }
+
+    func discardToken(for id: AccountID) async {
+        await credentials.remove(id)
+    }
+
+    /// アカウントのトークンを捨てて gh から取り直し、取れたトークンを返す（API が 401 を返したときなど）。
+    /// 同じアカウントの取得が走っていれば、その結果を共有する。
+    func refreshToken(for id: AccountID) async -> AccessToken? {
+        await credentials.remove(id)
+        guard knownAccountIDs.contains(id) else { return nil }
+        guard let ghPath = verifiedGhPath else {
+            Self.logger.error("Cannot refresh the token of \(id) before gh is verified")
+            return nil
+        }
+        let client = GhClient(executable: ghPath, runner: runner, environment: environment)
+        return await fetchToken(for: id, using: client)
+    }
+
+    /// `gh auth token` を実行して、取れたトークンを保存する。同じアカウントの取得が走っていれば、その結果を待つ。
+    /// 取得を始めた呼び出し元がキャンセルされたら gh も止める（合流しただけの呼び出し元のキャンセルでは止めない）。
+    private func fetchToken(for id: AccountID, using client: GhClient) async -> AccessToken? {
+        let token: AccessToken?
+        if let running = inFlightTokenFetches[id] {
+            running.isShared.withLock { $0 = true }
+            token = await running.task.value
+        } else {
+            let fetch = TokenFetch(task: Task { await client.token(host: id.host, user: id.user) })
+            inFlightTokenFetches[id] = fetch
+            token = await withTaskCancellationHandler {
+                await fetch.task.value
+            } onCancel: {
+                // 合流した呼び出し元がいれば、その結果を奪わないよう gh は止めない
+                if !fetch.isShared.withLock({ $0 }) {
+                    fetch.task.cancel()
+                }
+            }
+            inFlightTokenFetches[id] = nil
+        }
+        // 合流した呼び出し元も保存する（返したトークンが `CredentialStore` にあることを、誰が先に戻っても保証するため）
+        guard let token, knownAccountIDs.contains(id) else { return nil }
+        await credentials.set(token, for: id)
+        return token
     }
 
     private func discover(
@@ -125,7 +179,8 @@ actor AccountDiscovery: AccountDiscovering {
         let accounts = hostsFile.map(Account.accounts(from:)) ?? []
         guard !accounts.isEmpty else { return .notLoggedIn }
 
-        let held = await credentials.retainOnly(Set(accounts.map(\.id)))
+        knownAccountIDs = Set(accounts.map(\.id))
+        let held = await credentials.retainOnly(knownAccountIDs)
         let pending = accounts.filter { !held.contains($0.id) }
         if !pending.isEmpty {
             await update(
@@ -140,24 +195,25 @@ actor AccountDiscovery: AccountDiscovering {
 
     /// アカウントごとの `gh auth token` を並べて実行し、取れたトークンを保存する。取れなかったアカウントを返す。
     private func fetchTokens(for accounts: [Account], using client: GhClient) async -> Set<AccountID> {
-        let fetched = await withTaskGroup(of: (AccountID, AccessToken?).self) { group in
+        await withTaskGroup(of: (AccountID, Bool).self) { group in
             for account in accounts {
-                group.addTask { (account.id, await client.token(host: account.host, user: account.user)) }
+                group.addTask { (account.id, await self.fetchToken(for: account.id, using: client) != nil) }
             }
-            var results: [(AccountID, AccessToken?)] = []
-            for await result in group {
-                results.append(result)
-            }
-            return results
-        }
-        var failed: Set<AccountID> = []
-        for (id, token) in fetched {
-            if let token {
-                await credentials.set(token, for: id)
-            } else {
+            var failed: Set<AccountID> = []
+            for await (id, fetched) in group where !fetched {
                 failed.insert(id)
             }
+            return failed
         }
-        return failed
+    }
+}
+
+/// 走っている `gh auth token` と、ほかの呼び出し元が合流したかどうか。
+private final class TokenFetch: Sendable {
+    let task: Task<AccessToken?, Never>
+    let isShared = Mutex(false)
+
+    init(task: Task<AccessToken?, Never>) {
+        self.task = task
     }
 }
