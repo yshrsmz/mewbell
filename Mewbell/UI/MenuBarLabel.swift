@@ -18,7 +18,7 @@ enum UnreadBadge {
 @MainActor
 enum MenuBarIcon {
     /// 猫と件数の間。
-    static let spacing: CGFloat = 3
+    private static let spacing: CGFloat = 3
 
     private static var font: NSFont { NSFont.menuBarFont(ofSize: 0) }
 
@@ -29,8 +29,8 @@ enum MenuBarIcon {
     /// 0 件（`badge == nil`）はテンプレート画像の猫。件数があれば、緑の猫の右に件数を描いた画像にする。
     /// 色は描くときの外観（メニューバーの外観）で決まる。
     static func image(badge: String?) -> NSImage {
-        let cat = catSymbol(symbolConfiguration)
         guard let badge else {
+            let cat = catSymbol(symbolConfiguration)
             cat.isTemplate = true
             return cat
         }
@@ -45,7 +45,7 @@ enum MenuBarIcon {
         let size = NSSize(
             width: ceil(green.size.width + spacing + textSize.width),
             height: ceil(max(green.size.height, textSize.height)))
-        let image = NSImage(size: size, flipped: false) { rect in
+        return NSImage(size: size, flipped: false) { rect in
             green.draw(
                 in: NSRect(
                     x: 0, y: (rect.height - green.size.height) / 2, width: green.size.width,
@@ -53,8 +53,6 @@ enum MenuBarIcon {
             text.draw(at: NSPoint(x: green.size.width + spacing, y: (rect.height - textSize.height) / 2))
             return true
         }
-        image.isTemplate = false
-        return image
     }
 
     private static func catSymbol(_ configuration: NSImage.SymbolConfiguration) -> NSImage {
