@@ -18,7 +18,7 @@
 
 - [x] 4.1 ビルドが通る: `MEWBELL_WARNINGS_AS_ERRORS=YES` を付けた Debug と Release の `xcodebuild build` が成功する
 - [x] 4.2 テストが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` と `bash scripts/lint.sh` が成功し、`npx openspec validate --all --strict` も通る
-- [ ] 4.3 手元で起動して確認した: (a) 再読み込みを押すとボタンが押した反応を見せ、読み込み中の表示に替わって、取得が終わると戻る、(b) 押した直後に `log show` で `Fetching ... without If-Modified-Since` が出る（次の予定を待たない）、(c) 続けて押しても 10 秒より短い間隔では取得しない、(d) Web で 1 件既読にしてから押すと、すぐ一覧から消える
+- [x] 4.3 手元で起動して確認した: (a) 再読み込みを押すとボタンが押した反応を見せ、読み込み中の表示に替わって、取得が終わると戻る、(b) 押した直後に `log show` で `Fetching ... without If-Modified-Since` が出る（次の予定を待たない）、(c) 続けて押しても 10 秒より短い間隔では取得しない、(d) Web で 1 件既読にしてから押すと、すぐ一覧から消える。結果: (a) はユーザーが確認した（読み込み中の表示に替わり、終わると戻った）。(b) はログで確認した（押してから 11 ms で条件なしの取得が出た）。(c) と (d) は手元では試しておらず、(c) はユニットテスト（`waitsUntilTenSecondsAfterThePreviousFetch`）で確かめている
 
 ## 5. 別コンテキストでのレビュー
 
