@@ -10,6 +10,12 @@ final class AccountStore {
 
     @ObservationIgnored private static let logger = Logger(category: "Accounts")
     @ObservationIgnored private let discovery: (any AccountDiscovering)?
+    /// 読み直しに渡す設定（無効なアカウントと gh の上書き）。nil なら既定値
+    @ObservationIgnored private let settings: AppSettings?
+    /// 設定ディレクトリを変えるたびに進める。前の設定ディレクトリで始めた読み直しの結果は捨てる
+    @ObservationIgnored private var configGeneration = 0
+    /// 次の読み直しの前に、すべてのトークンを捨てる（設定ディレクトリを変えたとき）
+    @ObservationIgnored private var discardsTokensBeforeNextReload = false
     private var reloadTask: Task<Void, Never>?
     /// 読み直している間に要求が来たか（終わった後にもう一度読み直す）
     @ObservationIgnored private var reloadRequested = false
@@ -23,8 +29,9 @@ final class AccountStore {
     var isReloading: Bool { reloadTask != nil }
 
     /// `discovery` が nil のときは読み込みを行わない（テストのホストや SwiftUI プレビュー用）。
-    init(discovery: (any AccountDiscovering)?, state: DiscoveryState = .checking) {
+    init(discovery: (any AccountDiscovering)?, settings: AppSettings? = nil, state: DiscoveryState = .checking) {
         self.discovery = discovery
+        self.settings = settings
         self.state = state
     }
 
@@ -46,9 +53,17 @@ final class AccountStore {
         if userInitiated && !state.hasAccounts {
             state = .checking
         }
+        let options = DiscoveryOptions(
+            overrides: settings?.ghOverrides ?? GhOverrides(), disabled: settings?.disabledAccounts ?? [])
+        let generation = configGeneration
+        let discardsTokens = discardsTokensBeforeNextReload
+        discardsTokensBeforeNextReload = false
         reloadTask = Task {
-            await discovery.reload(userInitiated: userInitiated) { state in
-                await self.apply(state)
+            if discardsTokens {
+                await discovery.discardAllTokens()
+            }
+            await discovery.reload(userInitiated: userInitiated, options: options) { state in
+                await self.apply(state, generation: generation)
             }
             reloadTask = nil
             if reloadRequested {
@@ -74,7 +89,56 @@ final class AccountStore {
         await discovery?.closeCredentials()
     }
 
-    private func apply(_ state: DiscoveryState) {
+    /// 設定でアカウントを有効・無効にしたとき。無効にしたら読み直しを待たずに一覧から外してトークンを捨て、
+    /// 有効にし直したら読み直してトークンを取る。
+    func setEnabled(_ enabled: Bool, for id: AccountID) {
+        guard enabled else {
+            disable(id)
+            return
+        }
+        reload()
+    }
+
+    /// gh のパスの上書きを変えたとき。新しい候補で gh を確かめ直す。
+    func ghExecutableChanged() {
+        reload(userInitiated: true)
+    }
+
+    /// gh の設定ディレクトリの上書きを変えたとき。別の `hosts.yml` では同じ `<host>/<user>` でも別のログインのことが
+    /// あるので、すべてのポーラーを止め、トークンをすべて捨ててから読み直す。走っている読み直しの結果は捨てる。
+    func ghConfigDirectoryChanged() {
+        guard discovery != nil, !isTerminating else { return }
+        configGeneration += 1
+        discardsTokensBeforeNextReload = true
+        if state != .checking {
+            state = .checking
+            onStateChange?(state)
+        }
+        reload(userInitiated: true)
+    }
+
+    private func disable(_ id: AccountID) {
+        guard let discovery, !isTerminating else { return }
+        if case .accounts(let statuses) = state {
+            apply(.accounts(statuses), generation: configGeneration)
+        }
+        Task { await discovery.disable(id) }
+    }
+
+    /// 今の設定で無効なアカウントを `.disabled` にする（無効にした直後に、前の設定で始めた読み直しが終わったときのため）。
+    private func applyingSettings(to state: DiscoveryState) -> DiscoveryState {
+        guard let settings, case .accounts(let statuses) = state else { return state }
+        let disabled = settings.disabledAccounts
+        return .accounts(
+            statuses.map { status in
+                disabled.contains(status.id) ? AccountStatus(account: status.account, tokenState: .disabled) : status
+            })
+    }
+
+    private func apply(_ state: DiscoveryState, generation: Int) {
+        // 前の設定ディレクトリで始めた読み直しの結果は捨てる
+        guard generation == configGeneration else { return }
+        let state = applyingSettings(to: state)
         // 変わっていなければ代入しない（ポップオーバーを開くたびに一覧を描き直さないため）
         guard self.state != state else { return }
         self.state = state

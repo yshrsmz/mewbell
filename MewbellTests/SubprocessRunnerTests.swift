@@ -111,6 +111,15 @@ struct GhEnvironmentTests {
                 "NO_COLOR": "1",
             ])
     }
+
+    @Test func setsTheOverriddenConfigDirectory() {
+        let base = ["GH_TOKEN": "test-token", "GH_HOST": "example.com", "HOME": "/Users/me", "GH_CONFIG_DIR": "/a"]
+        let environment = GhEnvironment.make(
+            from: base, configDirectory: URL(filePath: "/Users/me/.gh-work", directoryHint: .isDirectory))
+        #expect(environment["GH_CONFIG_DIR"] == "/Users/me/.gh-work")
+        #expect(GhEnvironment.removedKeys.allSatisfy { environment[$0] == nil })
+        #expect(GhEnvironment.make(from: base, configDirectory: nil) == GhEnvironment.make(from: base))
+    }
 }
 
 struct AccessTokenTests {

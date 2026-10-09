@@ -7,8 +7,12 @@ protocol ThreadNotifying: AnyObject {
     func feedChanged(for account: AccountID, from old: FeedState?, to new: FeedState)
     /// スレッドを既読か Done にした。
     func threadRemoved(_ threadID: String, for account: AccountID)
-    /// アカウントのポーリングを止めた（一覧から消えた）。
+    /// アカウントのポーリングを止めた（一覧から消えた、無効にした）。
     func accountRemoved(_ account: AccountID)
+    /// アカウントの取得を最初からやり直す（「参加しているスレッドだけにする」を切り替えた）。次の取得を基準にする。
+    func resetBaseline(_ account: AccountID)
+    /// アカウントの macOS の通知をオフにした。出ている通知を取り下げる。
+    func notificationsDisabled(_ account: AccountID)
     /// `accounts` 以外のアカウントの通知をすべて取り下げる。
     func retainOnly(_ accounts: Set<AccountID>)
 }
@@ -17,12 +21,21 @@ protocol ThreadNotifying: AnyObject {
 @MainActor
 final class SystemNotifier: ThreadNotifying {
     private let center: any UserNotificationCenter
+    /// アカウントの macOS の通知を出すか（設定）
+    private let notifies: @MainActor (AccountID) -> Bool
+    /// 通知に音を付けるか（設定）
+    private let playsSound: @MainActor () -> Bool
     private var tracker = NotificationTracker()
     /// 通知センターへの操作を、呼んだ順に 1 つずつ流す（同じスレッドの追加と取り下げが入れ替わらないように）
     private var queue: Task<Void, Never>?
 
-    init(center: any UserNotificationCenter) {
+    init(
+        center: any UserNotificationCenter, notifies: @escaping @MainActor (AccountID) -> Bool = { _ in true },
+        playsSound: @escaping @MainActor () -> Bool = { true }
+    ) {
         self.center = center
+        self.notifies = notifies
+        self.playsSound = playsSound
     }
 
     func feedChanged(for account: AccountID, from old: FeedState?, to new: FeedState) {
@@ -33,8 +46,11 @@ final class SystemNotifier: ThreadNotifying {
             removeStaleDelivered(for: account, keeping: Set(new.threads.map(\.id)))
         case .loaded:
             guard old?.threads != new.threads else { return }
+            // 通知がオフでも見たスレッドは覚え続ける（オンに戻したときに、オフの間の分をまとめて通知しないため）
             let changes = tracker.update(new.threads, for: account)
-            let contents = changes.post.map { ThreadNotificationContent(thread: $0, account: account) }
+            let sound = playsSound()
+            let posted = notifies(account) ? changes.post : []
+            let contents = posted.map { ThreadNotificationContent(thread: $0, account: account, playsSound: sound) }
             let retracted = changes.retract.map { ThreadNotificationContent.identifier(threadID: $0, account: account) }
             enqueue { center in
                 await center.removeDelivered(identifiers: retracted)
@@ -57,6 +73,16 @@ final class SystemNotifier: ThreadNotifying {
 
     func accountRemoved(_ account: AccountID) {
         tracker.reset(account)
+        removeStaleDelivered(for: account, keeping: [])
+    }
+
+    func resetBaseline(_ account: AccountID) {
+        // 出ている通知は、次の基準の取り直しで今の一覧に無いものだけを取り下げる
+        tracker.reset(account)
+    }
+
+    func notificationsDisabled(_ account: AccountID) {
+        // 見たスレッドは覚えたままにする（オンに戻したときに、オフの間に届いたものをまとめて通知しないため）
         removeStaleDelivered(for: account, keeping: [])
     }
 

@@ -35,3 +35,25 @@ struct ReadThrough {
         }
     }
 }
+
+/// 操作したスレッドを取得の結果から隠す処理。
+enum HiddenThreads {
+    /// 操作の後に始めた取得の結果なら隠すのをやめ、そうでなければ既読・Done・すべて既読にしたスレッドを取り除く。
+    /// 取得は 1 つのループで順に行うので、番号と開始時刻は結果の届く順に増える。
+    static func revealOrHide(
+        _ threads: [NotificationThread], hidden: inout [String: HiddenUntil], readThroughs: inout [Int: ReadThrough],
+        fetchNumber: Int, startedAt: Date
+    ) -> [NotificationThread] {
+        hidden = hidden.filter { _, until in
+            guard case .fetch(let first) = until else { return true }
+            return fetchNumber < first
+        }
+        readThroughs = readThroughs.filter { _, readThrough in
+            readThrough.applies(toFetch: fetchNumber, startedAt: startedAt)
+        }
+        let cutoff = readThroughs.values.map(\.cutoff).max()
+        return threads.filter { thread in
+            hidden[thread.id] == nil && (cutoff.map { thread.updatedAt > $0 } ?? true)
+        }
+    }
+}

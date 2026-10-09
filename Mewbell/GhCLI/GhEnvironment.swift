@@ -1,3 +1,5 @@
+import Foundation
+
 /// gh（とログインシェル）の子プロセスに渡す環境変数を作る。
 enum GhEnvironment {
     /// 残っていると、`gh auth token` が `--hostname` / `--user` で指定したアカウント以外のトークンを返す
@@ -17,7 +19,12 @@ enum GhEnvironment {
     ]
 
     /// `HOME` や `GH_CONFIG_DIR` などそれ以外の変数は残す（gh が設定ディレクトリや Keychain を見つけるのに要る）。
-    static func make(from base: [String: String]) -> [String: String] {
-        base.filter { !removedKeys.contains($0.key) }.merging(addedValues) { _, added in added }
+    /// `configDirectory` があれば（設定で上書きしたとき）、`GH_CONFIG_DIR` をそのパスにする。
+    static func make(from base: [String: String], configDirectory: URL? = nil) -> [String: String] {
+        var environment = base.filter { !removedKeys.contains($0.key) }.merging(addedValues) { _, added in added }
+        if let configDirectory {
+            environment["GH_CONFIG_DIR"] = configDirectory.path
+        }
+        return environment
     }
 }

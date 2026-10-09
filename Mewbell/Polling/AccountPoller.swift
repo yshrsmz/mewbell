@@ -15,6 +15,8 @@ actor AccountPoller {
     private let endpoints: APIEndpoints
     private let client: GitHubAPIClient
     private let tokens: any TokenProviding
+    /// `participating=true` で取得する（切り替えたらポーラーを作り直す）
+    private let participating: Bool
     private let sleep: Sleep
     private let now: @Sendable () -> Date
     private let onUpdate: @Sendable (FeedState) async -> Void
@@ -51,13 +53,15 @@ actor AccountPoller {
 
     init(
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,
-        sleep: @escaping Sleep = { try await Task.sleep(for: $0) }, now: @escaping @Sendable () -> Date = { Date() },
+        participating: Bool = false, sleep: @escaping Sleep = { try await Task.sleep(for: $0) },
+        now: @escaping @Sendable () -> Date = { Date() },
         onUpdate: @escaping @Sendable (FeedState) async -> Void
     ) {
         self.accountID = accountID
         self.endpoints = endpoints
         self.client = client
         self.tokens = tokens
+        self.participating = participating
         self.sleep = sleep
         self.now = now
         self.onUpdate = onUpdate
@@ -194,7 +198,7 @@ actor AccountPoller {
         let startedAt = now()
         fetchCount += 1
         var result = await client.fetchNotifications(
-            endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince)
+            endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince, participating: participating)
         // 止められた（再開で新しいループに替わった）後に返った結果では、状態を書き換えない
         guard !Task.isCancelled else { return result }
         if case .updated(let threads, let lastModified, let pollInterval, let scopes) = result {
@@ -380,21 +384,11 @@ extension AccountPoller {
         unconditionalRequested.store(true, ordering: .relaxed)
     }
 
-    /// 操作の後に始めた取得の結果なら隠すのをやめ、そうでなければ既読・Done・すべて既読にしたスレッドを取り除く。
-    /// 取得は 1 つのループで順に行うので、番号と開始時刻は結果の届く順に増える。
+    /// 取得の結果から、既読・Done・すべて既読にしたスレッドを取り除く（`HiddenThreads.revealOrHide`）。
     private func revealOrHide(_ threads: [NotificationThread], fetchNumber: Int, startedAt: Date)
         -> [NotificationThread]
     {
-        hidden = hidden.filter { _, until in
-            guard case .fetch(let first) = until else { return true }
-            return fetchNumber < first
-        }
-        readThroughs = readThroughs.filter { _, readThrough in
-            readThrough.applies(toFetch: fetchNumber, startedAt: startedAt)
-        }
-        let cutoff = readThroughs.values.map(\.cutoff).max()
-        return threads.filter { thread in
-            hidden[thread.id] == nil && (cutoff.map { thread.updatedAt > $0 } ?? true)
-        }
+        HiddenThreads.revealOrHide(
+            threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: fetchNumber, startedAt: startedAt)
     }
 }

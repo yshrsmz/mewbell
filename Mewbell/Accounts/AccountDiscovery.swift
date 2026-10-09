@@ -7,6 +7,8 @@ enum TokenState: Sendable, Equatable {
     case fetching
     case ready
     case unavailable
+    /// ユーザーが設定で無効にした（トークンを持たず、`gh auth token` も実行しない）
+    case disabled
 }
 
 struct AccountStatus: Sendable, Equatable, Identifiable {
@@ -31,15 +33,45 @@ enum DiscoveryState: Sendable, Equatable {
     var hasAccounts: Bool {
         if case .accounts = self { true } else { false }
     }
+
+    /// 無効なアカウントを `.disabled` に、それ以外を `tokenState` にした「アカウントあり」。
+    static func accounts(
+        _ accounts: [Account], disabled: Set<AccountID>, tokenState: (Account) -> TokenState
+    ) -> DiscoveryState {
+        .accounts(
+            accounts.map { account in
+                AccountStatus(
+                    account: account, tokenState: disabled.contains(account.id) ? .disabled : tokenState(account))
+            })
+    }
+}
+
+/// 読み直しの開始時点の設定（`AppSettings` から作る）。
+struct DiscoveryOptions: Sendable, Equatable {
+    var overrides = GhOverrides()
+    /// 無効にしたアカウント
+    var disabled: Set<AccountID> = []
 }
 
 /// gh の検出からトークンの取得までを行う。`AccountStore` から差し替えられるようにプロトコルにする。
 protocol AccountDiscovering: Sendable {
     /// 読み直し、途中と最後の状態を `update` に渡す。
     /// `userInitiated` はユーザーが再読み込みを押したとき true（見つかっていない gh をログインシェルで探し直す）。
-    func reload(userInitiated: Bool, update: @escaping @Sendable (DiscoveryState) async -> Void) async
+    func reload(
+        userInitiated: Bool, options: DiscoveryOptions, update: @escaping @Sendable (DiscoveryState) async -> Void
+    ) async
+    /// アカウントのトークンを捨て、次の読み直しまで受け取らない（設定で無効にしたとき）。
+    func disable(_ id: AccountID) async
+    /// すべてのトークンを捨てる（設定ディレクトリの上書きを変えたとき）。
+    func discardAllTokens() async
     /// トークンをすべて捨て、以後は受け取らない（アプリの終了時）。
     func closeCredentials() async
+}
+
+extension AccountDiscovering {
+    func reload(userInitiated: Bool, update: @escaping @Sendable (DiscoveryState) async -> Void) async {
+        await reload(userInitiated: userInitiated, options: DiscoveryOptions(), update: update)
+    }
 }
 
 actor AccountDiscovery: AccountDiscovering, TokenProviding {
@@ -47,12 +79,17 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
 
     private let locator: GhLocator
     private let runner: any ProcessRunning
+    /// 子プロセスに渡す環境（設定ディレクトリを上書きしたときは、読み直しごとに `GH_CONFIG_DIR` を足す）
     private let environment: [String: String]
+    /// 設定で上書きしないときの設定ディレクトリ
     private let configDirectory: URL
     private let credentials: CredentialStore
-    private let overridePath: @Sendable () -> String?
     /// `gh --version` で対応を確かめた gh の実体のパス
     private var verifiedGhPath: URL?
+    /// 最後の読み直しで使った子プロセスの環境（401 の後の取り直しでも同じ設定ディレクトリを使うため）
+    private var currentEnvironment: [String: String]
+    /// `verifiedGhPath` を確かめたときの設定ディレクトリ（変わったら `gh --version` からやり直す）
+    private var verifiedConfigDirectory: URL?
     /// アカウントごとの走っている `gh auth token`（読み直しと取り直しで共有する）
     private var inFlightTokenFetches: [AccountID: TokenFetch] = [:]
     /// 最後の読み直しで `hosts.yml` にあったアカウント。ここに無いアカウントのトークンは保存しない
@@ -64,15 +101,14 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         runner: any ProcessRunning,
         environment: [String: String],
         configDirectory: URL,
-        credentials: CredentialStore,
-        overridePath: @escaping @Sendable () -> String? = { nil }
+        credentials: CredentialStore
     ) {
         self.locator = locator
         self.runner = runner
         self.environment = environment
         self.configDirectory = configDirectory
         self.credentials = credentials
-        self.overridePath = overridePath
+        currentEnvironment = environment
     }
 
     /// 実際の gh と `hosts.yml` を使う。
@@ -89,8 +125,10 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
             credentials: credentials)
     }
 
-    func reload(userInitiated: Bool, update: @escaping @Sendable (DiscoveryState) async -> Void) async {
-        let state = await discover(userInitiated: userInitiated, update: update)
+    func reload(
+        userInitiated: Bool, options: DiscoveryOptions, update: @escaping @Sendable (DiscoveryState) async -> Void
+    ) async {
+        let state = await discover(userInitiated: userInitiated, options: options, update: update)
         // アカウントを使えない状態になったら、持っているトークンをすべて捨てる
         if !state.hasAccounts {
             knownAccountIDs = []
@@ -101,6 +139,17 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
 
     func closeCredentials() async {
         await credentials.close()
+    }
+
+    func disable(_ id: AccountID) async {
+        // 走っている `gh auth token` の結果も、`knownAccountIDs` に無いので保存されない
+        knownAccountIDs.remove(id)
+        await credentials.remove(id)
+    }
+
+    func discardAllTokens() async {
+        knownAccountIDs = []
+        await credentials.removeAll()
     }
 
     func currentToken(for id: AccountID) async -> AccessToken? {
@@ -120,7 +169,7 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
             Self.logger.error("Cannot refresh the token of \(id) before gh is verified")
             return nil
         }
-        let client = GhClient(executable: ghPath, runner: runner, environment: environment)
+        let client = GhClient(executable: ghPath, runner: runner, environment: currentEnvironment)
         return await fetchToken(for: id, using: client)
     }
 
@@ -151,11 +200,26 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     }
 
     private func discover(
-        userInitiated: Bool, update: @Sendable (DiscoveryState) async -> Void
+        userInitiated: Bool, options: DiscoveryOptions, update: @Sendable (DiscoveryState) async -> Void
     ) async -> DiscoveryState {
-        guard let ghPath = await locator.locate(overridePath: overridePath(), retryLoginShell: userInitiated) else {
+        guard
+            let ghPath = await locator.locate(
+                overridePath: options.overrides.executablePath, retryLoginShell: userInitiated)
+        else {
             verifiedGhPath = nil
             return .ghNotFound
+        }
+        let configDirectory: URL
+        switch resolveConfigDirectory(options.overrides.configDirectory) {
+        case .success(let url): configDirectory = url
+        case .failure(let unusable): return .hostsFileUnreadable(path: unusable.hostsFile.path)
+        }
+        let environment = GhEnvironment.make(
+            from: environment, configDirectory: options.overrides.configDirectory != nil ? configDirectory : nil)
+        currentEnvironment = environment
+        if verifiedConfigDirectory != configDirectory {
+            verifiedGhPath = nil
+            verifiedConfigDirectory = configDirectory
         }
         // gh は hosts.yml を解釈できないと --version でも失敗するので、バージョンより先に読む
         let hostsURL = configDirectory.appending(path: "hosts.yml")
@@ -179,18 +243,29 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         let accounts = hostsFile.map(Account.accounts(from:)) ?? []
         guard !accounts.isEmpty else { return .notLoggedIn }
 
-        knownAccountIDs = Set(accounts.map(\.id))
+        // 無効なアカウントは gh を呼ばず、持っているトークンも捨てる
+        let enabled = accounts.filter { !options.disabled.contains($0.id) }
+        knownAccountIDs = Set(enabled.map(\.id))
         let held = await credentials.retainOnly(knownAccountIDs)
-        let pending = accounts.filter { !held.contains($0.id) }
+        let pending = enabled.filter { !held.contains($0.id) }
         if !pending.isEmpty {
             await update(
-                .accounts(
-                    accounts.map { AccountStatus(account: $0, tokenState: held.contains($0.id) ? .ready : .fetching) }))
+                .accounts(accounts, disabled: options.disabled) { held.contains($0.id) ? .ready : .fetching })
         }
 
         let failed = await fetchTokens(for: pending, using: client)
-        return .accounts(
-            accounts.map { AccountStatus(account: $0, tokenState: failed.contains($0.id) ? .unavailable : .ready) })
+        return .accounts(accounts, disabled: options.disabled) { failed.contains($0.id) ? .unavailable : .ready }
+    }
+
+    /// 設定で上書きした設定ディレクトリが使えなければ、ほかの候補に移らない（別の gh のログインを黙って使わないため）。
+    private func resolveConfigDirectory(_ override: String?) -> Result<URL, UnusableConfigDirectory> {
+        guard let override else { return .success(configDirectory) }
+        let url = URL(filePath: override, directoryHint: .isDirectory)
+        guard ConfigDirectoryValidator.validate(override) else {
+            Self.logger.error("The overridden gh config directory is not usable")
+            return .failure(UnusableConfigDirectory(hostsFile: url.appending(path: "hosts.yml")))
+        }
+        return .success(url)
     }
 
     /// アカウントごとの `gh auth token` を並べて実行し、取れたトークンを保存する。取れなかったアカウントを返す。
@@ -216,4 +291,9 @@ private final class TokenFetch: Sendable {
     init(task: Task<AccessToken?, Never>) {
         self.task = task
     }
+}
+
+/// 設定で上書きした、使えない設定ディレクトリ。
+private struct UnusableConfigDirectory: Error {
+    let hostsFile: URL
 }

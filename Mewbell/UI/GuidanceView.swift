@@ -7,6 +7,10 @@ struct GuidanceView: View {
     private static let ghWebsite = URL(string: "https://cli.github.com/")
 
     let state: DiscoveryState
+    /// 設定で gh のパスを上書きしている（見つからないときは、インストールではなく設定を案内する）
+    var ghExecutableOverridden = false
+    /// 設定で gh の設定ディレクトリを上書きしている
+    var ghConfigDirectoryOverridden = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -17,6 +21,10 @@ struct GuidanceView: View {
                     Text("Checking gh…")
                         .foregroundStyle(.secondary)
                 }
+            case .ghNotFound where ghExecutableOverridden:
+                title("Cannot use the gh set in Settings", systemImage: "exclamationmark.triangle")
+                Text("The gh executable set in Settings is missing or not safe to run. Change or reset it in Settings.")
+                OpenSettingsButton(style: .text)
             case .ghNotFound:
                 title("gh is not installed", systemImage: "exclamationmark.triangle")
                 Text("Mewbell uses the accounts you have logged in to with the GitHub CLI. Install it, then log in.")
@@ -40,6 +48,10 @@ struct GuidanceView: View {
                 title("Cannot read gh's account list", systemImage: "exclamationmark.triangle")
                 Text("Could not read \(path). Check your gh login with:")
                 CommandRow(command: "gh auth status")
+                if ghConfigDirectoryOverridden {
+                    Text("This path comes from the gh config directory set in Settings.")
+                    OpenSettingsButton(style: .text)
+                }
             case .notLoggedIn:
                 title("Not logged in to gh", systemImage: "person.crop.circle.badge.questionmark")
                 Text("Log in with the GitHub CLI. For GitHub Enterprise, add --hostname <host>.")
@@ -80,4 +92,13 @@ struct GuidanceView: View {
 
 #Preview("Not logged in") {
     GuidanceView(state: .notLoggedIn).padding().frame(width: 320)
+}
+
+#Preview("Overridden gh not usable") {
+    GuidanceView(state: .ghNotFound, ghExecutableOverridden: true).padding().frame(width: 320)
+}
+
+#Preview("Overridden config directory not readable") {
+    GuidanceView(state: .hostsFileUnreadable(path: "/Users/me/.gh-old/hosts.yml"), ghConfigDirectoryOverridden: true)
+        .padding().frame(width: 320)
 }

@@ -55,13 +55,26 @@ final class BlockingDiscovery: AccountDiscovering {
     /// `finish()` された回数（読み込みを 1 回ずつ進める許可）と、許可を待っている読み込み
     private let gate = Mutex<(permits: Int, waiters: [CheckedContinuation<Void, Never>])>((0, []))
     private let recordedEvents = Mutex<[String]>([])
+    private let recordedOptions = Mutex<[DiscoveryOptions]>([])
+    private let resultState = Mutex<DiscoveryState>(.notLoggedIn)
+
+    /// 読み込みの最後に渡す状態
+    var result: DiscoveryState {
+        get { resultState.withLock { $0 } }
+        set { resultState.withLock { $0 = newValue } }
+    }
+    /// 読み込みに渡された設定
+    var options: [DiscoveryOptions] { recordedOptions.withLock { $0 } }
 
     var callCount: Int { calls.withLock { $0 } }
     /// 読み込みの終了と破棄が起きた順
     var events: [String] { recordedEvents.withLock { $0 } }
 
-    func reload(userInitiated: Bool, update: @escaping @Sendable (DiscoveryState) async -> Void) async {
+    func reload(
+        userInitiated: Bool, options: DiscoveryOptions, update: @escaping @Sendable (DiscoveryState) async -> Void
+    ) async {
         calls.withLock { $0 += 1 }
+        recordedOptions.withLock { $0.append(options) }
         recordedEvents.withLock { $0.append(userInitiated ? "reload(user)" : "reload") }
         await withCheckedContinuation { continuation in
             let resumeNow = gate.withLock { gate in
@@ -76,8 +89,16 @@ final class BlockingDiscovery: AccountDiscovering {
                 continuation.resume()
             }
         }
-        await update(.notLoggedIn)
+        await update(result)
         recordedEvents.withLock { $0.append("reloadFinished") }
+    }
+
+    func disable(_ id: AccountID) async {
+        recordedEvents.withLock { $0.append("disable \(id)") }
+    }
+
+    func discardAllTokens() async {
+        recordedEvents.withLock { $0.append("discardAll") }
     }
 
     func closeCredentials() async {

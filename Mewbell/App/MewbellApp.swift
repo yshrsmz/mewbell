@@ -13,10 +13,16 @@ struct MewbellApp: App {
         MenuBarExtra {
             MenuBarContentView(
                 store: appDelegate.accountStore, notifications: appDelegate.notificationStore,
-                permission: appDelegate.notificationPermission)
+                permission: appDelegate.notificationPermission, settings: appDelegate.settings)
         } label: {
             MenuBarLabel(notifications: appDelegate.notificationStore)
         }
         .menuBarExtraStyle(.window)
+
+        Settings {
+            SettingsView(
+                settings: appDelegate.settings, accounts: appDelegate.accountStore,
+                launchAtLogin: appDelegate.launchAtLogin)
+        }
     }
 }

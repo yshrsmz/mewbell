@@ -25,7 +25,7 @@ struct NotificationStoreActionTests {
     private func makeStore(notifier: (any ThreadNotifying)?) -> NotificationStore {
         let client = GitHubAPIClient(transport: transport)
         return NotificationStore(
-            makePoller: { [tokens, sleeper] account, endpoints, onUpdate in
+            makePoller: { [tokens, sleeper] account, endpoints, _, onUpdate in
                 AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
                     sleep: sleeper.sleep, onUpdate: onUpdate)
@@ -86,7 +86,8 @@ struct NotificationStoreActionTests {
     @Test func ignoresDoneWithoutAPoller() throws {
         let thread = try Self.thread()
         let store = NotificationStore(
-            makePoller: nil, feeds: [alice: FeedState(phase: .loaded(updatedAt: .now), threads: [thread])])
+            makePoller: nil, openURL: { _ in },
+            feeds: [alice: FeedState(phase: .loaded(updatedAt: .now), threads: [thread])])
         store.markDone(thread, in: alice)
         #expect(store.feeds[alice]?.threads.map(\.id) == ["1"])
     }
@@ -125,14 +126,15 @@ struct NotificationStoreActionTests {
     ])
     func cannotMarkAllReadUnlessLoadedWithThreads(_ phase: FeedPhase, _ hasThreads: Bool) throws {
         let feed = FeedState(phase: phase, threads: hasThreads ? [try Self.thread()] : [])
-        let store = NotificationStore(makePoller: nil, feeds: [alice: feed])
+        let store = NotificationStore(makePoller: nil, openURL: { _ in }, feeds: [alice: feed])
         #expect(store.feeds[alice]?.canMarkAllRead != true)
         #expect(store.feeds[bob]?.canMarkAllRead != true)
     }
 
     @Test func canMarkAllReadWhenLoadedWithThreads() throws {
         let store = NotificationStore(
-            makePoller: nil, feeds: [alice: FeedState(phase: .loaded(updatedAt: .now), threads: [try Self.thread()])])
+            makePoller: nil, openURL: { _ in },
+            feeds: [alice: FeedState(phase: .loaded(updatedAt: .now), threads: [try Self.thread()])])
         #expect(store.feeds[alice]?.canMarkAllRead == true)
     }
 }

@@ -207,11 +207,12 @@ struct NotificationStoreRefreshTests {
         tokens.set("test-token-alice", for: alice)
         tokens.set("test-token-bob", for: bob)
         let client = GitHubAPIClient(transport: transport)
-        let store = NotificationStore(makePoller: { [tokens, sleeper, clock] account, endpoints, onUpdate in
-            AccountPoller(
-                accountID: account.id, endpoints: endpoints, client: client, tokens: tokens, sleep: sleeper.sleep,
-                now: { clock.value }, onUpdate: onUpdate)
-        })
+        let store = NotificationStore(
+            makePoller: { [tokens, sleeper, clock] account, endpoints, _, onUpdate in
+                AccountPoller(
+                    accountID: account.id, endpoints: endpoints, client: client, tokens: tokens, sleep: sleeper.sleep,
+                    now: { clock.value }, onUpdate: onUpdate)
+            }, openURL: { _ in })
         store.sync(
             with: .accounts([
                 AccountStatus(account: Account(id: alice, isActive: true), tokenState: .ready),

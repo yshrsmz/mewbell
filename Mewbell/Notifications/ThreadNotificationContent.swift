@@ -10,6 +10,8 @@ struct ThreadNotificationContent: Sendable, Equatable {
     /// 通知センターでまとめる単位（`<host>/<user>`）
     let threadIdentifier: String
     let userInfo: [String: String]
+    /// 既定の通知音を付ける
+    let playsSound: Bool
 
     enum Key {
         static let host = "host"
@@ -19,7 +21,8 @@ struct ThreadNotificationContent: Sendable, Equatable {
         static let url = "url"
     }
 
-    init(thread: NotificationThread, account: AccountID) {
+    init(thread: NotificationThread, account: AccountID, playsSound: Bool = true) {
+        self.playsSound = playsSound
         identifier = Self.identifier(threadID: thread.id, account: account)
         title = thread.title
         subtitle = thread.repository.description
