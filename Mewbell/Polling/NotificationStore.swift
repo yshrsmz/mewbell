@@ -15,6 +15,8 @@ final class NotificationStore {
         -> AccountPoller
 
     private(set) var feeds: [AccountID: FeedState] = [:]
+    /// 再読み込みで早めた取得が終わっていない
+    private(set) var isRefreshing = false
 
     @ObservationIgnored private static let logger = Logger(category: "Polling")
     @ObservationIgnored private let makePoller: PollerFactory?
@@ -91,19 +93,22 @@ final class NotificationStore {
         }
     }
 
-    /// 「スコープ不足」「認証エラー」で止まっているアカウントのポーリングを再開する（再読み込みボタン）。
-    func resumeStopped() {
-        for (id, entry) in pollers where feeds[id]?.phase.isStopped == true {
+    /// 再読み込み: 全アカウントを次の予定を待たずに `If-Modified-Since` なしで取得し、「スコープ不足」「認証エラー」で
+    /// 止まっているアカウントは再開する。押したときのアカウントの取得がすべて終わるまで `isRefreshing` を立てる。
+    func refresh() {
+        guard !isRefreshing else { return }
+        for (id, _) in pollers where feeds[id]?.phase.isStopped == true {
             feeds[id] = .loading
-            entry.poller.resume()
         }
-    }
-
-    /// 止まっていないアカウントの次の取得を `If-Modified-Since` なしにする（再読み込みボタン）。取得は早めない。
-    /// 止まっているアカウントは、再開でトークンを取り直すので、どのみち条件なしになる。
-    func requestUnconditionalFetch() {
-        for (id, entry) in pollers where feeds[id]?.phase.isStopped != true {
-            entry.poller.requestUnconditionalFetch()
+        let targets = pollers.values.map(\.poller)
+        isRefreshing = true
+        Task {
+            await withTaskGroup(of: Void.self) { group in
+                for poller in targets {
+                    group.addTask { await poller.refreshNow() }
+                }
+            }
+            isRefreshing = false
         }
     }
 

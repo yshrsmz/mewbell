@@ -101,27 +101,4 @@ struct UnconditionalFetchTests {
         #expect(fixture.ifModifiedSince == [nil, nil])
         fixture.poller.stop()
     }
-
-    @MainActor
-    @Test func storePassesTheRequestToItsPollers() async throws {
-        let alice = PollerFixture.alice
-        let transport = FakeHTTPTransport { _ in PollerFixture.ok(1...1) }
-        let tokens = FakeTokenProvider([alice: "test-token-alice"])
-        let sleeper = ManualSleeper()
-        let client = GitHubAPIClient(transport: transport)
-        let store = NotificationStore { account, endpoints, onUpdate in
-            AccountPoller(
-                accountID: account.id, endpoints: endpoints, client: client, tokens: tokens, sleep: sleeper.sleep,
-                onUpdate: onUpdate)
-        }
-        store.sync(
-            with: .accounts([AccountStatus(account: Account(id: alice, isActive: true), tokenState: .ready)]))
-        await sleeper.waitForSleeps(1)
-        store.requestUnconditionalFetch()
-        sleeper.advance()
-        await sleeper.waitForSleeps(2)
-        let sent = transport.requests.map { $0.value(forHTTPHeaderField: "If-Modified-Since") }
-        #expect(sent == [nil, nil])
-        store.stopAll()
-    }
 }

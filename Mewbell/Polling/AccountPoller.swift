@@ -2,20 +2,6 @@ import Foundation
 import Synchronization
 import os
 
-/// 一覧のスレッドへの操作。
-enum ThreadAction: Sendable, Equatable {
-    /// 既読にする（`PATCH /notifications/threads/{id}`）
-    case read(threadID: String)
-    /// Done にする（`DELETE /notifications/threads/{id}`）
-    case done(threadID: String)
-
-    var threadID: String {
-        switch self {
-        case .read(let threadID), .done(let threadID): threadID
-        }
-    }
-}
-
 /// 1 アカウントの通知をポーリングする。ループは 1 つだけ走らせる。
 actor AccountPoller {
     typealias Sleep = @Sendable (Duration) async throws -> Void
@@ -54,14 +40,12 @@ actor AccountPoller {
     private var readThroughs: [Int: ReadThrough] = [:]
     /// 次のすべて既読に振る番号
     private var readThroughCount = 0
-
-    /// 既読にしたスレッドを、いつまで取得の結果から取り除くか。
-    private enum HiddenUntil {
-        /// 終わっていない既読化のリクエストがある（数を持つのは、同じスレッドを続けて既読にしたとき、先に終わった分で隠すのをやめないため）
-        case requestsInFlight(Int)
-        /// この番号以降の取得の 200 が出るまで（既読化の後に始めた取得なら、結果をそのまま信じてよい）
-        case fetch(Int)
-    }
+    /// 走っているループの番号（止めたループが後から終わったときに、新しいループの状態を消さないため）
+    private var runningLoop: Int?
+    private var loopCount = 0
+    /// 次の取得までの待ち。再読み込みで止めて起こす
+    private var sleepTask: Task<Void, any Error>?
+    private var refreshWaiters = RefreshWaiters()
 
     init(
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,
@@ -93,9 +77,26 @@ actor AccountPoller {
         }
     }
 
-    /// 次の取得を `If-Modified-Since` なしにする（再読み込みボタン）。取得を早めはしない。
+    /// 次の取得を `If-Modified-Since` なしにする。取得を早めはしない。
     nonisolated func requestUnconditionalFetch() {
         unconditionalRequested.store(true, ordering: .relaxed)
+    }
+
+    /// 再読み込み: 次の予定を待たずに（下限は `RefreshWaiters`）条件なしで取得し、終わるまで待つ。取得の途中なら、その後に
+    /// もう 1 回取得する。止まっていれば再開して最初の取得を待つ。レート制限中とループが無いときは、早めずにすぐ戻る。
+    func refreshNow() async {
+        requestUnconditionalFetch()
+        if case .retrying(_, rateLimited: true) = state.phase { return }
+        let stopped = state.phase.isStopped
+        guard stopped || runningLoop != nil else { return }
+        await withCheckedContinuation { continuation in
+            refreshWaiters.add(continuation)
+            if stopped {
+                resume()
+            } else {
+                sleepTask?.cancel()
+            }
+        }
     }
 
     nonisolated func stop() {
@@ -116,6 +117,10 @@ actor AccountPoller {
     }
 
     private func run(refreshingTokenFirst: Bool) async {
+        loopCount += 1
+        let thisLoop = loopCount
+        runningLoop = thisLoop
+        defer { endLoop(thisLoop) }
         var refreshedToken = false
         if refreshingTokenFirst {
             await publish(.loading)
@@ -123,6 +128,7 @@ actor AccountPoller {
             refreshedToken = true
         }
         while !Task.isCancelled {
+            refreshWaiters.startAttempt(at: now())
             // トークンが無いのは、読み直しが一時的にトークンを捨てたときなど。失敗として待ってから確かめ直す
             let result: NotificationsFetchResult
             if let token = await tokens.currentToken(for: accountID) {
@@ -144,13 +150,35 @@ actor AccountPoller {
                     refreshedToken = false
                 }
                 await publish(state)
-                do {
-                    try await sleep(delay)
-                } catch {
-                    return
-                }
+                refreshWaiters.finish()
+                guard await pause(for: delay) else { return }
             }
         }
+    }
+
+    /// 次の取得まで `delay` 待つ。再読み込みの待ちがあれば、前の取得の開始から下限までの残りだけ待つ。止められたら false。
+    private func pause(for delay: Duration) async -> Bool {
+        if refreshWaiters.isEmpty {
+            let task = Task { [sleep] in try await sleep(delay) }
+            sleepTask = task
+            _ = try? await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            sleepTask = nil
+            guard !Task.isCancelled else { return false }
+            if refreshWaiters.isEmpty { return true }
+        }
+        guard let remaining = refreshWaiters.remainingWait(now: now()) else { return true }
+        return (try? await sleep(remaining)) != nil && !Task.isCancelled
+    }
+
+    /// ループが終わったら、再読み込みの待ちをすべて起こす。止めたループが新しいループの後に終わったときは何もしない。
+    private func endLoop(_ thisLoop: Int) {
+        guard runningLoop == thisLoop else { return }
+        runningLoop = nil
+        refreshWaiters.finish(all: true)
     }
 
     /// 1 回の取得をする。再読み込みの後と、最後に 200 で一覧を取り直してから間隔がたった後は `If-Modified-Since` を付けない。
@@ -367,34 +395,6 @@ extension AccountPoller {
         let cutoff = readThroughs.values.map(\.cutoff).max()
         return threads.filter { thread in
             hidden[thread.id] == nil && (cutoff.map { thread.updatedAt > $0 } ?? true)
-        }
-    }
-}
-
-/// すべて既読にした範囲（`updated_at` が `cutoff` 以前のスレッド）を、どの取得の結果から取り除くか。
-private struct ReadThrough {
-    let cutoff: Date
-    var until: Until
-
-    enum Until {
-        /// リクエストの結果が出るまで、どの取得の結果からも取り除く
-        case requestInFlight
-        /// 成功した: 結果が出る前に始めた取得と、結果から `deadline` までに始めた取得の結果から取り除く
-        /// （`202` で GitHub が既読にし終えるまでの分。時計が `completedAt` より前に戻ったら、もう取り除かない）
-        case succeeded(fetchesBefore: Int, completedAt: Date, deadline: Date)
-        /// 失敗した: この番号より前に始めた取得の結果からだけ取り除く
-        case failed(fetchesBefore: Int)
-    }
-
-    /// この番号・開始時刻の取得の結果から取り除くか。取得は順に行うので、一度 false になったらその後も false。
-    func applies(toFetch number: Int, startedAt: Date) -> Bool {
-        switch until {
-        case .requestInFlight:
-            true
-        case .succeeded(let fetchesBefore, let completedAt, let deadline):
-            number < fetchesBefore || (completedAt <= startedAt && startedAt < deadline)
-        case .failed(let fetchesBefore):
-            number < fetchesBefore
         }
     }
 }

@@ -12,18 +12,10 @@ struct MenuBarContentView: View {
                 Text("Mewbell")
                     .font(.headline)
                 Spacer()
-                Button {
+                ReloadButton(isLoading: store.isReloading || notifications.isRefreshing) {
                     store.reload(userInitiated: true)
-                    // 止まっているアカウントに印を立てないよう、再開より先に呼ぶ
-                    notifications.requestUnconditionalFetch()
-                    notifications.resumeStopped()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
+                    notifications.refresh()
                 }
-                .buttonStyle(.borderless)
-                .disabled(store.isReloading)
-                .help("Reload gh accounts, resume stopped accounts, and fully refetch at the next poll")
-                .accessibilityLabel("Reload")
             }
 
             Divider()
