@@ -85,7 +85,7 @@ final class NotificationStore {
             feeds[id] = .loading
             Self.logger.info("Started polling \(id)")
             for threadID in pendingReads.removeValue(forKey: id) ?? [] {
-                Task { await poller.markRead(threadID: threadID) }
+                Task { await poller.perform(.read(threadID: threadID)) }
             }
             poller.start()
         }
@@ -113,22 +113,46 @@ final class NotificationStore {
             let url = ThreadWebURL.make(for: thread, endpoints: endpoints)
         else { return }
         openURL(url)
-        markRead(thread.id, in: account)
+        perform(.read(threadID: thread.id), in: account)
     }
 
     /// macOS の通知のクリックから、検証済みの URL を開いて既読にする。
     func openFromNotification(_ request: ThreadOpenRequest) {
         openURL(request.url)
-        markRead(request.threadID, in: request.account)
+        perform(.read(threadID: request.threadID), in: request.account)
     }
 
-    /// 一覧からすぐに外し、ポーラーに既読化を頼む。ポーラーがまだ無ければ、作るときまで取っておく。
-    private func markRead(_ threadID: String, in account: AccountID) {
+    /// 一覧のスレッドを、開かずに既読にする。
+    func markRead(_ thread: NotificationThread, in account: AccountID) {
+        perform(.read(threadID: thread.id), in: account)
+    }
+
+    /// 一覧のスレッドを Done にする。
+    func markDone(_ thread: NotificationThread, in account: AccountID) {
+        perform(.done(threadID: thread.id), in: account)
+    }
+
+    /// アカウントの「すべて既読」を押せるか（取得できていて、一覧が 1 件以上あるとき）。
+    func canMarkAllRead(_ account: AccountID) -> Bool {
+        feeds[account]?.canMarkAllRead ?? false
+    }
+
+    /// アカウントの一覧をすべて既読にする。一覧から外すのはポーラーで、その結果は `apply` で届く
+    /// （止まっている・トークンが無いときに外さない判断を、ポーラーの 1 か所でするため）。
+    func markAllRead(in account: AccountID) {
+        guard canMarkAllRead(account), let poller = pollers[account]?.poller else { return }
+        Task { await poller.markAllRead() }
+    }
+
+    /// 一覧からすぐに外し、ポーラーに操作を頼む。既読はポーラーがまだ無ければ、作るときまで取っておく
+    /// （起動の直後に通知をクリックされたとき）。
+    private func perform(_ action: ThreadAction, in account: AccountID) {
+        let threadID = action.threadID
         feeds[account]?.threads.removeAll { $0.id == threadID }
-        notifier?.threadRead(threadID, for: account)
+        notifier?.threadRemoved(threadID, for: account)
         if let poller = pollers[account]?.poller {
-            Task { await poller.markRead(threadID: threadID) }
-        } else {
+            Task { await poller.perform(action) }
+        } else if case .read = action {
             pendingReads[account, default: []].insert(threadID)
         }
     }

@@ -46,10 +46,10 @@ enum NotificationsFetchResult: Sendable, Equatable {
     case failed(FetchFailure)
 }
 
-/// スレッドの既読化の結果。
-enum MarkReadResult: Sendable, Equatable {
-    /// `205`、または `304`（既読だった）と `404`（スレッドがもう無い）
-    case read
+/// スレッドの既読化・Done・すべて既読の結果。
+enum ThreadActionResult: Sendable, Equatable {
+    /// 操作ごとの成功の状態コード（既読は `205` / `304` / `404`、Done は `204` / `404`、すべて既読は `202` / `205` / `304`）
+    case succeeded
     /// 401
     case unauthorized
     /// レート制限の 403 / 429
@@ -126,23 +126,50 @@ struct GitHubAPIClient: Sendable {
     }
 
     /// スレッドを既読にする（`PATCH /notifications/threads/{id}`）。`threadID` が数字でなければ送らない。
-    func markThreadRead(endpoints: APIEndpoints, token: AccessToken, threadID: String) async -> MarkReadResult {
+    func markThreadRead(endpoints: APIEndpoints, token: AccessToken, threadID: String) async -> ThreadActionResult {
+        await sendThreadAction(
+            method: "PATCH", endpoints: endpoints, token: token, threadID: threadID, success: [205, 304, 404])
+    }
+
+    /// スレッドを Done にする（`DELETE /notifications/threads/{id}`）。`threadID` が数字でなければ送らない。
+    func markThreadDone(endpoints: APIEndpoints, token: AccessToken, threadID: String) async -> ThreadActionResult {
+        await sendThreadAction(
+            method: "DELETE", endpoints: endpoints, token: token, threadID: threadID, success: [204, 404])
+    }
+
+    /// アカウントの通知のうち、`lastReadAt` 以前に更新されたものをすべて既読にする（`PUT /notifications`）。
+    /// `202` は GitHub が後から非同期に既読にするという意味で、成功として扱う。
+    func markAllRead(endpoints: APIEndpoints, token: AccessToken, lastReadAt: Date) async -> ThreadActionResult {
+        let body = MarkAllReadBody(lastReadAt: lastReadAt.formatted(.iso8601), read: true)
+        guard let data = try? JSONEncoder().encode(body) else { return .failed(.malformedBody) }
+        let url = endpoints.apiURL(path: "notifications")
+        switch await send(url, method: "PUT", endpoints: endpoints, token: token, ifModifiedSince: nil, body: data) {
+        case .success(let response): return Self.classifyAction(response, success: [202, 205, 304])
+        case .failure(let failure): return .failed(failure)
+        }
+    }
+
+    private func sendThreadAction(
+        method: String, endpoints: APIEndpoints, token: AccessToken, threadID: String, success: Set<Int>
+    ) async -> ThreadActionResult {
         guard ThreadID.isValid(threadID) else {
-            Self.logger.error("Refused to mark a thread with an invalid ID as read")
+            Self.logger.error("Refused to send \(method) for a thread with an invalid ID")
             return .failed(.rejectedURL)
         }
         let url = endpoints.apiURL(path: "notifications/threads/\(threadID)")
-        let response: HTTPResponse
-        switch await send(url, method: "PATCH", endpoints: endpoints, token: token, ifModifiedSince: nil) {
-        case .success(let value): response = value
+        switch await send(url, method: method, endpoints: endpoints, token: token, ifModifiedSince: nil) {
+        case .success(let response): return Self.classifyAction(response, success: success)
         case .failure(let failure): return .failed(failure)
         }
+    }
+
+    /// 操作のレスポンスを分類する。`classifyFailure` と同じく、`Retry-After` は秒数として読めるときだけレート制限とみなす。
+    private static func classifyAction(_ response: HTTPResponse, success: Set<Int>) -> ThreadActionResult {
         switch response.statusCode {
-        case 205, 304, 404:
-            return .read
+        case let status where success.contains(status):
+            return .succeeded
         case 401:
             return .unauthorized
-        // `classifyFailure` と同じく、`Retry-After` は秒数として読めるときだけレート制限とみなす
         case 403
         where response.header("X-RateLimit-Remaining") == "0"
             || response.header("Retry-After").flatMap({ Int($0) }) != nil, 429:
@@ -153,8 +180,10 @@ struct GitHubAPIClient: Sendable {
     }
 
     /// リクエストを組み立てて送る。送り先がアカウントの API ベースの下でなければ送らない。
+    /// `body` があるときだけ JSON のボディとして付ける（ボディはログに出さない）。
     private func send(
-        _ url: URL, method: String, endpoints: APIEndpoints, token: AccessToken, ifModifiedSince: String?
+        _ url: URL, method: String, endpoints: APIEndpoints, token: AccessToken, ifModifiedSince: String?,
+        body: Data? = nil
     ) async -> Result<HTTPResponse, FetchFailure> {
         guard endpoints.isAllowedRequestURL(url) else {
             Self.logger.error("Refused to send a request outside the API base of \(endpoints.host)")
@@ -168,6 +197,10 @@ struct GitHubAPIClient: Sendable {
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         if let ifModifiedSince {
             request.setValue(ifModifiedSince, forHTTPHeaderField: "If-Modified-Since")
+        }
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
         let path = url.path()
         do {
@@ -214,5 +247,16 @@ struct GitHubAPIClient: Sendable {
 
     private static func pollInterval(_ response: HTTPResponse) -> Int? {
         response.header("X-Poll-Interval").flatMap { Int($0) }
+    }
+}
+
+/// `PUT /notifications` のボディ。トークンを含めない。
+private struct MarkAllReadBody: Encodable {
+    let lastReadAt: String
+    let read: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case lastReadAt = "last_read_at"
+        case read
     }
 }

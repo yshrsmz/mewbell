@@ -209,9 +209,31 @@ struct SystemNotifierTests {
         notifier.feedChanged(for: alice, from: .loading, to: feed([try thread("1"), try thread("2")]))
         await notifier.waitForPendingWork()
         center.delivered.value = ["github.com/alice/1", "github.com/alice/2"]
-        notifier.threadRead("1", for: alice)
+        notifier.threadRemoved("1", for: alice)
         await notifier.waitForPendingWork()
         #expect(center.delivered.value == ["github.com/alice/2"])
+    }
+
+    @Test func doesNotRepostARemovedThreadThatComesBackUnchanged() async throws {
+        let first = feed([try thread("1"), try thread("2")])
+        notifier.feedChanged(for: alice, from: .loading, to: first)
+        notifier.threadRemoved("2", for: alice)
+        let afterRemoval = feed([try thread("1")])
+        // 次の取得で、同じ updated_at のまま一覧に戻っても出し直さない
+        notifier.feedChanged(for: alice, from: afterRemoval, to: first)
+        await notifier.waitForPendingWork()
+        #expect(center.added.value.isEmpty)
+    }
+
+    @Test func retractsOnlyTheAccountMarkedAllRead() async throws {
+        let aliceThreads = feed([try thread("1"), try thread("2")])
+        notifier.feedChanged(for: alice, from: .loading, to: aliceThreads)
+        notifier.feedChanged(for: bob, from: .loading, to: feed([try thread("3")]))
+        await notifier.waitForPendingWork()
+        center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/bob/3"]
+        notifier.feedChanged(for: alice, from: aliceThreads, to: feed([]))
+        await notifier.waitForPendingWork()
+        #expect(center.delivered.value == ["github.com/bob/3"])
     }
 
     @Test func doesNothingWhileRetrying() async throws {

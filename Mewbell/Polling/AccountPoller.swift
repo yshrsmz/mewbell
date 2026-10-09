@@ -2,6 +2,20 @@ import Foundation
 import Synchronization
 import os
 
+/// 一覧のスレッドへの操作。
+enum ThreadAction: Sendable, Equatable {
+    /// 既読にする（`PATCH /notifications/threads/{id}`）
+    case read(threadID: String)
+    /// Done にする（`DELETE /notifications/threads/{id}`）
+    case done(threadID: String)
+
+    var threadID: String {
+        switch self {
+        case .read(let threadID), .done(let threadID): threadID
+        }
+    }
+}
+
 /// 1 アカウントの通知をポーリングする。ループは 1 つだけ走らせる。
 actor AccountPoller {
     typealias Sleep = @Sendable (Duration) async throws -> Void
@@ -34,8 +48,12 @@ actor AccountPoller {
     private var consecutiveFailures = 0
     /// 始めた取得の数（次に始める取得の番号）
     private var fetchCount = 0
-    /// 既読にしたので、取得の結果から取り除いているスレッド
+    /// 既読・Done にしたので、取得の結果から取り除いているスレッド
     private var hidden: [String: HiddenUntil] = [:]
+    /// すべて既読にしたので、取得の結果から `updated_at` で取り除いている範囲
+    private var readThrough: ReadThrough?
+    /// 次のすべて既読に振る番号
+    private var readThroughCount = 0
 
     /// 既読にしたスレッドを、いつまで取得の結果から取り除くか。
     private enum HiddenUntil {
@@ -77,33 +95,6 @@ actor AccountPoller {
 
     /// 次の取得を `If-Modified-Since` なしにする（再読み込みボタン）。取得を早めはしない。
     nonisolated func requestUnconditionalFetch() {
-        unconditionalRequested.store(true, ordering: .relaxed)
-    }
-
-    /// スレッドを既読にする。一覧からすぐに外し、既読化のリクエストを送り、次の取得を条件なしにする。
-    /// 止まっているときとトークンが無いときは送らない（次の条件なしの取得で、未読のままなら一覧に戻る）。
-    func markRead(threadID: String) async {
-        if case .requestsInFlight(let count) = hidden[threadID] {
-            hidden[threadID] = .requestsInFlight(count + 1)
-        } else {
-            hidden[threadID] = .requestsInFlight(1)
-        }
-        if state.threads.contains(where: { $0.id == threadID }) {
-            state.threads.removeAll { $0.id == threadID }
-            await publish(state)
-        }
-        if !state.phase.isStopped, let token = await tokens.currentToken(for: accountID) {
-            let result = await client.markThreadRead(endpoints: endpoints, token: token, threadID: threadID)
-            if result != .read {
-                Self.logger.error("Could not mark a thread of \(self.accountID) as read: \(String(describing: result))")
-            }
-        }
-        // 既読化の結果が 304 に隠れないように、また失敗したスレッドが一覧に戻るように、次は条件なしで取り直す
-        if case .requestsInFlight(let count) = hidden[threadID], count > 1 {
-            hidden[threadID] = .requestsInFlight(count - 1)
-        } else {
-            hidden[threadID] = .fetch(fetchCount)
-        }
         unconditionalRequested.store(true, ordering: .relaxed)
     }
 
@@ -172,12 +163,13 @@ actor AccountPoller {
         }
         let ifModifiedSince = isDue ? nil : lastModified
         let number = fetchCount
+        let startedAt = now()
         fetchCount += 1
         var result = await client.fetchNotifications(
             endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince)
         if case .updated(let threads, let lastModified, let pollInterval, let scopes) = result {
             result = .updated(
-                threads: revealOrHide(threads, fetchNumber: number), lastModified: lastModified,
+                threads: revealOrHide(threads, fetchNumber: number, startedAt: startedAt), lastModified: lastModified,
                 pollInterval: pollInterval, scopes: scopes)
         }
         // 止められた（再開で新しいループに替わった）後に返った結果では、状態を書き換えない
@@ -190,15 +182,6 @@ actor AccountPoller {
             unconditionalRequested.store(true, ordering: .relaxed)
         }
         return result
-    }
-
-    /// 既読化の後に始めた取得の結果なら隠すのをやめ、そうでなければ既読にしたスレッドを取り除く。
-    private func revealOrHide(_ threads: [NotificationThread], fetchNumber: Int) -> [NotificationThread] {
-        hidden = hidden.filter { _, until in
-            guard case .fetch(let first) = until else { return true }
-            return fetchNumber < first
-        }
-        return threads.filter { hidden[$0.id] == nil }
     }
 
     /// 最後に 200 で一覧を取り直してから間隔がたったか。時計が戻ったとき（差が負）も、たったものとして扱う
@@ -281,6 +264,7 @@ actor AccountPoller {
     /// 止まった状態にする。スレッドは捨てる。
     private func stop(as phase: FeedPhase) async {
         state = FeedState(phase: phase, threads: [])
+        readThrough = nil
         lastModified = nil
         scopesVerified = false
         consecutiveFailures = 0
@@ -290,5 +274,114 @@ actor AccountPoller {
     private func publish(_ state: FeedState) async {
         self.state = state
         await onUpdate(state)
+    }
+}
+
+// 一覧のスレッドへの操作と、操作したスレッドを取得の結果から隠す処理
+extension AccountPoller {
+    /// スレッドを既読か Done にする。一覧からすぐに外し、リクエストを送り、次の取得を条件なしにする。
+    /// 止まっているときとトークンが無いときは送らない（次の条件なしの取得で、未読のままなら一覧に戻る）。
+    func perform(_ action: ThreadAction) async {
+        let threadID = action.threadID
+        if case .requestsInFlight(let count) = hidden[threadID] {
+            hidden[threadID] = .requestsInFlight(count + 1)
+        } else {
+            hidden[threadID] = .requestsInFlight(1)
+        }
+        if state.threads.contains(where: { $0.id == threadID }) {
+            state.threads.removeAll { $0.id == threadID }
+            await publish(state)
+        }
+        if !state.phase.isStopped, let token = await tokens.currentToken(for: accountID) {
+            let result =
+                switch action {
+                case .read:
+                    await client.markThreadRead(endpoints: endpoints, token: token, threadID: threadID)
+                case .done:
+                    await client.markThreadDone(endpoints: endpoints, token: token, threadID: threadID)
+                }
+            if result != .succeeded {
+                Self.logger.error(
+                    "Could not apply \(String(describing: action)) to a thread of \(self.accountID): \(String(describing: result))"
+                )
+            }
+        }
+        // 結果が 304 に隠れないように、また失敗したスレッドが一覧に戻るように、次は条件なしで取り直す
+        if case .requestsInFlight(let count) = hidden[threadID], count > 1 {
+            hidden[threadID] = .requestsInFlight(count - 1)
+        } else {
+            hidden[threadID] = .fetch(fetchCount)
+        }
+        unconditionalRequested.store(true, ordering: .relaxed)
+    }
+
+    /// 一覧にあるスレッドの `updated_at` の最大値までを、すべて既読にする。一覧からすぐに外し、`PUT /notifications` を送り、
+    /// 次の取得を条件なしにする。止まっているとき、トークンが無いとき、一覧が空のときは何もしない。
+    func markAllRead() async {
+        guard !state.phase.isStopped, let token = await tokens.currentToken(for: accountID),
+            !state.phase.isStopped, let newest = state.threads.map(\.updatedAt).max()
+        else { return }
+        // 前のすべて既読がまだ終わっていなければ、その範囲も含めて隠し続ける
+        let cutoff = max(newest, readThrough?.cutoff ?? newest)
+        let serial = readThroughCount
+        readThroughCount += 1
+        readThrough = ReadThrough(serial: serial, cutoff: cutoff, until: .requestInFlight)
+        state.threads.removeAll { $0.updatedAt <= cutoff }
+        await publish(state)
+
+        let result = await client.markAllRead(endpoints: endpoints, token: token, lastReadAt: cutoff)
+        if result != .succeeded {
+            Self.logger.error("Could not mark all threads of \(self.accountID) as read: \(String(describing: result))")
+        }
+        if readThrough?.serial == serial {
+            readThrough?.until =
+                result == .succeeded
+                ? .fetchesStartedBefore(now().addingTimeInterval(Self.unconditionalFetchInterval))
+                : .fetchesBefore(fetchCount)
+        }
+        unconditionalRequested.store(true, ordering: .relaxed)
+    }
+
+    /// 操作の後に始めた取得の結果なら隠すのをやめ、そうでなければ既読・Done・すべて既読にしたスレッドを取り除く。
+    /// 取得は 1 つのループで順に行うので、番号と開始時刻は結果の届く順に増える。
+    private func revealOrHide(_ threads: [NotificationThread], fetchNumber: Int, startedAt: Date)
+        -> [NotificationThread]
+    {
+        hidden = hidden.filter { _, until in
+            guard case .fetch(let first) = until else { return true }
+            return fetchNumber < first
+        }
+        if let readThrough {
+            let applies =
+                switch readThrough.until {
+                case .requestInFlight: true
+                case .fetchesStartedBefore(let deadline): startedAt < deadline
+                case .fetchesBefore(let number): fetchNumber < number
+                }
+            if !applies {
+                self.readThrough = nil
+            }
+        }
+        let cutoff = readThrough?.cutoff
+        return threads.filter { thread in
+            hidden[thread.id] == nil && !(cutoff.map { thread.updatedAt <= $0 } ?? false)
+        }
+    }
+}
+
+/// すべて既読にした範囲（`updated_at` が `cutoff` 以前のスレッド）を、どの取得の結果から取り除くか。
+private struct ReadThrough {
+    /// どのすべて既読のものか（先に始めたすべて既読の結果で、後のものの期限を書き換えないため）
+    let serial: Int
+    let cutoff: Date
+    var until: Until
+
+    enum Until {
+        /// リクエストの結果が出るまで、どの取得の結果からも取り除く
+        case requestInFlight
+        /// 成功した: この時刻より前に始めた取得の結果から取り除く（`202` で GitHub が既読にし終えるまでの分）
+        case fetchesStartedBefore(Date)
+        /// 失敗した: この番号より前に始めた取得の結果からだけ取り除く
+        case fetchesBefore(Int)
     }
 }
