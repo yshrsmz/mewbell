@@ -31,3 +31,13 @@ enum PollSchedule {
         return .seconds(min(minimumInterval << exponent, maximumBackoff))
     }
 }
+
+/// 1 回の取得の後にすること。
+enum PollStep {
+    /// 待ってから次の取得をする
+    case wait(Duration)
+    /// トークンを取り直したので、すぐに取得をやり直す
+    case retryNow
+    /// 止まった
+    case stop
+}

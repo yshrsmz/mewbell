@@ -114,9 +114,14 @@ final class PollerFixture: Sendable {
             sleep: sleeper.sleep, now: { clock.value }, onUpdate: { state in updates.withLock { $0.append(state) } })
     }
 
+    /// 時刻だけを進める（待っているポーラーは起こさない）。
+    func moveClock(by seconds: TimeInterval) {
+        clock.withLock { $0 = $0.addingTimeInterval(seconds) }
+    }
+
     /// 時刻を進めてから、待っているポーラーを次の取得に進める。
     func advance(by seconds: TimeInterval) {
-        clock.withLock { $0 = $0.addingTimeInterval(seconds) }
+        moveClock(by: seconds)
         sleeper.advance()
     }
 
@@ -159,9 +164,7 @@ final class PollerFixture: Sendable {
 
     static let notModified = HTTPResponse(statusCode: 304)
 
-    var ifModifiedSince: [String?] {
-        transport.requests.map { $0.value(forHTTPHeaderField: "If-Modified-Since") }
-    }
+    var ifModifiedSince: [String?] { transport.ifModifiedSince }
 
     var authorizations: [String?] {
         transport.requests.map { $0.value(forHTTPHeaderField: "Authorization") }

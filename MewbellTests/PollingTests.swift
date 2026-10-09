@@ -309,16 +309,18 @@ struct NotificationStoreTests {
         store.stopAll()
     }
 
-    @Test func resumesOnlyStoppedPollers() async {
+    @Test func refreshResumesStoppedPollers() async {
         tokens.set("test-token-bob", for: bob)
         let store = await storeWithUnauthorizedAlice(otherAccounts: [status("bob", .ready)])
         await sleeper.waitForSleeps(1)
         tokens.refreshedValue.value = "test-token-alice"
-        store.resumeStopped()
+        store.refresh()
         #expect(store.feeds[alice] == .loading)
-        await sleeper.waitForSleeps(2)
+        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.threads.count == 1 } }
+        // トークンを取り直すのは止まっていた alice だけ。bob は前の取得から 10 秒の下限を待っている
         #expect(tokens.refreshCount.value == 2)
         #expect(transport.requests.count == 3)
+        #expect(store.isRefreshing)
         #expect(store.feeds[alice]?.threads.count == 1)
         store.stopAll()
     }

@@ -13,6 +13,11 @@ enum FeedPhase: Sendable, Equatable {
     /// トークンを取り直しても 401 だったので止めた
     case unauthorized
 
+    /// レート制限で待っている
+    var isRateLimited: Bool {
+        if case .retrying(_, rateLimited: true) = self { true } else { false }
+    }
+
     /// 再読み込みを押すまで取得しない状態か。
     var isStopped: Bool {
         switch self {
