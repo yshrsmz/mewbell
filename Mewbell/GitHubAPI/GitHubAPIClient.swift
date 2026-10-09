@@ -142,11 +142,9 @@ struct GitHubAPIClient: Sendable {
     func markAllRead(endpoints: APIEndpoints, token: AccessToken, lastReadAt: Date) async -> ThreadActionResult {
         let body = MarkAllReadBody(lastReadAt: lastReadAt.formatted(.iso8601), read: true)
         guard let data = try? JSONEncoder().encode(body) else { return .failed(.malformedBody) }
-        let url = endpoints.apiURL(path: "notifications")
-        switch await send(url, method: "PUT", endpoints: endpoints, token: token, ifModifiedSince: nil, body: data) {
-        case .success(let response): return Self.classifyAction(response, success: [202, 205, 304])
-        case .failure(let failure): return .failed(failure)
-        }
+        return await sendAction(
+            endpoints.apiURL(path: "notifications"), method: "PUT", endpoints: endpoints, token: token,
+            success: [202, 205, 304], body: data)
     }
 
     private func sendThreadAction(
@@ -156,23 +154,29 @@ struct GitHubAPIClient: Sendable {
             Self.logger.error("Refused to send \(method) for a thread with an invalid ID")
             return .failed(.rejectedURL)
         }
-        let url = endpoints.apiURL(path: "notifications/threads/\(threadID)")
-        switch await send(url, method: method, endpoints: endpoints, token: token, ifModifiedSince: nil) {
-        case .success(let response): return Self.classifyAction(response, success: success)
-        case .failure(let failure): return .failed(failure)
+        return await sendAction(
+            endpoints.apiURL(path: "notifications/threads/\(threadID)"), method: method, endpoints: endpoints,
+            token: token, success: success)
+    }
+
+    /// 操作のリクエストを送り、レスポンスを分類する。
+    private func sendAction(
+        _ url: URL, method: String, endpoints: APIEndpoints, token: AccessToken, success: Set<Int>,
+        body: Data? = nil
+    ) async -> ThreadActionResult {
+        switch await send(url, method: method, endpoints: endpoints, token: token, ifModifiedSince: nil, body: body) {
+        case .success(let response): Self.classifyAction(response, success: success)
+        case .failure(let failure): .failed(failure)
         }
     }
 
-    /// 操作のレスポンスを分類する。`classifyFailure` と同じく、`Retry-After` は秒数として読めるときだけレート制限とみなす。
     private static func classifyAction(_ response: HTTPResponse, success: Set<Int>) -> ThreadActionResult {
         switch response.statusCode {
         case let status where success.contains(status):
             return .succeeded
         case 401:
             return .unauthorized
-        case 403
-        where response.header("X-RateLimit-Remaining") == "0"
-            || response.header("Retry-After").flatMap({ Int($0) }) != nil, 429:
+        case 403 where isRateLimited(response), 429:
             return .rateLimited
         default:
             return .failed(.unexpectedStatus(response.statusCode))
@@ -226,23 +230,33 @@ struct GitHubAPIClient: Sendable {
         case 401:
             return .unauthorized
         case 403, 429:
-            if let seconds = response.header("Retry-After").flatMap({ Int($0) }) {
+            guard Self.isRateLimited(response) else {
+                return response.statusCode == 429
+                    ? .rateLimited(retryAt: now())
+                    : .forbidden(scopes: OAuthScopes(header: response.header("X-OAuth-Scopes")))
+            }
+            if let seconds = Self.retryAfterSeconds(response) {
                 return .rateLimited(retryAt: now().addingTimeInterval(TimeInterval(max(seconds, 0))))
             }
-            if response.header("X-RateLimit-Remaining") == "0" {
-                let reset = response.header("X-RateLimit-Reset")
-                    .flatMap { TimeInterval($0) }
-                    .map(Date.init(timeIntervalSince1970:))
-                return .rateLimited(retryAt: reset ?? now())
-            }
-            return response.statusCode == 429
-                ? .rateLimited(retryAt: now())
-                : .forbidden(scopes: OAuthScopes(header: response.header("X-OAuth-Scopes")))
+            let reset = response.header("X-RateLimit-Reset")
+                .flatMap { TimeInterval($0) }
+                .map(Date.init(timeIntervalSince1970:))
+            return .rateLimited(retryAt: reset ?? now())
         case 422:
             return .invalidRequest
         default:
             return .failed(.unexpectedStatus(response.statusCode))
         }
+    }
+
+    /// 403 / 429 がレート制限を示すか（`X-RateLimit-Remaining: 0`、または `Retry-After` が秒数として読める）。
+    /// 取得と操作の両方の分類で使い、判定を揃える。
+    private static func isRateLimited(_ response: HTTPResponse) -> Bool {
+        response.header("X-RateLimit-Remaining") == "0" || retryAfterSeconds(response) != nil
+    }
+
+    private static func retryAfterSeconds(_ response: HTTPResponse) -> Int? {
+        response.header("Retry-After").flatMap { Int($0) }
     }
 
     private static func pollInterval(_ response: HTTPResponse) -> Int? {

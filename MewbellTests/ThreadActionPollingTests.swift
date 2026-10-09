@@ -11,27 +11,15 @@ struct DonePollingTests {
         fixture = try PollerFixture()
     }
 
-    /// `GET` には `gets` を順に返し（尽きたら通信の失敗）、`PATCH` には `205`、`DELETE` には `delete` を返す。
+    /// `PATCH` には `205`、`DELETE` には `delete` を返す。
     private func route(gets: [HTTPResponse], delete: HTTPResponse = HTTPResponse(statusCode: 204)) {
-        let queue = LockedValue(gets)
-        fixture.transport.setHandler { request throws(TransportError) in
-            switch request.httpMethod {
-            case "PATCH": return HTTPResponse(statusCode: 205)
-            case "DELETE": return delete
-            default:
-                guard let next = queue.withLock({ $0.isEmpty ? nil : $0.removeFirst() }) else {
-                    throw .network(code: URLError.Code.notConnectedToInternet.rawValue)
-                }
-                return next
-            }
+        fixture.respond(gets: gets) { request in
+            request.httpMethod == "DELETE" ? delete : HTTPResponse(statusCode: 205)
         }
     }
 
-    private func requests(_ method: String) -> [URLRequest] {
-        fixture.transport.requests.filter { $0.httpMethod == method }
-    }
-
-    private var lastIDs: [String] { fixture.last?.threads.map(\.id) ?? [] }
+    private func requests(_ method: String) -> [URLRequest] { fixture.requests(method) }
+    private var lastIDs: [String] { fixture.lastIDs }
 
     @Test func removesTheThreadAndSendsTheDelete() async {
         route(gets: [PollerFixture.ok(1...3), PollerFixture.notModified])
@@ -126,9 +114,7 @@ struct MarkAllReadPollingTests {
     /// `updated_at` を指定したスレッドの `200`。
     private static func ok(_ threads: [(id: String, updatedAt: String)], scopes: String = "repo") -> HTTPResponse {
         let body = threads.map { FakeHTTPTransport.threadJSON(id: $0.id, updatedAt: $0.updatedAt) }
-        return HTTPResponse(
-            statusCode: 200, headers: ["Last-Modified": "LM-1", "X-OAuth-Scopes": scopes, "X-Poll-Interval": "60"],
-            body: Data("[\(body.joined(separator: ","))]".utf8))
+        return PollerFixture.ok(body: Data("[\(body.joined(separator: ","))]".utf8), scopes: scopes)
     }
 
     /// 12:00 の `1` と 12:30 の `2`
@@ -136,28 +122,9 @@ struct MarkAllReadPollingTests {
     /// 12:00 の `1`、12:30 の `2`、12:45 の `3`
     private static let threeThreads = ok([("1", noon), ("2", half), ("3", quarterTo)])
 
-    /// `GET` には `gets` を順に返し（尽きたら通信の失敗）、`PUT` には `put` の結果を返す。
-    private func route(
-        gets: [HTTPResponse],
-        put: @escaping @Sendable (URLRequest) throws(TransportError) -> HTTPResponse = { _ in
-            HTTPResponse(statusCode: 202)
-        }
-    ) {
-        let queue = LockedValue(gets)
-        fixture.transport.setHandler { request throws(TransportError) in
-            if request.httpMethod == "PUT" {
-                return try put(request)
-            }
-            guard let next = queue.withLock({ $0.isEmpty ? nil : $0.removeFirst() }) else {
-                throw .network(code: URLError.Code.notConnectedToInternet.rawValue)
-            }
-            return next
-        }
-    }
-
-    private var gets: [URLRequest] { fixture.transport.requests.filter { $0.httpMethod == "GET" } }
-    private var puts: [URLRequest] { fixture.transport.requests.filter { $0.httpMethod == "PUT" } }
-    private var lastIDs: [String] { fixture.last?.threads.map(\.id) ?? [] }
+    private var gets: [URLRequest] { fixture.requests("GET") }
+    private var puts: [URLRequest] { fixture.requests("PUT") }
+    private var lastIDs: [String] { fixture.lastIDs }
 
     private static func lastReadAt(_ request: URLRequest) -> String? {
         guard let body = request.httpBody,
@@ -166,16 +133,11 @@ struct MarkAllReadPollingTests {
         return json["last_read_at"] as? String
     }
 
+    /// `GET` には `gets` を順に返し、`PUT` には `put` の結果を返して、最初の取得まで進める。
     private func startLoaded(
-        _ gets: [HTTPResponse], put: (@Sendable (URLRequest) throws(TransportError) -> HTTPResponse)? = nil
-    )
-        async
-    {
-        if let put {
-            route(gets: gets, put: put)
-        } else {
-            route(gets: gets)
-        }
+        _ gets: [HTTPResponse], put: @escaping FakeHTTPTransport.Handler = { _ in HTTPResponse(statusCode: 202) }
+    ) async {
+        fixture.respond(gets: gets, other: put)
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
     }
@@ -251,7 +213,7 @@ struct MarkAllReadPollingTests {
     }
 
     @Test func sendsNothingWhileStopped() async {
-        route(gets: [Self.ok([("1", Self.noon)], scopes: "gist")])
+        fixture.respond(gets: [Self.ok([("1", Self.noon)], scopes: "gist")]) { _ in HTTPResponse(statusCode: 202) }
         fixture.poller.start()
         await waitUntil { self.fixture.last?.phase == .scopeInsufficient }
         await fixture.poller.markAllRead()

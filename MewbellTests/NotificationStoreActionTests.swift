@@ -88,13 +88,13 @@ struct NotificationStoreActionTests {
         let store = await loadedStore(notifier: notifier)
         await notifier.waitForPendingWork()
         center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/bob/3"]
-        #expect(store.canMarkAllRead(alice))
+        #expect(store.feeds[alice]?.canMarkAllRead == true)
         store.markAllRead(in: alice)
         await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.threads.isEmpty == true } }
         #expect(store.feeds[alice]?.threads.isEmpty == true)
         #expect(store.feeds[bob]?.threads.count == 3)
         #expect(store.unreadCount == 3)
-        #expect(!store.canMarkAllRead(alice))
+        #expect(store.feeds[alice]?.canMarkAllRead != true)
         #expect(urls("PUT") == ["https://api.github.com/notifications"])
         // alice の通知だけが取り下がる
         await notifier.waitForPendingWork()
@@ -118,13 +118,13 @@ struct NotificationStoreActionTests {
     func cannotMarkAllReadUnlessLoadedWithThreads(_ phase: FeedPhase, _ hasThreads: Bool) throws {
         let feed = FeedState(phase: phase, threads: hasThreads ? [try Self.thread()] : [])
         let store = NotificationStore(makePoller: nil, feeds: [alice: feed])
-        #expect(!store.canMarkAllRead(alice))
-        #expect(!store.canMarkAllRead(bob))
+        #expect(store.feeds[alice]?.canMarkAllRead != true)
+        #expect(store.feeds[bob]?.canMarkAllRead != true)
     }
 
     @Test func canMarkAllReadWhenLoadedWithThreads() throws {
         let store = NotificationStore(
             makePoller: nil, feeds: [alice: FeedState(phase: .loaded(updatedAt: .now), threads: [try Self.thread()])])
-        #expect(store.canMarkAllRead(alice))
+        #expect(store.feeds[alice]?.canMarkAllRead == true)
     }
 }

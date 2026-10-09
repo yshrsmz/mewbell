@@ -132,15 +132,10 @@ final class NotificationStore {
         perform(.done(threadID: thread.id), in: account)
     }
 
-    /// アカウントの「すべて既読」を押せるか（取得できていて、一覧が 1 件以上あるとき）。
-    func canMarkAllRead(_ account: AccountID) -> Bool {
-        feeds[account]?.canMarkAllRead ?? false
-    }
-
     /// アカウントの一覧をすべて既読にする。一覧から外すのはポーラーで、その結果は `apply` で届く
     /// （止まっている・トークンが無いときに外さない判断を、ポーラーの 1 か所でするため）。
     func markAllRead(in account: AccountID) {
-        guard canMarkAllRead(account), let poller = pollers[account]?.poller else { return }
+        guard feeds[account]?.canMarkAllRead == true, let poller = pollers[account]?.poller else { return }
         Task { await poller.markAllRead() }
     }
 

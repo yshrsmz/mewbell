@@ -24,64 +24,6 @@ struct PollScheduleTests {
     }
 }
 
-/// `AccountPoller` を偽のトランスポート・トークン・時計で動かす。
-final class PollerFixture: Sendable {
-    static let alice = AccountID(host: "github.com", user: "alice")
-    static let now = Date(timeIntervalSince1970: 1_791_460_800)
-
-    let transport = FakeHTTPTransport()
-    let tokens = FakeTokenProvider([alice: "test-token-alice"])
-    let sleeper = ManualSleeper()
-    let updates = LockedValue<[FeedState]>([])
-    /// ポーラーが見る時刻。テストで進められる
-    let clock = LockedValue(now)
-    let poller: AccountPoller
-
-    init() throws {
-        let updates = updates
-        let clock = clock
-        poller = AccountPoller(
-            accountID: Self.alice, endpoints: try #require(APIEndpoints(host: "github.com")),
-            client: GitHubAPIClient(transport: transport, now: { clock.value }), tokens: tokens,
-            sleep: sleeper.sleep, now: { clock.value }, onUpdate: { state in updates.withLock { $0.append(state) } })
-    }
-
-    /// 時刻を進めてから、待っているポーラーを次の取得に進める。
-    func advance(by seconds: TimeInterval) {
-        clock.withLock { $0 = $0.addingTimeInterval(seconds) }
-        sleeper.advance()
-    }
-
-    var last: FeedState? { updates.value.last }
-
-    func respond(_ responses: [HTTPResponse]) {
-        let queue = LockedValue(responses)
-        transport.setHandler { _ throws(TransportError) in
-            guard let next = queue.withLock({ $0.isEmpty ? nil : $0.removeFirst() }) else {
-                throw .network(code: URLError.Code.notConnectedToInternet.rawValue)
-            }
-            return next
-        }
-    }
-
-    static func ok(_ ids: ClosedRange<Int>, lastModified: String = "LM-1", scopes: String = "repo") -> HTTPResponse {
-        HTTPResponse(
-            statusCode: 200,
-            headers: ["Last-Modified": lastModified, "X-OAuth-Scopes": scopes, "X-Poll-Interval": "60"],
-            body: FakeHTTPTransport.page(ids))
-    }
-
-    static let notModified = HTTPResponse(statusCode: 304)
-
-    var ifModifiedSince: [String?] {
-        transport.requests.map { $0.value(forHTTPHeaderField: "If-Modified-Since") }
-    }
-
-    var authorizations: [String?] {
-        transport.requests.map { $0.value(forHTTPHeaderField: "Authorization") }
-    }
-}
-
 struct AccountPollerTests {
     private let fixture: PollerFixture
 

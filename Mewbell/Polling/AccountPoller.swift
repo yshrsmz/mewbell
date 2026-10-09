@@ -318,8 +318,9 @@ extension AccountPoller {
     /// 一覧にあるスレッドの `updated_at` の最大値までを、すべて既読にする。一覧からすぐに外し、`PUT /notifications` を送り、
     /// 次の取得を条件なしにする。止まっているとき、トークンが無いとき、一覧が空のときは何もしない。
     func markAllRead() async {
-        guard !state.phase.isStopped, let token = await tokens.currentToken(for: accountID),
-            !state.phase.isStopped, let newest = state.threads.map(\.updatedAt).max()
+        // 止まっているかは、トークンを待っている間に止められることがあるので待った後に見る
+        guard let token = await tokens.currentToken(for: accountID), !state.phase.isStopped,
+            let newest = state.threads.map(\.updatedAt).max()
         else { return }
         // 前のすべて既読がまだ終わっていなければ、その範囲も含めて隠し続ける
         let cutoff = max(newest, readThrough?.cutoff ?? newest)
@@ -364,7 +365,7 @@ extension AccountPoller {
         }
         let cutoff = readThrough?.cutoff
         return threads.filter { thread in
-            hidden[thread.id] == nil && !(cutoff.map { thread.updatedAt <= $0 } ?? false)
+            hidden[thread.id] == nil && (cutoff.map { thread.updatedAt > $0 } ?? true)
         }
     }
 }

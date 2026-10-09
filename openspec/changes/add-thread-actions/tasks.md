@@ -14,7 +14,7 @@
 
 - [x] 3.1 `AccountPoller.markRead(threadID:)` を `perform(_ action: ThreadAction)`（`.read` / `.done`）に一般化する（D3）。確認: 既存の `MarkReadPollingTests` が `.read` で通る。テストを足して通す: (a) `.done` で一覧からすぐ外れ、`DELETE` が送られ、次の取得に `If-Modified-Since` が付かない、(b) `DELETE` が `500` のとき、次の取得で返ったスレッドが一覧に戻る、(c) `DELETE` の応答を止めている間（`pausedMethod = "DELETE"`）に終わった取得が同じスレッドを返しても戻らない、(d) 同じスレッドに `.read` と `.done` を続けて行い、片方だけが終わった後の取得では戻らない、(e) 止まっているときは送らない
 - [x] 3.2 `AccountPoller.markAllRead()` と `readThrough` を実装し、`revealOrHide` と `stop(as:)` に組み込む。取得の開始時刻を取得の連番と一緒に覚える（D4）。確認: テストを足して通す: (a) `updated_at` が 12:00 と 12:30 の一覧で呼ぶと、一覧が空になって `onUpdate` が呼ばれ、`last_read_at` が 12:30 の `PUT` が送られる、(b) 次の取得に `If-Modified-Since` が付かない、(c) `202` の後の取得が 12:00 と 12:45 を返すと、12:45 だけが残る、(d) `now` を 5 分以上進めた後に始めた取得では 12:00 が戻る、(e) `PUT` が通信の失敗のとき、その後に始めた取得で 12:00 と 12:30 が戻る、(f) `PUT` の応答を止めている間に終わった取得からも 12:00 と 12:30 が除かれる、(g) 一覧が空・止まっている・トークンが無いときは何も送らず一覧も変えない、(h) 1 回目の `PUT` の応答を止めたまま 2 回目を呼び、1 回目が失敗で終わっても 2 回目の除外が続く、(i) どの場合も取得の待ち時間（`sleep` に渡る値）が変わらない
-- [x] 3.3 `NotificationStore` に `markRead(_:in:)`、`markDone(_:in:)`、`markAllRead(in:)`、`canMarkAllRead(_:)` を足し、`open` と `openFromNotification` を同じ経路に通す。`ThreadNotifying.threadRead` を `threadRemoved` に改名する（D5、D6）。確認: 偽の `PollerFactory` でテストを足して通す: (a) `markDone` で `feeds` からすぐ外れ、`threadRemoved` とポーラーの `perform(.done)` が呼ばれ、URL は開かれない、(b) `markRead` も同じで `perform(.read)`、(c) `markAllRead` の後、ポーラーの `publish` で `feeds` が空になる、(d) `canMarkAllRead` は `.loaded` で 1 件以上のときだけ true（`.retrying`・`.loading`・0 件・止まっているときは false）、(e) 既存の `NotificationStoreOpenTests` が通る
+- [x] 3.3 `NotificationStore` に `markRead(_:in:)`、`markDone(_:in:)`、`markAllRead(in:)` と `FeedState.canMarkAllRead` を足し、`open` と `openFromNotification` を同じ経路に通す。`ThreadNotifying.threadRead` を `threadRemoved` に改名する（D5、D6）。確認: 偽の `PollerFactory` でテストを足して通す: (a) `markDone` で `feeds` からすぐ外れ、`threadRemoved` とポーラーの `perform(.done)` が呼ばれ、URL は開かれない、(b) `markRead` も同じで `perform(.read)`、(c) `markAllRead` の後、ポーラーの `publish` で `feeds` が空になる、(d) `FeedState.canMarkAllRead` は `.loaded` で 1 件以上のときだけ true（`.retrying`・`.loading`・0 件・止まっているときは false）、(e) 既存の `NotificationStoreOpenTests` が通る
 
 ## 4. macOS の通知（Notifications）
 
@@ -23,7 +23,7 @@
 ## 5. UI
 
 - [x] 5.1 `ThreadRow` に `.overlay` のホバーのボタン（`ThreadActionButtons`）と `.contextMenu`（Open in Browser / Mark as Read / Mark as Done）を足し、`open`・`markRead`・`markDone` を `AccountSectionView` と `NotificationListView` を通して `NotificationStore` に渡す（D7）。確認: プレビューでホバーのボタンの見た目を見る（件名が長い行で、行の高さが変わらない）。行の操作のボタンのクリックで行が開かないことは 6.3 で確かめる。結果: Xcode の RenderPreview は未承認で使えず、一時テストの `ImageRenderer` で描いた。ホバーの有無で行の高さが変わらないことは見えたが、`ImageRenderer` は `Button` をプレースホルダーで描くので、ボタンの見た目は 6.3 で見る
-- [x] 5.2 `MarkAllReadButton` を作り、アカウントの見出しに置く（D8）。押せる条件は `NotificationStore.canMarkAllRead`。確認: プレビューに「通常」「確認中（`Mark 3 as read?`）」「押せない」を並べて見る。5 秒で戻ること、閉じると戻ることは 6.3 で確かめる。結果: 5.1 と同じく `ImageRenderer` では `Button` を描けず、見出しの右端に置かれることだけを見た。見た目は 6.3 で見る
+- [x] 5.2 `MarkAllReadButton` を作り、アカウントの見出しに置く（D8）。押せる条件は `FeedState.canMarkAllRead`。確認: プレビューに「通常」「確認中（`Mark 3 as read?`）」「押せない」を並べて見る。5 秒で戻ること、閉じると戻ることは 6.3 で確かめる。結果: 5.1 と同じく `ImageRenderer` では `Button` を描けず、見出しの右端に置かれることだけを見た。見た目は 6.3 で見る
 - [x] 5.3 README の現状の説明を更新する（一覧から既読・Done・すべて既読ができること）。確認: 差分を読み、CLAUDE.md の約束と食い違いが無い
 
 ## 6. 最終確認
@@ -34,5 +34,5 @@
 
 ## 7. 別コンテキストでのレビュー
 
-- [ ] 7.1 新しいコンテキストの opus サブエージェントで `simplify` スキルを実行し、作業ツリーに入った変更を確かめる。確認: `bash scripts/lint.sh` と `xcodebuild test` が引き続き通る
+- [x] 7.1 新しいコンテキストの opus サブエージェントで `simplify` スキルを実行し、作業ツリーに入った変更を確かめる。確認: `bash scripts/lint.sh` と `xcodebuild test` が引き続き通る
 - [ ] 7.2 別の新しいコンテキストの opus サブエージェントで `code-review` スキルを effort `medium` で実行し、指摘ごとに「直した / 直さない（理由）」を決めて対応する。ロジックに手を入れたら 7.2 をやり直す。確認: 指摘の件数と対応結果、セキュリティ上の確認を PR 本文に書いた

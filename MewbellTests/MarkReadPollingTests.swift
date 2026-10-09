@@ -11,23 +11,13 @@ struct MarkReadPollingTests {
         fixture = try PollerFixture()
     }
 
-    /// `GET` には `gets` を順に返し（尽きたら通信の失敗）、`PATCH` には `patch` を返す。
     private func route(gets: [HTTPResponse], patch: HTTPResponse = HTTPResponse(statusCode: 205)) {
-        let queue = LockedValue(gets)
-        fixture.transport.setHandler { request throws(TransportError) in
-            if request.httpMethod == "PATCH" {
-                return patch
-            }
-            guard let next = queue.withLock({ $0.isEmpty ? nil : $0.removeFirst() }) else {
-                throw .network(code: URLError.Code.notConnectedToInternet.rawValue)
-            }
-            return next
-        }
+        fixture.respond(gets: gets) { _ in patch }
     }
 
-    private var gets: [URLRequest] { fixture.transport.requests.filter { $0.httpMethod == "GET" } }
-    private var patches: [URLRequest] { fixture.transport.requests.filter { $0.httpMethod == "PATCH" } }
-    private var lastIDs: [String] { fixture.last?.threads.map(\.id) ?? [] }
+    private var gets: [URLRequest] { fixture.requests("GET") }
+    private var patches: [URLRequest] { fixture.requests("PATCH") }
+    private var lastIDs: [String] { fixture.lastIDs }
 
     @Test func removesTheThreadAndSendsThePatch() async {
         route(gets: [PollerFixture.ok(1...3), PollerFixture.notModified])

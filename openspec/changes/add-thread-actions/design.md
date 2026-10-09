@@ -41,7 +41,7 @@ GitHub の前提（GHES 3.13 のドキュメントでも同じ）:
 | `GitHubAPI/` | `GitHubAPIClient.markThreadDone(endpoints:token:threadID:)`、`markAllRead(endpoints:token:lastReadAt:)` | 新しい 2 つのリクエスト。`send` にボディの引数を足して共有する（D2） |
 | `GitHubAPI/` | `ThreadActionResult`（`MarkReadResult` を改名） | 既読・Done・すべて既読で共通の結果。`.succeeded` / `.unauthorized` / `.rateLimited` / `.failed(FetchFailure)` |
 | `Polling/` | `AccountPoller.perform(_ action: ThreadAction)`、`markAllRead()` | 一覧から外す・隠す・送る・次の取得を条件なしにする（D3、D4）。`ThreadAction` は `.read(threadID)` / `.done(threadID)` |
-| `Polling/` | `NotificationStore.markRead(_:in:)`、`markDone(_:in:)`、`markAllRead(in:)`、`canMarkAllRead(_:)` | UI からの入り口。既存の `open` と `openFromNotification` も同じ経路に通す（D5） |
+| `Polling/` | `NotificationStore.markRead(_:in:)`、`markDone(_:in:)`、`markAllRead(in:)`、`FeedState.canMarkAllRead` | UI からの入り口。既存の `open` と `openFromNotification` も同じ経路に通す（D5） |
 | `Notifications/` | `ThreadNotifying.threadRemoved(_:for:)`（`threadRead` を改名） | 既読・Done にしたスレッドの通知を取り下げる。すべて既読は既存の `feedChanged` の差分で取り下がる（D6） |
 | `UI/` | `ThreadRow`、`ThreadActionButtons`、`MarkAllReadButton` | 行のホバーのボタンとコンテキストメニュー、見出しの 2 段階のボタン（D7、D8） |
 
@@ -97,7 +97,7 @@ enum Until {
 
 - `markRead(_ threadID:, in:)` を `perform(.read(id), in:)` にし、`markDone` を足す。どちらも `feeds` からすぐ外し、`notifier?.threadRemoved` を呼び、ポーラーの `perform` を `Task` で呼ぶ。ポーラーが無いときの `pendingReads` は既読（通知のクリックの経路）のときだけ使い、Done ではポーラーが無ければ何もしない（UI に行が出るのはポーラーがあるときだけ）
 - `markAllRead(in:)` は `feeds` を自分では書き換えず、ポーラーの `markAllRead()` を呼ぶだけにする。外した結果はポーラーの `publish` → `apply` で届く（actor への 1 回の往復で、手で外すのと見た目は変わらない）。こうすると「止まっている・トークンが無いときは外さない」の判断がポーラーの 1 か所で済み、`cutoff` もポーラーの状態から取れる
-- `canMarkAllRead(_ account:)` は `feeds[account]` が `.loaded` で `threads` が空でないとき true。UI のボタンの有効・無効に使う
+- `FeedState.canMarkAllRead` は `.loaded` で `threads` が空でないとき true。UI のボタンの有効・無効と、`markAllRead(in:)` の前提の確認に使う
 
 ### D6. macOS の通知の取り下げ
 
@@ -129,7 +129,7 @@ enum Until {
 
 - ネットワーク: 既存の `FakeHTTPTransport` で、`DELETE` と `PUT` のメソッド・URL・ヘッダー・`httpBody`（JSON を読み直して `last_read_at` と `read` を確かめ、トークンの文字列が含まれないことも確かめる）を見る。状態コードごとの結果、`ThreadID` の拒否、`307` / `302` の拒否、オリジン検査をテストする
 - ポーラー: 既存の `PollingFakes`（偽のトークン、`sleep`、`now`）と `FakeHTTPTransport.pausedMethod`（`"PUT"` や `"DELETE"` の応答を止める）で、取得中の操作、`202` の後の取得、5 分の期限（`now` を進める）、失敗の後に戻ること、`If-Modified-Since` が付かないことを確かめる
-- `NotificationStore`: 既存の偽の `PollerFactory` で、`markDone` の後の `feeds` と `notifier` の呼び出し、`canMarkAllRead` を確かめる
+- `NotificationStore`: 既存の偽の `PollerFactory` で、`markDone` の後の `feeds` と `notifier` の呼び出し、`FeedState.canMarkAllRead` を確かめる
 - 通知: 既存の偽の `UserNotificationCenter` で、すべて既読の後の `feedChanged` で取り下がることを確かめる
 - UI: ホバーと 2 段階のボタンはプレビューと手元で確かめる。2 段階の状態の遷移は View の中の `@State` なので、ユニットテストはしない
 

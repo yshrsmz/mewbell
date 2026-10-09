@@ -139,10 +139,8 @@ struct MarkAllReadButton: View {
         // 確認の表示は 5 秒で戻す（`confirming` が変わると前の待ちは取り消される）
         .task(id: confirming) {
             guard confirming else { return }
-            try? await Task.sleep(for: .seconds(5))
-            if !Task.isCancelled {
-                confirming = false
-            }
+            guard (try? await Task.sleep(for: .seconds(5))) != nil else { return }
+            confirming = false
         }
         .onChange(of: isEnabled) { _, enabled in
             if !enabled {
