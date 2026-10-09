@@ -12,6 +12,7 @@ struct RefreshWaiters {
     private var waiters: [(attempt: Int, continuation: CheckedContinuation<Void, Never>)] = []
 
     var isEmpty: Bool { waiters.isEmpty }
+    var count: Int { waiters.count }
 
     mutating func startAttempt(at date: Date) {
         attempts += 1

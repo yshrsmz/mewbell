@@ -47,6 +47,7 @@ actor AccountPoller {
     /// 次の取得までの待ち。再読み込みで止めて起こす
     private var sleepTask: Task<Void, any Error>?
     private var refreshWaiters = RefreshWaiters()
+    var pendingRefreshCount: Int { refreshWaiters.count }  // テスト用
 
     init(
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,
@@ -90,7 +91,8 @@ actor AccountPoller {
     /// もう 1 回取得する。止まっていれば再開して最初の取得を待つ。レート制限中とループが無いときは、早めずにすぐ戻る。
     func refreshNow() async {
         requestUnconditionalFetch()
-        guard !state.phase.isRateLimited else { return }
+        // レート制限の待ちの間だけ早めない（待ち終えて取得している途中なら、その後にもう 1 回取得する）
+        guard !(state.phase.isRateLimited && sleepTask != nil) else { return }
         let stopped = state.phase.isStopped
         guard stopped || runningLoop != nil else { return }
         await withCheckedContinuation { continuation in

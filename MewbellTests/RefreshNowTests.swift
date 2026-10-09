@@ -11,6 +11,13 @@ struct RefreshNowTests {
         fixture = try PollerFixture()
     }
 
+    private func waitForPendingRefresh() async {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while await fixture.poller.pendingRefreshCount == 0, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
     /// 最初の取得を終えて、次の取得を待っているポーラー。
     private func startAndWait() async {
         fixture.poller.start()
@@ -51,7 +58,7 @@ struct RefreshNowTests {
         fixture.advance(by: 60)
         await waitUntil { fixture.transport.requests.count == 2 }
         let refresh = Task { await fixture.poller.refreshNow() }
-        try? await Task.sleep(for: .milliseconds(20))
+        await waitForPendingRefresh()
         fixture.transport.pausedMethod.value = nil
         // 取得中の分が終わった後は、その取得の開始から 10 秒の下限だけ待つ
         await fixture.sleeper.waitForSleeps(2)
@@ -93,12 +100,34 @@ struct RefreshNowTests {
         fixture.advance(by: 60)
         await waitUntil { fixture.transport.requests.count == 2 }
         let refresh = Task { await fixture.poller.refreshNow() }
-        try? await Task.sleep(for: .milliseconds(20))
+        await waitForPendingRefresh()
         fixture.transport.pausedMethod.value = nil
         await refresh.value
         await fixture.sleeper.waitForSleeps(2)
         #expect(fixture.sleeper.durations == [.seconds(60), .seconds(300)])
         #expect(fixture.transport.requests.count == 2)
+        fixture.poller.stop()
+    }
+
+    @Test func fetchesOnceMoreWhenPressedDuringTheFetchAfterARateLimit() async {
+        fixture.respond([
+            PollerFixture.ok(1...1), HTTPResponse(statusCode: 403, headers: ["Retry-After": "300"]),
+            PollerFixture.notModified, PollerFixture.ok(1...2),
+        ])
+        await startAndWait()
+        fixture.advance(by: 60)
+        await fixture.sleeper.waitForSleeps(2)
+        fixture.transport.pausedMethod.value = "GET"
+        fixture.advance(by: 300)
+        await waitUntil { fixture.transport.requests.count == 3 }
+        let refresh = Task { await fixture.poller.refreshNow() }
+        await waitForPendingRefresh()
+        fixture.transport.pausedMethod.value = nil
+        await fixture.sleeper.waitForSleeps(3)
+        #expect(fixture.sleeper.durations == [.seconds(60), .seconds(300), .seconds(10)])
+        fixture.advance(by: 10)
+        await refresh.value
+        #expect(fixture.lastIDs == ["1", "2"])
         fixture.poller.stop()
     }
 
