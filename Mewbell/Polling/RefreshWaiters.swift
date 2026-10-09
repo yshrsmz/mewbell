@@ -26,8 +26,9 @@ struct RefreshWaiters {
 
     /// 終わった試みまでを待っている人を起こす。`all` ならすべて（ループが終わったとき）。
     mutating func finish(all: Bool = false) {
-        let finished = waiters.filter { all || $0.attempt <= attempts }
-        waiters.removeAll { all || $0.attempt <= attempts }
+        let split = waiters.partition { all || $0.attempt <= attempts }
+        let finished = waiters[split...]
+        waiters.removeSubrange(split...)
         for waiter in finished {
             waiter.continuation.resume()
         }
