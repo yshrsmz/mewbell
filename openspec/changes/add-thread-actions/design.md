@@ -40,7 +40,7 @@ GitHub の前提（GHES 3.13 のドキュメントでも同じ）:
 | --- | --- | --- |
 | `GitHubAPI/` | `GitHubAPIClient.markThreadDone(endpoints:token:threadID:)`、`markAllRead(endpoints:token:lastReadAt:)` | 新しい 2 つのリクエスト。`send` にボディの引数を足して共有する（D2） |
 | `GitHubAPI/` | `ThreadActionResult`（`MarkReadResult` を改名） | 既読・Done・すべて既読で共通の結果。`.succeeded` / `.unauthorized` / `.rateLimited` / `.failed(FetchFailure)` |
-| `Polling/` | `AccountPoller.perform(_ action: ThreadAction)`、`markAllRead()` | 一覧から外す・隠す・送る・次の取得を条件なしにする（D3、D4）。`ThreadAction` は `.read(threadID)` / `.done(threadID)` |
+| `Polling/` | `AccountPoller.perform(_ action: ThreadAction)`、`markAllRead(through:)` | 一覧から外す・隠す・送る・次の取得を条件なしにする（D3、D4）。`ThreadAction` は `.read(threadID)` / `.done(threadID)` |
 | `Polling/` | `NotificationStore.markRead(_:in:)`、`markDone(_:in:)`、`markAllRead(in:)`、`FeedState.canMarkAllRead` | UI からの入り口。既存の `open` と `openFromNotification` も同じ経路に通す（D5） |
 | `Notifications/` | `ThreadNotifying.threadRemoved(_:for:)`（`threadRead` を改名） | 既読・Done にしたスレッドの通知を取り下げる。すべて既読は既存の `feedChanged` の差分で取り下がる（D6） |
 | `UI/` | `ThreadRow`、`ThreadActionButtons`、`MarkAllReadButton` | 行のホバーのボタンとコンテキストメニュー、見出しの 2 段階のボタン（D7、D8） |
@@ -77,10 +77,10 @@ enum Until {
 }
 ```
 
-`markAllRead()` の流れ（actor の中）:
+`markAllRead(through: newest)` の流れ（actor の中）。`newest` は store が、ユーザーが押したときに表示していた一覧（`feeds`）の `updated_at` の最大値（`FeedState.newestUpdate`）として渡す:
 
 1. トークンが無い、取得の状態が `.loaded` でない（トークンを待つ間に変わることがあるので、待った後に見る）、`state.threads` が空 → 何もしない
-2. `cutoff = state.threads.map(\.updatedAt).max()` を秒に切り捨てる（`last_read_at` は秒までしか送らないので、隠す範囲と GitHub が既読にする範囲を揃える）。新しい番号で `.requestInFlight` の `ReadThrough` を入れ、`state.threads` から `updatedAt <= cutoff` を外して `publish`
+2. `cutoff` は `newest` を秒に切り捨てたもの。ポーラーの `state.threads` からは取らない（トークンを待つ間に届いた、ユーザーが見ていないスレッドを含めないため。2 回目の code-review の指摘で改めた）（`last_read_at` は秒までしか送らないので、隠す範囲と GitHub が既読にする範囲を揃える）。新しい番号で `.requestInFlight` の `ReadThrough` を入れ、`state.threads` から `updatedAt <= cutoff` を外して `publish`
 3. `PUT` を送る（`await`。この間も取得は進む）
 4. 自分の番号の `ReadThrough` がまだあれば（止まって消されていなければ）、結果に合わせて `.succeeded` か `.failed` にする
 5. 条件なしの印を立てる
@@ -98,7 +98,7 @@ enum Until {
 ### D5. `NotificationStore` の入り口
 
 - `markRead(_ threadID:, in:)` を `perform(.read(id), in:)` にし、`markDone` を足す。どちらも `feeds` からすぐ外し、`notifier?.threadRemoved` を呼び、ポーラーの `perform` を `Task` で呼ぶ。ポーラーが無いときの `pendingReads` は既読（通知のクリックの経路）のときだけ使い、Done ではポーラーが無ければ何もしない（UI に行が出るのはポーラーがあるときだけ）
-- `markAllRead(in:)` は `feeds` を自分では書き換えず、ポーラーの `markAllRead()` を呼ぶだけにする。外した結果はポーラーの `publish` → `apply` で届く（actor への 1 回の往復で、手で外すのと見た目は変わらない）。こうすると「取得できていない・トークンが無いときは外さない」の判断がポーラーの 1 か所で済み（store が見た後に状態が変わっても、ポーラーが見直す）、`cutoff` もポーラーの状態から取れる
+- `markAllRead(in:)` は `feeds` を自分では書き換えず、ポーラーの `markAllRead(through:)` を、表示中の一覧の最新の `updated_at` を付けて呼ぶだけにする。外した結果はポーラーの `publish` → `apply` で届く（actor への 1 回の往復で、手で外すのと見た目は変わらない）。こうすると「取得できていない・トークンが無いときは外さない」の判断がポーラーの 1 か所で済み（store が見た後に状態が変わっても、ポーラーが見直す）。`cutoff` は store が表示中の一覧から決める（D4）
 - `FeedState.canMarkAllRead` は `.loaded` で `threads` が空でないとき true。UI のボタンの有効・無効と、`markAllRead(in:)` の前提の確認に使う
 
 ### D6. macOS の通知の取り下げ
@@ -120,7 +120,7 @@ enum Until {
 
 見出しの `Spacer` の後ろに置く。`count: Int`、`isEnabled: Bool`、`action: () -> Void` を受け取り、確認の状態は View の `@State` に持つ（ストアに持たない。ポップオーバーを閉じれば消えてよい状態なので）。
 
-- 確認中に `count` が変わったら（新着が届いた）`confirming = false` に戻す（見ていないスレッドまで既読にしないため）
+- 確認中に `count` か `newest`（一覧の最新のスレッドの `updated_at`）が変わったら `confirming = false` に戻す（見ていないスレッドまで既読にしないため。件数が同じまま中身が入れ替わる場合も `newest` で気づく）
 - 1 回目: `confirming = true` にし、5 秒後に `false` に戻す `Task` を始める（`.task(id: confirming)` で、`confirming` が変わったら前のものは取り消される）
 - 2 回目（`confirming` のまま）: `action()` を呼び、`confirming = false`
 - `.onDisappear` で `confirming = false`。`isEnabled` が `false` になったら（`onChange`）`confirming = false`

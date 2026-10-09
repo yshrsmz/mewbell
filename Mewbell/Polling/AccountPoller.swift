@@ -167,13 +167,13 @@ actor AccountPoller {
         fetchCount += 1
         var result = await client.fetchNotifications(
             endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince)
+        // 止められた（再開で新しいループに替わった）後に返った結果では、状態を書き換えない
+        guard !Task.isCancelled else { return result }
         if case .updated(let threads, let lastModified, let pollInterval, let scopes) = result {
             result = .updated(
                 threads: revealOrHide(threads, fetchNumber: number, startedAt: startedAt), lastModified: lastModified,
                 pollInterval: pollInterval, scopes: scopes)
         }
-        // 止められた（再開で新しいループに替わった）後に返った結果では、状態を書き換えない
-        guard !Task.isCancelled else { return result }
         if case .updated = result {
             // 条件付きでも 200 なら全ページを取り直しているので、条件なしと同じく一覧は最新になる
             lastFullFetch = now()
@@ -292,7 +292,8 @@ extension AccountPoller {
             state.threads.removeAll { $0.id == threadID }
             await publish(state)
         }
-        if !state.phase.isStopped, let token = await tokens.currentToken(for: accountID) {
+        // 止まっているかは、トークンを待っている間に止められることがあるので待った後に見る
+        if let token = await tokens.currentToken(for: accountID), !state.phase.isStopped {
             let result =
                 switch action {
                 case .read:
@@ -315,12 +316,13 @@ extension AccountPoller {
         unconditionalRequested.store(true, ordering: .relaxed)
     }
 
-    /// 一覧にあるスレッドの `updated_at` の最大値までを、すべて既読にする。一覧からすぐに外し、`PUT /notifications` を送り、
-    /// 次の取得を条件なしにする。止まっているとき、トークンが無いとき、一覧が空のときは何もしない。
-    func markAllRead() async {
+    /// `newest`（ユーザーが押したときに表示していた一覧の `updated_at` の最大値）までを、すべて既読にする。
+    /// 一覧からすぐに外し、`PUT /notifications` を送り、次の取得を条件なしにする。取得できていないとき、
+    /// トークンが無いとき、一覧が空のときは何もしない。押した後に届いたスレッドは、`newest` より新しいので外さない。
+    func markAllRead(through newest: Date) async {
         // 取得の状態は、トークンを待っている間に変わることがあるので待った後に見る
         guard let token = await tokens.currentToken(for: accountID), case .loaded = state.phase,
-            let newest = state.threads.map(\.updatedAt).max()
+            !state.threads.isEmpty
         else { return }
         // `last_read_at` は秒までしか送らないので、隠す範囲も秒に揃える
         let cutoff = Date(timeIntervalSince1970: newest.timeIntervalSince1970.rounded(.down))

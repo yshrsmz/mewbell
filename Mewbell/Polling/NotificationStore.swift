@@ -132,11 +132,13 @@ final class NotificationStore {
         perform(.done(threadID: thread.id), in: account)
     }
 
-    /// アカウントの一覧をすべて既読にする。一覧から外すのはポーラーで、その結果は `apply` で届く
-    /// （止まっている・トークンが無いときに外さない判断を、ポーラーの 1 か所でするため）。
+    /// アカウントの一覧を、表示している一覧の最新のスレッドまですべて既読にする。一覧から外すのはポーラーで、
+    /// その結果は `apply` で届く（取得できていない・トークンが無いときに外さない判断を、ポーラーの 1 か所でするため）。
     func markAllRead(in account: AccountID) {
-        guard feeds[account]?.canMarkAllRead == true, let poller = pollers[account]?.poller else { return }
-        Task { await poller.markAllRead() }
+        guard let feed = feeds[account], feed.canMarkAllRead, let newest = feed.newestUpdate,
+            let poller = pollers[account]?.poller
+        else { return }
+        Task { await poller.markAllRead(through: newest) }
     }
 
     /// 一覧からすぐに外し、ポーラーに操作を頼む。既読はポーラーがまだ無ければ、作るときまで取っておく

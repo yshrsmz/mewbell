@@ -140,7 +140,9 @@ struct GitHubAPIClient: Sendable {
     /// アカウントの通知のうち、`lastReadAt` 以前に更新されたものをすべて既読にする（`PUT /notifications`）。
     /// `202` は GitHub が後から非同期に既読にするという意味で、成功として扱う。
     func markAllRead(endpoints: APIEndpoints, token: AccessToken, lastReadAt: Date) async -> ThreadActionResult {
-        let body = MarkAllReadBody(lastReadAt: lastReadAt.formatted(.iso8601), read: true)
+        // 秒まで・UTC（呼び出し元は隠す範囲も秒に揃えている）
+        let format = Date.ISO8601FormatStyle(includingFractionalSeconds: false, timeZone: .gmt)
+        let body = MarkAllReadBody(lastReadAt: lastReadAt.formatted(format), read: true)
         guard let data = try? JSONEncoder().encode(body) else { return .failed(.malformedBody) }
         return await sendAction(
             endpoints.apiURL(path: "notifications"), method: "PUT", endpoints: endpoints, token: token,

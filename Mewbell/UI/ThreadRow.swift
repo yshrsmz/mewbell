@@ -58,6 +58,9 @@ struct ThreadRow: View {
             Button("Mark as Read", action: markRead)
             Button("Mark as Done", action: markDone)
         }
+        // ホバーのボタンを使えない VoiceOver でも操作できるように
+        .accessibilityAction(named: "Mark as Read", markRead)
+        .accessibilityAction(named: "Mark as Done", markDone)
     }
 
     private var symbol: String {
@@ -103,13 +106,16 @@ private struct ThreadActionButtons: View {
 /// アカウントの通知をすべて既読にするボタン。1 回目で確認の表示に変わり、5 秒以内にもう一度押したときだけ実行する。
 struct MarkAllReadButton: View {
     let count: Int
+    /// 一覧の最新のスレッドの `updated_at`。確認の途中で変わったら確認からやり直す
+    let newest: Date?
     let isEnabled: Bool
     let action: () -> Void
 
     @State private var confirming: Bool
 
-    init(count: Int, isEnabled: Bool, confirming: Bool = false, action: @escaping () -> Void) {
+    init(count: Int, newest: Date?, isEnabled: Bool, confirming: Bool = false, action: @escaping () -> Void) {
         self.count = count
+        self.newest = newest
         self.isEnabled = isEnabled
         self.action = action
         _confirming = State(initialValue: confirming)
@@ -147,8 +153,9 @@ struct MarkAllReadButton: View {
                 confirming = false
             }
         }
-        // 確認の途中で件数が変わったら、見ていないスレッドまで既読にしないように確認からやり直す
+        // 確認の途中で一覧が変わったら（件数か最新のスレッド）、見ていないスレッドまで既読にしないように確認からやり直す
         .onChange(of: count) { confirming = false }
+        .onChange(of: newest) { confirming = false }
         .onDisappear { confirming = false }
     }
 }
@@ -167,9 +174,9 @@ struct RelativeTimeText: View {
 
 #Preview("Mark all as read") {
     VStack(alignment: .trailing, spacing: 12) {
-        MarkAllReadButton(count: 3, isEnabled: true) {}
-        MarkAllReadButton(count: 3, isEnabled: true, confirming: true) {}
-        MarkAllReadButton(count: 0, isEnabled: false) {}
+        MarkAllReadButton(count: 3, newest: .now, isEnabled: true) {}
+        MarkAllReadButton(count: 3, newest: .now, isEnabled: true, confirming: true) {}
+        MarkAllReadButton(count: 0, newest: nil, isEnabled: false) {}
     }
     .padding()
 }

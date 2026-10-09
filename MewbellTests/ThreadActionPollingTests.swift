@@ -142,10 +142,25 @@ struct MarkAllReadPollingTests {
         await fixture.sleeper.waitForSleeps(1)
     }
 
+    /// 最後に届いた一覧の最新のスレッドまで、すべて既読にする（store が表示中の一覧から決めるのと同じ）。
+    private func markAllRead() async {
+        await fixture.poller.markAllRead(through: fixture.last?.threads.map(\.updatedAt).max() ?? .distantPast)
+    }
+
+    @Test func leavesThreadsThatArrivedAfterTheClick() async throws {
+        await startLoaded([Self.threeThreads])
+        // 押したときに表示していた一覧の最新が 12:30 なら、その後に届いた 12:45 は既読にしない
+        let half = try #require(ISO8601DateFormatter().date(from: Self.half))
+        await fixture.poller.markAllRead(through: half)
+        #expect(lastIDs == ["3"])
+        #expect(puts.map(Self.lastReadAt) == [Self.half])
+        fixture.poller.stop()
+    }
+
     @Test func clearsTheListAndSendsThePut() async {
         await startLoaded([Self.twoThreads, PollerFixture.notModified])
         let updates = fixture.updates.value.count
-        await fixture.poller.markAllRead()
+        await markAllRead()
         #expect(lastIDs.isEmpty)
         #expect(fixture.updates.value.count > updates)
         #expect(puts.map { $0.url?.absoluteString } == ["https://api.github.com/notifications"])
@@ -161,7 +176,7 @@ struct MarkAllReadPollingTests {
 
     @Test func keepsTheReadThreadsOutWhileGitHubFinishesTheAsyncRead() async {
         await startLoaded([Self.twoThreads, Self.threeThreads, Self.threeThreads])
-        await fixture.poller.markAllRead()
+        await markAllRead()
         // 202 の 1 分後の取得: 12:30 以前は除き、12:45 は出す
         fixture.advance(by: 60)
         await fixture.sleeper.waitForSleeps(2)
@@ -178,7 +193,7 @@ struct MarkAllReadPollingTests {
         await startLoaded(
             [Self.twoThreads, Self.twoThreads],
             put: { _ throws(TransportError) in throw .network(code: URLError.Code.timedOut.rawValue) })
-        await fixture.poller.markAllRead()
+        await markAllRead()
         #expect(lastIDs.isEmpty)
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
@@ -191,7 +206,7 @@ struct MarkAllReadPollingTests {
             [Self.twoThreads, Self.threeThreads, Self.twoThreads],
             put: { _ in HTTPResponse(statusCode: 500) })
         fixture.transport.pausedMethod.value = "PUT"
-        let markAll = Task { await fixture.poller.markAllRead() }
+        let markAll = Task { await markAllRead() }
         await waitUntil { self.puts.count == 1 }
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
@@ -212,11 +227,11 @@ struct MarkAllReadPollingTests {
             put: { request in
                 HTTPResponse(statusCode: Self.lastReadAt(request) == Self.half ? 202 : 500)
             })
-        await fixture.poller.markAllRead()
+        await markAllRead()
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
         #expect(lastIDs == ["3"])
-        await fixture.poller.markAllRead()
+        await markAllRead()
         #expect(puts.map(Self.lastReadAt) == [Self.half, Self.quarterTo])
         // 2 回目の失敗の後も、1 回目の 202 の分（12:30 以前）は隠し続け、12:45 は戻る
         fixture.sleeper.advance()
@@ -227,7 +242,7 @@ struct MarkAllReadPollingTests {
 
     @Test func revealsTheThreadsWhenTheClockGoesBack() async {
         await startLoaded([Self.twoThreads, Self.twoThreads])
-        await fixture.poller.markAllRead()
+        await markAllRead()
         // 202 の後に時計が 1 時間戻ったら、期限の内とはみなさない
         fixture.advance(by: -3600)
         await fixture.sleeper.waitForSleeps(2)
@@ -244,7 +259,7 @@ struct MarkAllReadPollingTests {
             Issue.record("Expected retrying, got \(String(describing: fixture.last?.phase))")
             return
         }
-        await fixture.poller.markAllRead()
+        await markAllRead()
         #expect(puts.isEmpty)
         #expect(lastIDs == ["1", "2"])
         fixture.poller.stop()
@@ -252,7 +267,7 @@ struct MarkAllReadPollingTests {
 
     @Test func sendsNothingForAnEmptyList() async {
         await startLoaded([Self.ok([])])
-        await fixture.poller.markAllRead()
+        await markAllRead()
         #expect(puts.isEmpty)
         fixture.poller.stop()
     }
@@ -261,7 +276,7 @@ struct MarkAllReadPollingTests {
         fixture.respond(gets: [Self.ok([("1", Self.noon)], scopes: "gist")]) { _ in HTTPResponse(statusCode: 202) }
         fixture.poller.start()
         await waitUntil { self.fixture.last?.phase == .scopeInsufficient }
-        await fixture.poller.markAllRead()
+        await markAllRead()
         #expect(puts.isEmpty)
     }
 
@@ -269,7 +284,7 @@ struct MarkAllReadPollingTests {
         await startLoaded([Self.twoThreads])
         let updates = fixture.updates.value.count
         await fixture.tokens.discardToken(for: PollerFixture.alice)
-        await fixture.poller.markAllRead()
+        await markAllRead()
         #expect(puts.isEmpty)
         #expect(fixture.updates.value.count == updates)
         #expect(lastIDs == ["1", "2"])
@@ -284,12 +299,12 @@ struct MarkAllReadPollingTests {
                 HTTPResponse(statusCode: Self.lastReadAt(request) == Self.half ? 500 : 202)
             })
         fixture.transport.pausedMethod.value = "PUT"
-        let first = Task { await fixture.poller.markAllRead() }
+        let first = Task { await markAllRead() }
         await waitUntil { self.puts.count == 1 }
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
         #expect(lastIDs == ["3"])
-        let second = Task { await fixture.poller.markAllRead() }
+        let second = Task { await markAllRead() }
         await waitUntil { self.puts.count == 2 }
         #expect(puts.map(Self.lastReadAt) == [Self.half, Self.quarterTo])
         fixture.transport.pausedMethod.value = nil

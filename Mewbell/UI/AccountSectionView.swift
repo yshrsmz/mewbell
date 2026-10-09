@@ -89,7 +89,9 @@ struct AccountSectionView: View {
                 .truncationMode(.middle)
             Spacer(minLength: 0)
             if status.tokenState == .ready, let feed, !feed.phase.isStopped {
-                MarkAllReadButton(count: feed.threads.count, isEnabled: feed.canMarkAllRead) {
+                MarkAllReadButton(
+                    count: feed.threads.count, newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead
+                ) {
                     actions.markAllRead(account.id)
                 }
             }
