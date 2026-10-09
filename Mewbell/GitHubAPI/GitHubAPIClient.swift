@@ -142,7 +142,10 @@ struct GitHubAPIClient: Sendable {
             return .read
         case 401:
             return .unauthorized
-        case 403 where response.header("X-RateLimit-Remaining") == "0" || response.header("Retry-After") != nil, 429:
+        // `classifyFailure` と同じく、`Retry-After` は秒数として読めるときだけレート制限とみなす
+        case 403
+        where response.header("X-RateLimit-Remaining") == "0"
+            || response.header("Retry-After").flatMap({ Int($0) }) != nil, 429:
             return .rateLimited
         default:
             return .failed(.unexpectedStatus(response.statusCode))

@@ -64,6 +64,7 @@ struct MarkThreadReadTests {
         (HTTPResponse(statusCode: 403, headers: ["Retry-After": "60"]), .rateLimited),
         (HTTPResponse(statusCode: 429), .rateLimited),
         (HTTPResponse(statusCode: 403), .failed(.unexpectedStatus(403))),
+        (HTTPResponse(statusCode: 403, headers: ["Retry-After": "soon"]), .failed(.unexpectedStatus(403))),
         (HTTPResponse(statusCode: 422), .failed(.unexpectedStatus(422))),
         (HTTPResponse(statusCode: 500), .failed(.unexpectedStatus(500))),
         (HTTPResponse(statusCode: 307, headers: ["Location": "https://evil.example.com/"]), .failed(.redirect)),

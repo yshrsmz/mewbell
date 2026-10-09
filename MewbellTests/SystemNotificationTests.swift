@@ -191,6 +191,20 @@ struct SystemNotifierTests {
         #expect(center.added.value.count == 1)
     }
 
+    @Test func makesTheBaselineAfterAFailedFirstFetch() async throws {
+        center.delivered.value = ["github.com/alice/9"]
+        let retrying = FeedState(phase: .retrying(nextAttempt: .now, rateLimited: false), threads: [])
+        notifier.feedChanged(for: alice, from: .loading, to: retrying)
+        let first = feed([])
+        notifier.feedChanged(for: alice, from: retrying, to: first)
+        await notifier.waitForPendingWork()
+        // 前回の実行の通知を掃除する
+        #expect(center.delivered.value.isEmpty)
+        notifier.feedChanged(for: alice, from: first, to: feed([try thread("1")]))
+        await notifier.waitForPendingWork()
+        #expect(center.added.value.map(\.identifier) == ["github.com/alice/1"])
+    }
+
     @Test func retractsAThreadMarkedRead() async throws {
         notifier.feedChanged(for: alice, from: .loading, to: feed([try thread("1"), try thread("2")]))
         await notifier.waitForPendingWork()

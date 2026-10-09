@@ -56,7 +56,7 @@ macOS と GitHub の前提:
 
 | 変化 | 入力 | 結果 |
 | --- | --- | --- |
-| `phase` が `.loading` から `.loaded` | `baseline(threads)` | 何も出さない。`seen` と `current` を作る。前回の実行の通知の掃除（下）をする |
+| `.loaded` になり、そのアカウントの基準がまだ無い（`.loading` からでも、最初の取得の失敗を挟んだ `.retrying` からでも） | `baseline(threads)` | 何も出さない。`seen` と `current` を作る。前回の実行の通知の掃除（下）をする |
 | `.loaded` のまま `threads` が変わった（取得・既読化） | `update(threads)` | `seen` に無いか、`updated_at` が `seen` より新しいスレッドを出す。`current` から消えたスレッドを取り下げる。`seen` を更新する |
 | `.retrying` | なし | 何もしない（spec の「通信の失敗では消さない」） |
 | `.scopeInsufficient` / `.unauthorized` | `reset` | そのアカウントの通知をすべて取り下げ、`seen` と `current` を捨てる（再開の後はまた基準から） |

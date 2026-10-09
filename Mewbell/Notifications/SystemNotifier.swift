@@ -27,7 +27,8 @@ final class SystemNotifier: ThreadNotifying {
 
     func feedChanged(for account: AccountID, from old: FeedState?, to new: FeedState) {
         switch new.phase {
-        case .loaded where old == nil || old?.phase == .loading:
+        // 最初の取得が失敗を挟んで成功したとき（`.retrying` から `.loaded`）も、基準にする
+        case .loaded where !tracker.hasBaseline(for: account):
             tracker.baseline(new.threads, for: account)
             removeStaleDelivered(for: account, keeping: Set(new.threads.map(\.id)))
         case .loaded:

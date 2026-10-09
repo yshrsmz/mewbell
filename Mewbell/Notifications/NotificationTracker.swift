@@ -44,6 +44,11 @@ struct NotificationTracker {
         current[account]?.remove(threadID)
     }
 
+    /// アカウントの基準の取得を覚えているか。
+    func hasBaseline(for account: AccountID) -> Bool {
+        current[account] != nil
+    }
+
     /// アカウントの記録を捨てる（止まった・消えたとき）。次の取得はまた基準になる。
     mutating func reset(_ account: AccountID) {
         seen[account] = nil

@@ -63,7 +63,8 @@ struct ThreadOpenRequest: Sendable, Equatable {
             GhIdentifier.isValidHost(host), GhIdentifier.isValidUser(user), ThreadID.isValid(threadID),
             let endpoints = APIEndpoints(host: host)
         else { return nil }
-        if let url = (userInfo[Key.url] as? String).flatMap(URL.init(string:)), Self.isOpenable(url, host: host) {
+        if let url = (userInfo[Key.url] as? String).flatMap(URL.init(string:)), ThreadWebURL.isOpenable(url, host: host)
+        {
             self.url = url
         } else if let repository = (userInfo[Key.repository] as? String).flatMap(RepositoryName.init(fullName:)),
             let url = ThreadWebURL.repositoryPage(repository, endpoints: endpoints)
@@ -74,12 +75,5 @@ struct ThreadOpenRequest: Sendable, Equatable {
         }
         account = AccountID(host: host, user: user)
         self.threadID = threadID
-    }
-
-    /// `https` で、ホストが `host` と一致し、ポートもユーザー情報も含まない URL か。
-    private static func isOpenable(_ url: URL, host: String) -> Bool {
-        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
-        return components.scheme?.lowercased() == "https" && components.host?.lowercased() == host
-            && components.port == nil && components.user == nil && components.password == nil
     }
 }

@@ -8,21 +8,24 @@ enum ThreadWebURL {
         if let suffix = suffix(for: thread, endpoints: endpoints) {
             url = suffix.reduce(url) { $0.appending(path: $1) }
         }
-        return isOnWebHost(url, endpoints: endpoints) ? url : nil
+        return isOpenable(url, host: endpoints.host) ? url : nil
     }
 
     /// リポジトリのページの URL。`https` でホストがアカウントのホストと一致しなければ nil（開かない）。
     static func repositoryPage(_ repository: RepositoryName, endpoints: APIEndpoints) -> URL? {
         let url = repositoryBase(repository, endpoints: endpoints)
-        return isOnWebHost(url, endpoints: endpoints) ? url : nil
+        return isOpenable(url, host: endpoints.host) ? url : nil
     }
 
     private static func repositoryBase(_ repository: RepositoryName, endpoints: APIEndpoints) -> URL {
         endpoints.webBaseURL.appending(path: repository.owner).appending(path: repository.name)
     }
 
-    private static func isOnWebHost(_ url: URL, endpoints: APIEndpoints) -> Bool {
-        url.scheme == "https" && url.host()?.lowercased() == endpoints.host
+    /// ブラウザで開いてよい URL か。`https` で、ホストが `host`（小文字）と一致し、ポートもユーザー情報も含まないときだけ true。
+    static func isOpenable(_ url: URL, host: String) -> Bool {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
+        return components.scheme?.lowercased() == "https" && components.host?.lowercased() == host
+            && components.port == nil && components.user == nil && components.password == nil
     }
 
     /// リポジトリのページより後ろのパスの要素。組み立てられなければ nil（リポジトリのページを開く）。
