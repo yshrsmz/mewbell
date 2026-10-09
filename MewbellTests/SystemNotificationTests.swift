@@ -294,6 +294,11 @@ struct MenuBarIconTests {
         #expect(!MenuBarIcon.image(badge: "1").isTemplate)
     }
 
+    @Test func describesTheImageForVoiceOver() {
+        #expect(MenuBarIcon.image(badge: nil).accessibilityDescription == "Mewbell")
+        #expect(MenuBarIcon.image(badge: "5").accessibilityDescription == "Mewbell, 5 unread")
+    }
+
     @Test func widensWithTheBadge() {
         let cat = MenuBarIcon.image(badge: nil).size.width
         let one = MenuBarIcon.image(badge: "1").size.width
@@ -307,9 +312,10 @@ struct MenuBarIconTests {
     func drawsAGreenCatAndALabelColoredBadge(_ appearance: NSAppearance.Name, _ isDark: Bool) throws {
         let image = MenuBarIcon.image(badge: "5")
         let bitmap = try render(image, in: try #require(NSAppearance(named: appearance)))
-        let width = bitmap.pixelsWide
-        let cat = pixels(of: bitmap, columns: 0..<(width * 2 / 5))
-        let badge = pixels(of: bitmap, columns: (width * 3 / 4)..<width)
+        // 猫だけの画像の幅で、猫と件数の列を分ける（ビットマップは 2 倍で描く）
+        let catColumns = Int(MenuBarIcon.image(badge: nil).size.width * 2)
+        let cat = pixels(of: bitmap, columns: 0..<catColumns)
+        let badge = pixels(of: bitmap, columns: catColumns..<bitmap.pixelsWide)
         #expect(cat.contains { $0.greenComponent > 0.5 && $0.greenComponent > $0.redComponent + 0.2 })
         #expect(
             badge.contains { color in
