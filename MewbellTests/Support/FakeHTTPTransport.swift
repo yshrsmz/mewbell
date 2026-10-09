@@ -15,12 +15,18 @@ final class FakeHTTPTransport: HTTPTransport {
 
     var requests: [URLRequest] { recorded.value }
 
+    /// この HTTP メソッドのリクエストの応答を、nil に戻すまで止める（スレッドを塞がずに待つので、呼び出し元の actor に入れる）
+    let pausedMethod = LockedValue<String?>(nil)
+
     func setHandler(_ handler: @escaping Handler) {
         self.handler.value = handler
     }
 
     func send(_ request: URLRequest, bodyLimit: Int) async throws(TransportError) -> HTTPResponse {
         recorded.withLock { $0.append(request) }
+        while let method = pausedMethod.value, method == request.httpMethod {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
         let handler = handler.value
         let response = try handler(request)
         guard response.body.count <= bodyLimit else { throw .bodyTooLarge }

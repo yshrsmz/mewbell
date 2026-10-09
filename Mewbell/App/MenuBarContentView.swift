@@ -4,6 +4,7 @@ import SwiftUI
 struct MenuBarContentView: View {
     let store: AccountStore
     let notifications: NotificationStore
+    let permission: NotificationPermission
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -27,8 +28,14 @@ struct MenuBarContentView: View {
 
             Divider()
 
+            if permission.isDenied {
+                NotificationPermissionBanner()
+            }
+
             if case .accounts(let statuses) = store.state {
-                NotificationListView(statuses: statuses, feeds: notifications.feeds)
+                NotificationListView(statuses: statuses, feeds: notifications.feeds) { thread, account in
+                    notifications.open(thread, in: account)
+                }
             } else {
                 GuidanceView(state: store.state)
             }
@@ -45,6 +52,7 @@ struct MenuBarContentView: View {
         // ポップオーバーを開くたびに読み直す（ログイン直後に開けば一覧に出るように）
         .onAppear {
             store.reload()
+            permission.refresh()
         }
     }
 }
@@ -69,10 +77,12 @@ struct MenuBarContentView: View {
                                 repository: repository)
                         }
                     })
-            ]))
+            ]),
+        permission: NotificationPermission(center: nil, authorization: .denied))
 }
 
 #Preview("gh not found") {
     MenuBarContentView(
-        store: AccountStore(discovery: nil, state: .ghNotFound), notifications: NotificationStore(makePoller: nil))
+        store: AccountStore(discovery: nil, state: .ghNotFound), notifications: NotificationStore(makePoller: nil),
+        permission: NotificationPermission(center: nil))
 }

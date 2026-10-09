@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import os
@@ -19,19 +20,35 @@ final class NotificationStore {
     @ObservationIgnored private let makePoller: PollerFactory?
     @ObservationIgnored private var pollers: [AccountID: (poller: AccountPoller, generation: Int)] = [:]
     @ObservationIgnored private var nextGeneration = 0
+    @ObservationIgnored private let notifier: (any ThreadNotifying)?
+    @ObservationIgnored private let openURL: @MainActor (URL) -> Void
+    /// ポーラーがまだ無いアカウントで、既読にするスレッド（起動の直後に通知をクリックされたとき）
+    @ObservationIgnored private var pendingReads: [AccountID: Set<String>] = [:]
 
     /// `makePoller` が nil のときはポーリングしない（テストのホストや SwiftUI プレビュー用）。
-    init(makePoller: PollerFactory?, feeds: [AccountID: FeedState] = [:]) {
+    init(
+        makePoller: PollerFactory?, notifier: (any ThreadNotifying)? = nil,
+        openURL: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) },
+        feeds: [AccountID: FeedState] = [:]
+    ) {
         self.makePoller = makePoller
+        self.notifier = notifier
+        self.openURL = openURL
         self.feeds = feeds
     }
 
-    static func live(tokens: any TokenProviding) -> NotificationStore {
+    static func live(tokens: any TokenProviding, notifier: any ThreadNotifying) -> NotificationStore {
         let client = GitHubAPIClient(transport: URLSessionTransport())
-        return NotificationStore { account, endpoints, onUpdate in
-            AccountPoller(
-                accountID: account.id, endpoints: endpoints, client: client, tokens: tokens, onUpdate: onUpdate)
-        }
+        return NotificationStore(
+            makePoller: { account, endpoints, onUpdate in
+                AccountPoller(
+                    accountID: account.id, endpoints: endpoints, client: client, tokens: tokens, onUpdate: onUpdate)
+            }, notifier: notifier)
+    }
+
+    /// 全アカウントの未読の一覧の件数の合計（止まったアカウントはスレッドを持たないので 0 件）。
+    var unreadCount: Int {
+        feeds.values.reduce(0) { $0 + $1.threads.count }
     }
 
     /// トークンが「使える」アカウントのポーラーを起動し、一覧から消えたアカウントのポーラーを止めて状態を消す
@@ -45,6 +62,13 @@ final class NotificationStore {
         for id in pollers.keys where !keptIDs.contains(id) {
             pollers.removeValue(forKey: id)?.poller.stop()
             feeds[id] = nil
+            notifier?.accountRemoved(id)
+        }
+        if state != .checking {
+            notifier?.retainOnly(keptIDs)
+            // 読み込みが終わっても一覧に無いか、トークンを取れないアカウントの既読化は捨てる
+            let waitingIDs = Set(statuses.filter { $0.tokenState != .unavailable }.map(\.id))
+            pendingReads = pendingReads.filter { waitingIDs.contains($0.key) }
         }
         for account in statuses.filter({ $0.tokenState == .ready }).map(\.account) where pollers[account.id] == nil {
             guard let endpoints = APIEndpoints(host: account.host) else {
@@ -60,6 +84,9 @@ final class NotificationStore {
             pollers[id] = (poller, generation)
             feeds[id] = .loading
             Self.logger.info("Started polling \(id)")
+            for threadID in pendingReads.removeValue(forKey: id) ?? [] {
+                Task { await poller.markRead(threadID: threadID) }
+            }
             poller.start()
         }
     }
@@ -80,6 +107,32 @@ final class NotificationStore {
         }
     }
 
+    /// 一覧のスレッドをブラウザで開いて既読にする。URL を組み立てられなければ、開かず既読にもしない。
+    func open(_ thread: NotificationThread, in account: AccountID) {
+        guard let endpoints = APIEndpoints(host: account.host),
+            let url = ThreadWebURL.make(for: thread, endpoints: endpoints)
+        else { return }
+        openURL(url)
+        markRead(thread.id, in: account)
+    }
+
+    /// macOS の通知のクリックから、検証済みの URL を開いて既読にする。
+    func openFromNotification(_ request: ThreadOpenRequest) {
+        openURL(request.url)
+        markRead(request.threadID, in: request.account)
+    }
+
+    /// 一覧からすぐに外し、ポーラーに既読化を頼む。ポーラーがまだ無ければ、作るときまで取っておく。
+    private func markRead(_ threadID: String, in account: AccountID) {
+        feeds[account]?.threads.removeAll { $0.id == threadID }
+        notifier?.threadRead(threadID, for: account)
+        if let poller = pollers[account]?.poller {
+            Task { await poller.markRead(threadID: threadID) }
+        } else {
+            pendingReads[account, default: []].insert(threadID)
+        }
+    }
+
     /// すべてのポーラーを止めて状態を消す（終了時）。
     func stopAll() {
         for entry in pollers.values {
@@ -92,6 +145,8 @@ final class NotificationStore {
     private func apply(_ state: FeedState, for id: AccountID, generation: Int) {
         // 止めたポーラーから遅れて届いた更新は捨てる
         guard pollers[id]?.generation == generation, feeds[id] != state else { return }
+        let old = feeds[id]
         feeds[id] = state
+        notifier?.feedChanged(for: id, from: old, to: state)
     }
 }

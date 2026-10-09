@@ -46,6 +46,18 @@ enum NotificationsFetchResult: Sendable, Equatable {
     case failed(FetchFailure)
 }
 
+/// スレッドの既読化の結果。
+enum MarkReadResult: Sendable, Equatable {
+    /// `205`、または `304`（既読だった）と `404`（スレッドがもう無い）
+    case read
+    /// 401
+    case unauthorized
+    /// レート制限の 403 / 429
+    case rateLimited
+    /// そのほかの状態コード、リダイレクト、通信の失敗、送らなかった
+    case failed(FetchFailure)
+}
+
 /// GitHub の REST API のクライアント。トークンを `Authorization` に付けるのはこの型だけ。
 /// 状態を持たない。`AccountPoller` の中から呼ぶ。
 struct GitHubAPIClient: Sendable {
@@ -79,7 +91,8 @@ struct GitHubAPIClient: Sendable {
         while true {
             let response: HTTPResponse
             switch await send(
-                url, endpoints: endpoints, token: token, ifModifiedSince: page == 1 ? ifModifiedSince : nil)
+                url, method: "GET", endpoints: endpoints, token: token,
+                ifModifiedSince: page == 1 ? ifModifiedSince : nil)
             {
             case .success(let value): response = value
             case .failure(let failure): return .failed(failure)
@@ -112,16 +125,43 @@ struct GitHubAPIClient: Sendable {
         }
     }
 
+    /// スレッドを既読にする（`PATCH /notifications/threads/{id}`）。`threadID` が数字でなければ送らない。
+    func markThreadRead(endpoints: APIEndpoints, token: AccessToken, threadID: String) async -> MarkReadResult {
+        guard ThreadID.isValid(threadID) else {
+            Self.logger.error("Refused to mark a thread with an invalid ID as read")
+            return .failed(.rejectedURL)
+        }
+        let url = endpoints.apiURL(path: "notifications/threads/\(threadID)")
+        let response: HTTPResponse
+        switch await send(url, method: "PATCH", endpoints: endpoints, token: token, ifModifiedSince: nil) {
+        case .success(let value): response = value
+        case .failure(let failure): return .failed(failure)
+        }
+        switch response.statusCode {
+        case 205, 304, 404:
+            return .read
+        case 401:
+            return .unauthorized
+        // `classifyFailure` と同じく、`Retry-After` は秒数として読めるときだけレート制限とみなす
+        case 403
+        where response.header("X-RateLimit-Remaining") == "0"
+            || response.header("Retry-After").flatMap({ Int($0) }) != nil, 429:
+            return .rateLimited
+        default:
+            return .failed(.unexpectedStatus(response.statusCode))
+        }
+    }
+
     /// リクエストを組み立てて送る。送り先がアカウントの API ベースの下でなければ送らない。
     private func send(
-        _ url: URL, endpoints: APIEndpoints, token: AccessToken, ifModifiedSince: String?
+        _ url: URL, method: String, endpoints: APIEndpoints, token: AccessToken, ifModifiedSince: String?
     ) async -> Result<HTTPResponse, FetchFailure> {
         guard endpoints.isAllowedRequestURL(url) else {
             Self.logger.error("Refused to send a request outside the API base of \(endpoints.host)")
             return .failure(.rejectedURL)
         }
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = method
         request.setValue("Bearer \(token.value)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
@@ -132,13 +172,14 @@ struct GitHubAPIClient: Sendable {
         let path = url.path()
         do {
             let response = try await transport.send(request, bodyLimit: Self.bodyLimit)
-            Self.logger.info("GET \(path) on \(endpoints.host) returned \(response.statusCode, privacy: .private)")
+            Self.logger.info(
+                "\(method) \(path) on \(endpoints.host) returned \(response.statusCode, privacy: .private)")
             if (300..<400).contains(response.statusCode) && response.statusCode != 304 {
                 return .failure(.redirect)
             }
             return .success(response)
         } catch {
-            Self.logger.error("GET \(path) on \(endpoints.host) failed: \(String(describing: error))")
+            Self.logger.error("\(method) \(path) on \(endpoints.host) failed: \(String(describing: error))")
             return switch error {
             case .bodyTooLarge: .failure(.bodyTooLarge)
             case .network(let code): .failure(.network(code: code))

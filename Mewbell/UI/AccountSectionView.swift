@@ -5,12 +5,14 @@ import SwiftUI
 struct NotificationListView: View {
     let statuses: [AccountStatus]
     let feeds: [AccountID: FeedState]
+    /// スレッドがクリックされたとき（ブラウザで開いて既読にする）
+    let open: (NotificationThread, AccountID) -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(statuses) { status in
-                    AccountSectionView(status: status, feed: feeds[status.id])
+                    AccountSectionView(status: status, feed: feeds[status.id]) { open($0, status.id) }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -24,6 +26,7 @@ struct NotificationListView: View {
 struct AccountSectionView: View {
     let status: AccountStatus
     let feed: FeedState?
+    let open: (NotificationThread) -> Void
 
     private var account: Account { status.account }
 
@@ -119,17 +122,9 @@ struct AccountSectionView: View {
             EmptyView()
         }
     }
-
-    /// Web の URL を組み立て、アカウントのホストの `https` のときだけ開く。
-    private func open(_ thread: NotificationThread) {
-        guard let endpoints = APIEndpoints(host: account.host),
-            let url = ThreadWebURL.make(for: thread, endpoints: endpoints)
-        else { return }
-        NSWorkspace.shared.open(url)
-    }
 }
 
-/// スレッドの行。クリックでブラウザで開く。
+/// スレッドの行。クリックでブラウザで開いて既読にする。
 struct ThreadRow: View {
     let thread: NotificationThread
     let action: () -> Void
@@ -158,7 +153,7 @@ struct ThreadRow: View {
             .padding(.vertical, 3)
         }
         .buttonStyle(.plain)
-        .help("Open in browser")
+        .help("Open in browser and mark as read")
     }
 
     private var symbol: String {
@@ -271,7 +266,8 @@ struct FeedStatusView: View {
                 phase: .retrying(nextAttempt: now.addingTimeInterval(240), rateLimited: false),
                 threads: [thread("4", "acme/web", .discussion, "team_mention", minutesAgo: 600)].compactMap { $0 }),
             erin.id: FeedState(phase: .unauthorized, threads: []),
-        ]
+        ],
+        open: { _, _ in }
     )
     .padding()
     .frame(width: 380)
@@ -290,7 +286,8 @@ struct FeedStatusView: View {
         feeds: [
             alice.id: FeedState(phase: .loaded(updatedAt: Date()), threads: []),
             bob.id: .loading,
-        ]
+        ],
+        open: { _, _ in }
     )
     .padding()
     .frame(width: 380)
