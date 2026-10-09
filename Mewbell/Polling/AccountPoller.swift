@@ -27,7 +27,7 @@ actor AccountPoller {
     private var state = FeedState.loading
     /// 最後にすべてのページを取り終えた 200 の `Last-Modified`
     private var lastModified: String?
-    /// 最後に条件なしで全ページを取り終えた時刻
+    /// 最後に 200 で全ページを取り終えた時刻（`If-Modified-Since` を付けた取得でも 200 なら一覧はすべて取り直される）
     private var lastFullFetch: Date?
     /// 今のトークンでスコープを確かめたか
     private var scopesVerified = false
@@ -134,6 +134,8 @@ actor AccountPoller {
         let ifModifiedSince = isDue ? nil : lastModified
         let result = await client.fetchNotifications(
             endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince)
+        // 止められた（再開で新しいループに替わった）後に返った結果では、状態を書き換えない
+        guard !Task.isCancelled else { return result }
         if case .updated = result {
             // 条件付きでも 200 なら全ページを取り直しているので、条件なしと同じく一覧は最新になる
             lastFullFetch = now()

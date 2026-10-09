@@ -72,9 +72,10 @@ final class NotificationStore {
         }
     }
 
-    /// 各アカウントの次の取得を `If-Modified-Since` なしにする（再読み込みボタン）。取得は早めない。
+    /// 止まっていないアカウントの次の取得を `If-Modified-Since` なしにする（再読み込みボタン）。取得は早めない。
+    /// 止まっているアカウントは、再開でトークンを取り直すので、どのみち条件なしになる。
     func requestUnconditionalFetch() {
-        for entry in pollers.values {
+        for (id, entry) in pollers where feeds[id]?.phase.isStopped != true {
             entry.poller.requestUnconditionalFetch()
         }
     }
