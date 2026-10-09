@@ -48,3 +48,10 @@ final class FakeHTTPTransport: HTTPTransport {
         Data("[\(ids.map { threadJSON(id: String($0), repository: repository) }.joined(separator: ","))]".utf8)
     }
 }
+
+extension FakeHTTPTransport {
+    /// 届いたリクエストの `If-Modified-Since`（順に）
+    var ifModifiedSince: [String?] {
+        requests.map { $0.value(forHTTPHeaderField: "If-Modified-Since") }
+    }
+}

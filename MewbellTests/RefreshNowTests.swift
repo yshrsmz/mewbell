@@ -11,10 +11,6 @@ struct RefreshNowTests {
         fixture = try PollerFixture()
     }
 
-    private func moveClock(by seconds: TimeInterval) {
-        fixture.clock.withLock { $0 = $0.addingTimeInterval(seconds) }
-    }
-
     /// 最初の取得を終えて、次の取得を待っているポーラー。
     private func startAndWait() async {
         fixture.poller.start()
@@ -24,7 +20,7 @@ struct RefreshNowTests {
     @Test func wakesTheWaitAndFetchesWithoutIfModifiedSince() async {
         fixture.respond([PollerFixture.ok(1...1), PollerFixture.ok(1...2, lastModified: "LM-2")])
         await startAndWait()
-        moveClock(by: 20)
+        fixture.moveClock(by: 20)
         await fixture.poller.refreshNow()
         #expect(fixture.ifModifiedSince == [nil, nil])
         #expect(fixture.lastIDs == ["1", "2"])
@@ -37,7 +33,7 @@ struct RefreshNowTests {
     @Test func waitsUntilTenSecondsAfterThePreviousFetch() async {
         fixture.respond([PollerFixture.ok(1...1), PollerFixture.ok(1...2)])
         await startAndWait()
-        moveClock(by: 3)
+        fixture.moveClock(by: 3)
         let refresh = Task { await fixture.poller.refreshNow() }
         await fixture.sleeper.waitForSleeps(2)
         #expect(fixture.sleeper.durations == [.seconds(60), .seconds(7)])
@@ -76,7 +72,7 @@ struct RefreshNowTests {
         await startAndWait()
         fixture.advance(by: 60)
         await fixture.sleeper.waitForSleeps(2)
-        moveClock(by: 20)
+        fixture.moveClock(by: 20)
         await fixture.poller.refreshNow()
         #expect(fixture.transport.requests.count == 2)
         #expect(fixture.sleeper.durations == [.seconds(60), .seconds(300)])
@@ -126,7 +122,7 @@ struct RefreshNowTests {
         fixture.respond([PollerFixture.ok(1...1), HTTPResponse(statusCode: 401), PollerFixture.ok(1...3)])
         fixture.tokens.refreshedValue.value = "test-token-alice-2"
         await startAndWait()
-        moveClock(by: 20)
+        fixture.moveClock(by: 20)
         await fixture.poller.refreshNow()
         #expect(fixture.transport.requests.count == 3)
         #expect(fixture.lastIDs == ["1", "2", "3"])
@@ -165,17 +161,13 @@ struct NotificationStoreRefreshTests {
         return store
     }
 
-    private nonisolated var ifModifiedSince: [String?] {
-        transport.requests.map { $0.value(forHTTPHeaderField: "If-Modified-Since") }
-    }
-
     @Test func fetchesEveryAccountNowAndShowsTheProgress() async {
         let store = await loadedStore()
         transport.pausedMethod.value = "GET"
         store.refresh()
         #expect(store.isRefreshing)
         await waitUntil { self.transport.requests.count == 4 }
-        #expect(ifModifiedSince == [nil, nil, nil, nil])
+        #expect(transport.ifModifiedSince == [nil, nil, nil, nil])
         #expect(store.isRefreshing)
         transport.pausedMethod.value = nil
         await waitUntil { MainActor.assumeIsolated { !store.isRefreshing } }

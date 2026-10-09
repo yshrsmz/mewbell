@@ -33,27 +33,27 @@
 `AccountPoller` の待ちを次の形にする。
 
 - `sleep(delay)` を子のタスク（`sleepTask`）で走らせ、ループは `withTaskCancellationHandler` でその完了を待つ。ループが止められたら子も止める（今までどおりループを抜ける）
-- `wake` は `sleepTask` だけを止める。ループは「自分が止められていない」ことを `Task.isCancelled` で確かめ、止められていなければ待ちを終えたものとして次へ進む
-- 起こされた後は、前の取得を始めた時刻（`lastFetchStartedAt`）から 10 秒（`minimumUserFetchInterval`）たっていなければ、残りの時間だけもう一度待つ（この待ちは起こせない）。時刻は注入した `now` で測る
+- 再読み込みは `sleepTask` だけを止める。ループは「自分が止められていない」ことを `Task.isCancelled` で確かめ、止められていなければ待ちを終えたものとして次へ進む
+- 起こされた後は、前の取得を始めた時刻から 10 秒（`RefreshWaiters.minimumInterval`）たっていなければ、残りの時間だけもう一度待つ（この待ちは起こせない）。時刻は注入した `now` で測る
 
-ループの外から待ちを起こすのは actor のメソッド（`fetchNow()`）にする。`sleepTask` は actor の状態なので、ループが待っている間（actor は空いている）に入れる。
+ループの外から待ちを起こすのは actor のメソッド（`refreshNow()`）にする。`sleepTask` は actor の状態なので、ループが待っている間（actor は空いている）に入れる。
 
 代わりの案:
 
 - (a) ループごと止めて、`run` を作り直す（`resume()` と同じ）。取得の途中で押されると、その取得の結果を捨てることになり、`fetchCount` や隠しているスレッドの扱いとも絡むので採らない
 - (b) `AsyncStream` で「起きろ」を送り、`sleep` と競争させる。待ちごとに `TaskGroup` が要り、(D1) より大きくなる
 
-### D2. `fetchNow()` は押したことによる取得の終わりを待つ
+### D2. `refreshNow()` は押したことによる取得の終わりを待つ
 
-`AccountPoller` に `func fetchNow() async` を足す。
+`AccountPoller` に `func refreshNow() async` を足す。待ち手と取得の試みの数・開始時刻は `RefreshWaiters`（`AccountPoller` の中だけで使う値型）に持つ。
 
 1. `unconditionalRequested` を立てる
-2. 状態が止まっている（`isStopped`）か、レート制限で待っている（`.retrying(rateLimited: true)`）なら、すぐ戻る（印だけ残るので、次の取得は条件なしになる）
-3. 「この取得番号以降の取得が終わったら起こす」待ち手（`CheckedContinuation`）を `fetchWaiters` に足す。番号は、取得中なら今の取得の次（`fetchCount`）、待っているなら次に始める取得（`fetchCount`）。どちらも `fetchCount` でよい（取得中は、もう `fetchCount` を進めてある）
-4. 待っているなら `sleepTask` を止めて起こす。取得中なら何もしない（取得が終わった後の待ちに入ったところで、待ち手があれば起こさずに 10 秒の下限だけ待つ）
+2. レート制限で待っている（`.retrying(rateLimited: true)`）か、ループが無ければ、すぐ戻る（印だけ残るので、次の取得は条件なしになる）
+3. 「次に始める試みが終わったら起こす」待ち手（`CheckedContinuation`）を `RefreshWaiters` に足す。試みはループの 1 周ごとに数える（トークンが無くて送らなかった回も含む）。取得中なら、今の試みの次になる
+4. 止まっている（`isStopped`）なら `resume()` で再開する（再開の最初の取得を同じ待ち手で待つ）。待っているなら `sleepTask` を止めて起こす。取得中なら何もしない（取得が終わった後の待ちに入ったところで、待ち手があれば起こさずに 10 秒の下限だけ待つ）
 5. 待ち手が起こされるまで待つ
 
-ループは `handle` の後（状態を publish した後）に、終わった取得の番号以上を待っている待ち手を起こす。`retryNow`（401 でトークンを取り直してすぐやり直す）のときは、やり直しの取得が終わるまで起こさない。ループが終わるとき（止めた・止められた）は、残っている待ち手をすべて起こす。止まっているアカウントを `resume()` で起こし直したときの最初の取得も、同じ待ち手で待てる（`resume()` の後に `fetchNow()` を呼ぶ）。
+ループは `handle` の後（状態を publish した後）に、終わった取得の番号以上を待っている待ち手を起こす。`retryNow`（401 でトークンを取り直してすぐやり直す）のときは、やり直しの取得が終わるまで起こさない。ループが終わるとき（止めた・止められた）は、残っている待ち手をすべて起こす。止めたループが新しいループ（`resume()`）より後に終わったときは、新しいループの待ち手を起こさないよう、ループに番号を振って確かめる。
 
 取得中に押されたときの「終わった後にもう 1 回」は、待ちに入るときに待ち手があるかで決める。待ち手がいて、その待ち手の番号の取得をまだ始めていなければ、`delay` の代わりに 10 秒の下限までの残りだけ待つ。
 
@@ -62,8 +62,8 @@
 再読み込みボタンの処理を `NotificationStore.refresh()`（`@MainActor`）にまとめる。
 
 - `isRefreshing: Bool`（`@Observable` で見せる）を立てる
-- `requestUnconditionalFetch()` と `resumeStopped()` を今までどおりの順で呼ぶ（止まっているアカウントに印を立てないため、再開より先に印）
-- `Task` の中で、そのときのポーラーすべてに `fetchNow()` を `withTaskGroup` で並べて呼び、すべて戻ったら `isRefreshing` を下ろす。続けて押されないよう、`isRefreshing` の間は `refresh()` を何もしない
+- 止まっているアカウントの区画を、すぐ最初の取得中の表示にする（印と再開は各ポーラーの `refreshNow()` が行う）
+- `Task` の中で、そのときのポーラーすべてに `refreshNow()` を `withTaskGroup` で並べて呼び、すべて戻ったら `isRefreshing` を下ろす。続けて押されないよう、`isRefreshing` の間は `refresh()` を何もしない
 
 `AccountStore.reload(userInitiated:)` はボタンから今までどおり呼ぶ。ボタンは `store.isReloading || notifications.isRefreshing` の間、読み込み中の表示にして押せなくする。読み直しで新しいアカウントが現れても、`refresh()` を呼んだ時点のポーラーだけを待つ（Non-Goals）。
 
@@ -81,9 +81,9 @@
 
 ## スレッドとアクター
 
-- 待ち（`sleepTask`）、待ち手（`fetchWaiters`）、`lastFetchStartedAt` は `AccountPoller`（actor）の中だけで読み書きする。`fetchNow()` は actor のメソッドで、ループが `await` している間に入る（actor の再入）
+- 待ち（`sleepTask`）、待ち手と試みの開始時刻（`refreshWaiters`）は `AccountPoller`（actor）の中だけで読み書きする。`refreshNow()` は actor のメソッドで、ループが `await` している間に入る（actor の再入）
 - `unconditionalRequested` は今までどおり `nonisolated` の `Atomic<Bool>`
-- `NotificationStore.refresh()` と `isRefreshing` は `@MainActor`。`fetchNow()` を待つ `Task` は `@MainActor` を継承し、終わったら `isRefreshing` を下ろす
+- `NotificationStore.refresh()` と `isRefreshing` は `@MainActor`。`refreshNow()` を待つ `Task` は `@MainActor` を継承し、終わったら `isRefreshing` を下ろす
 - `SWIFT_APPROACHABLE_CONCURRENCY` のため、テストの fake で同期的に待たない。`ManualSleeper` はキャンセルで抜ける作りなので、そのまま使える
 
 ## テストでの差し替え
