@@ -205,6 +205,51 @@ struct MarkAllReadPollingTests {
         fixture.poller.stop()
     }
 
+    @Test func aFailedLaterPutDoesNotEndAnEarlierOnesHiding() async {
+        // 12:30 までの 1 回目は受け付けられ、12:45 までの 2 回目は失敗する
+        await startLoaded(
+            [Self.twoThreads, Self.threeThreads, Self.threeThreads],
+            put: { request in
+                HTTPResponse(statusCode: Self.lastReadAt(request) == Self.half ? 202 : 500)
+            })
+        await fixture.poller.markAllRead()
+        fixture.sleeper.advance()
+        await fixture.sleeper.waitForSleeps(2)
+        #expect(lastIDs == ["3"])
+        await fixture.poller.markAllRead()
+        #expect(puts.map(Self.lastReadAt) == [Self.half, Self.quarterTo])
+        // 2 回目の失敗の後も、1 回目の 202 の分（12:30 以前）は隠し続け、12:45 は戻る
+        fixture.sleeper.advance()
+        await fixture.sleeper.waitForSleeps(3)
+        #expect(lastIDs == ["3"])
+        fixture.poller.stop()
+    }
+
+    @Test func revealsTheThreadsWhenTheClockGoesBack() async {
+        await startLoaded([Self.twoThreads, Self.twoThreads])
+        await fixture.poller.markAllRead()
+        // 202 の後に時計が 1 時間戻ったら、期限の内とはみなさない
+        fixture.advance(by: -3600)
+        await fixture.sleeper.waitForSleeps(2)
+        #expect(lastIDs == ["1", "2"])
+        fixture.poller.stop()
+    }
+
+    @Test func sendsNothingWhileRetrying() async {
+        // 2 回目の取得は通信の失敗になり、最後に取得できた 2 件を持ったまま待つ
+        await startLoaded([Self.twoThreads])
+        fixture.sleeper.advance()
+        await fixture.sleeper.waitForSleeps(2)
+        guard case .retrying = fixture.last?.phase else {
+            Issue.record("Expected retrying, got \(String(describing: fixture.last?.phase))")
+            return
+        }
+        await fixture.poller.markAllRead()
+        #expect(puts.isEmpty)
+        #expect(lastIDs == ["1", "2"])
+        fixture.poller.stop()
+    }
+
     @Test func sendsNothingForAnEmptyList() async {
         await startLoaded([Self.ok([])])
         await fixture.poller.markAllRead()

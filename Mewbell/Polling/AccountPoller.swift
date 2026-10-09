@@ -50,8 +50,8 @@ actor AccountPoller {
     private var fetchCount = 0
     /// 既読・Done にしたので、取得の結果から取り除いているスレッド
     private var hidden: [String: HiddenUntil] = [:]
-    /// すべて既読にしたので、取得の結果から `updated_at` で取り除いている範囲
-    private var readThrough: ReadThrough?
+    /// すべて既読にしたので、取得の結果から `updated_at` で取り除いている範囲（すべて既読の番号ごと）
+    private var readThroughs: [Int: ReadThrough] = [:]
     /// 次のすべて既読に振る番号
     private var readThroughCount = 0
 
@@ -264,7 +264,7 @@ actor AccountPoller {
     /// 止まった状態にする。スレッドは捨てる。
     private func stop(as phase: FeedPhase) async {
         state = FeedState(phase: phase, threads: [])
-        readThrough = nil
+        readThroughs.removeAll()
         lastModified = nil
         scopesVerified = false
         consecutiveFailures = 0
@@ -318,15 +318,15 @@ extension AccountPoller {
     /// 一覧にあるスレッドの `updated_at` の最大値までを、すべて既読にする。一覧からすぐに外し、`PUT /notifications` を送り、
     /// 次の取得を条件なしにする。止まっているとき、トークンが無いとき、一覧が空のときは何もしない。
     func markAllRead() async {
-        // 止まっているかは、トークンを待っている間に止められることがあるので待った後に見る
-        guard let token = await tokens.currentToken(for: accountID), !state.phase.isStopped,
+        // 取得の状態は、トークンを待っている間に変わることがあるので待った後に見る
+        guard let token = await tokens.currentToken(for: accountID), case .loaded = state.phase,
             let newest = state.threads.map(\.updatedAt).max()
         else { return }
-        // 前のすべて既読がまだ終わっていなければ、その範囲も含めて隠し続ける
-        let cutoff = max(newest, readThrough?.cutoff ?? newest)
+        // `last_read_at` は秒までしか送らないので、隠す範囲も秒に揃える
+        let cutoff = Date(timeIntervalSince1970: newest.timeIntervalSince1970.rounded(.down))
         let serial = readThroughCount
         readThroughCount += 1
-        readThrough = ReadThrough(serial: serial, cutoff: cutoff, until: .requestInFlight)
+        readThroughs[serial] = ReadThrough(cutoff: cutoff, until: .requestInFlight)
         state.threads.removeAll { $0.updatedAt <= cutoff }
         await publish(state)
 
@@ -334,11 +334,15 @@ extension AccountPoller {
         if result != .succeeded {
             Self.logger.error("Could not mark all threads of \(self.accountID) as read: \(String(describing: result))")
         }
-        if readThrough?.serial == serial {
-            readThrough?.until =
+        // 止まって消されていたら、戻さない
+        if readThroughs[serial] != nil {
+            let completedAt = now()
+            readThroughs[serial]?.until =
                 result == .succeeded
-                ? .fetchesStartedBefore(now().addingTimeInterval(Self.unconditionalFetchInterval))
-                : .fetchesBefore(fetchCount)
+                ? .succeeded(
+                    fetchesBefore: fetchCount, completedAt: completedAt,
+                    deadline: completedAt.addingTimeInterval(Self.unconditionalFetchInterval))
+                : .failed(fetchesBefore: fetchCount)
         }
         unconditionalRequested.store(true, ordering: .relaxed)
     }
@@ -352,18 +356,10 @@ extension AccountPoller {
             guard case .fetch(let first) = until else { return true }
             return fetchNumber < first
         }
-        if let readThrough {
-            let applies =
-                switch readThrough.until {
-                case .requestInFlight: true
-                case .fetchesStartedBefore(let deadline): startedAt < deadline
-                case .fetchesBefore(let number): fetchNumber < number
-                }
-            if !applies {
-                self.readThrough = nil
-            }
+        readThroughs = readThroughs.filter { _, readThrough in
+            readThrough.applies(toFetch: fetchNumber, startedAt: startedAt)
         }
-        let cutoff = readThrough?.cutoff
+        let cutoff = readThroughs.values.map(\.cutoff).max()
         return threads.filter { thread in
             hidden[thread.id] == nil && (cutoff.map { thread.updatedAt > $0 } ?? true)
         }
@@ -372,17 +368,28 @@ extension AccountPoller {
 
 /// すべて既読にした範囲（`updated_at` が `cutoff` 以前のスレッド）を、どの取得の結果から取り除くか。
 private struct ReadThrough {
-    /// どのすべて既読のものか（先に始めたすべて既読の結果で、後のものの期限を書き換えないため）
-    let serial: Int
     let cutoff: Date
     var until: Until
 
     enum Until {
         /// リクエストの結果が出るまで、どの取得の結果からも取り除く
         case requestInFlight
-        /// 成功した: この時刻より前に始めた取得の結果から取り除く（`202` で GitHub が既読にし終えるまでの分）
-        case fetchesStartedBefore(Date)
+        /// 成功した: 結果が出る前に始めた取得と、結果から `deadline` までに始めた取得の結果から取り除く
+        /// （`202` で GitHub が既読にし終えるまでの分。時計が `completedAt` より前に戻ったら、もう取り除かない）
+        case succeeded(fetchesBefore: Int, completedAt: Date, deadline: Date)
         /// 失敗した: この番号より前に始めた取得の結果からだけ取り除く
-        case fetchesBefore(Int)
+        case failed(fetchesBefore: Int)
+    }
+
+    /// この番号・開始時刻の取得の結果から取り除くか。取得は順に行うので、一度 false になったらその後も false。
+    func applies(toFetch number: Int, startedAt: Date) -> Bool {
+        switch until {
+        case .requestInFlight:
+            true
+        case .succeeded(let fetchesBefore, let completedAt, let deadline):
+            number < fetchesBefore || (completedAt <= startedAt && startedAt < deadline)
+        case .failed(let fetchesBefore):
+            number < fetchesBefore
+        }
     }
 }

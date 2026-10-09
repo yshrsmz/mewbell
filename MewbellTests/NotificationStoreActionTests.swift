@@ -83,6 +83,14 @@ struct NotificationStoreActionTests {
         store.stopAll()
     }
 
+    @Test func ignoresDoneWithoutAPoller() throws {
+        let thread = try Self.thread()
+        let store = NotificationStore(
+            makePoller: nil, feeds: [alice: FeedState(phase: .loaded(updatedAt: .now), threads: [thread])])
+        store.markDone(thread, in: alice)
+        #expect(store.feeds[alice]?.threads.map(\.id) == ["1"])
+    }
+
     @Test func marksAllThreadsOfOneAccountRead() async {
         let notifier = SystemNotifier(center: center)
         let store = await loadedStore(notifier: notifier)

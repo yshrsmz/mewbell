@@ -147,6 +147,8 @@ struct MarkAllReadButton: View {
                 confirming = false
             }
         }
+        // 確認の途中で件数が変わったら、見ていないスレッドまで既読にしないように確認からやり直す
+        .onChange(of: count) { confirming = false }
         .onDisappear { confirming = false }
     }
 }

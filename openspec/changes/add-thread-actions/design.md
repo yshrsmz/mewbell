@@ -65,38 +65,40 @@ GitHub の前提（GHES 3.13 のドキュメントでも同じ）:
 
 ### D4. すべて既読は「時刻で隠す」
 
-すべて既読はスレッド ID の集合ではなく `last_read_at` で決まる（GitHub の側も時刻で既読にする）ので、`hidden` とは別に、ポーラーに 1 つだけ `readThrough: ReadThrough?` を持つ。
+すべて既読はスレッド ID の集合ではなく `last_read_at` で決まる（GitHub の側も時刻で既読にする）ので、`hidden` とは別に、ポーラーにすべて既読の番号ごとの `readThroughs: [Int: ReadThrough]` を持つ。
 
 ```
 struct ReadThrough { cutoff: Date; until: Until }
 enum Until {
-  case requestInFlight          // 結果が出るまで、どの取得の結果からも cutoff 以前を除く
-  case fetchesStartedBefore(Date)  // 成功: この時刻（結果 + 5 分）より前に始めた取得の結果から除く
-  case fetchesBefore(Int)       // 失敗: この番号より前に始めた取得の結果からだけ除く
+  case requestInFlight                                  // 結果が出るまで、どの取得の結果からも cutoff 以前を除く
+  case succeeded(fetchesBefore: Int, completedAt: Date, deadline: Date)
+      // 成功: 結果が出る前に始めた取得と、completedAt〜deadline（結果 + 5 分）に始めた取得の結果から除く
+  case failed(fetchesBefore: Int)                       // 失敗: この番号より前に始めた取得の結果からだけ除く
 }
 ```
 
 `markAllRead()` の流れ（actor の中）:
 
-1. 止まっている、トークンが無い、`state.threads` が空 → 何もしない（spec: 送らない・外さない）
-2. `cutoff = state.threads.map(\.updatedAt).max()`。`readThrough = ReadThrough(cutoff, .requestInFlight)`。`state.threads` から `updatedAt <= cutoff` を外して `publish`
+1. トークンが無い、取得の状態が `.loaded` でない（トークンを待つ間に変わることがあるので、待った後に見る）、`state.threads` が空 → 何もしない
+2. `cutoff = state.threads.map(\.updatedAt).max()` を秒に切り捨てる（`last_read_at` は秒までしか送らないので、隠す範囲と GitHub が既読にする範囲を揃える）。新しい番号で `.requestInFlight` の `ReadThrough` を入れ、`state.threads` から `updatedAt <= cutoff` を外して `publish`
 3. `PUT` を送る（`await`。この間も取得は進む）
-4. 結果が `.succeeded` なら `.fetchesStartedBefore(now() + 300 秒)`、それ以外なら `.fetchesBefore(fetchCount)`
+4. 自分の番号の `ReadThrough` がまだあれば（止まって消されていなければ）、結果に合わせて `.succeeded` か `.failed` にする
 5. 条件なしの印を立てる
 
-`revealOrHide` で、取得の結果に `hidden` の除外に加えて `readThrough` の除外を掛ける。取得の開始時刻は、`fetch(with:)` の頭で連番と一緒に取っておく。期限が過ぎた・番号を越えた `readThrough` は `revealOrHide` で消す。`stop(as:)` でも消す（止まると一覧が空になり、再開後の最初の取得をそのまま信じてよいため）。
+`revealOrHide` で、取得の結果に `hidden` の除外に加えて、当てはまる `ReadThrough` のうち最大の `cutoff` での除外を掛ける。取得の開始時刻は、`fetch(with:)` の頭で連番と一緒に取っておく。取得は 1 つのループで順に行うので、一度当てはまらなくなった `ReadThrough` はその後も当てはまらず、そこで消す。`stop(as:)` でもすべて消す（止まると一覧が空になり、再開後の最初の取得をそのまま信じてよいため）。
 
-すべて既読が終わる前にもう一度すべて既読が押されたときは、新しい `cutoff`（大きい方）と `.requestInFlight` で上書きする。先に終わった方の結果で `until` を書き換えないように、`readThrough` に通し番号を持たせ、自分の番号のときだけ 4 を行う。
-
+- すべて既読を続けて押したとき、番号ごとに別々に持つので、後のリクエストの失敗で前のリクエストの成功の分（`202` の 5 分）を戻さない
+- 時計が戻ったとき: `.succeeded` は `completedAt <= startedAt` も見るので、戻った後に始めた取得では除かない（`periodicUnconditionalFetchIsDue` と同じく、戻った分だけ隠し続けることをしない）
 - 5 分の根拠: 条件なしの取得の間隔（`unconditionalFetchInterval`）と同じ。`202` の非同期の処理がそれより長くかかると、残りのスレッドが一度一覧に戻るが、次の取得で消える（Risks）
 - 代替案: 成功したら期限なしで除き続ける → GitHub の非同期の処理が失敗したときに、未読のスレッドが二度と一覧に出ない。期限を付ける
 - 代替案: 既存の `hidden` に、外したスレッドの ID を全部入れる → `202` の後に「既読化の後に始めた取得の 200」で戻ってしまう。また、ページの上限の外にあって一覧に無かったスレッドは隠せない
+- 代替案: `ReadThrough` を 1 つだけ持ち、続けて押したら上書きする → 後のリクエストが失敗すると、前のリクエストの成功の分まで戻ってしまう（code-review の指摘で改めた）
 - `cutoff` を `Last-Modified` から取る案: `Last-Modified` は直近の 200 の値で、隠しているスレッドを除いた後の一覧とずれることがある。一覧に見えているものの最大値の方が、ユーザーが見たものと一致する
 
 ### D5. `NotificationStore` の入り口
 
 - `markRead(_ threadID:, in:)` を `perform(.read(id), in:)` にし、`markDone` を足す。どちらも `feeds` からすぐ外し、`notifier?.threadRemoved` を呼び、ポーラーの `perform` を `Task` で呼ぶ。ポーラーが無いときの `pendingReads` は既読（通知のクリックの経路）のときだけ使い、Done ではポーラーが無ければ何もしない（UI に行が出るのはポーラーがあるときだけ）
-- `markAllRead(in:)` は `feeds` を自分では書き換えず、ポーラーの `markAllRead()` を呼ぶだけにする。外した結果はポーラーの `publish` → `apply` で届く（actor への 1 回の往復で、手で外すのと見た目は変わらない）。こうすると「止まっている・トークンが無いときは外さない」の判断がポーラーの 1 か所で済み、`cutoff` もポーラーの状態から取れる
+- `markAllRead(in:)` は `feeds` を自分では書き換えず、ポーラーの `markAllRead()` を呼ぶだけにする。外した結果はポーラーの `publish` → `apply` で届く（actor への 1 回の往復で、手で外すのと見た目は変わらない）。こうすると「取得できていない・トークンが無いときは外さない」の判断がポーラーの 1 か所で済み（store が見た後に状態が変わっても、ポーラーが見直す）、`cutoff` もポーラーの状態から取れる
 - `FeedState.canMarkAllRead` は `.loaded` で `threads` が空でないとき true。UI のボタンの有効・無効と、`markAllRead(in:)` の前提の確認に使う
 
 ### D6. macOS の通知の取り下げ
@@ -118,6 +120,7 @@ enum Until {
 
 見出しの `Spacer` の後ろに置く。`count: Int`、`isEnabled: Bool`、`action: () -> Void` を受け取り、確認の状態は View の `@State` に持つ（ストアに持たない。ポップオーバーを閉じれば消えてよい状態なので）。
 
+- 確認中に `count` が変わったら（新着が届いた）`confirming = false` に戻す（見ていないスレッドまで既読にしないため）
 - 1 回目: `confirming = true` にし、5 秒後に `false` に戻す `Task` を始める（`.task(id: confirming)` で、`confirming` が変わったら前のものは取り消される）
 - 2 回目（`confirming` のまま）: `action()` を呼び、`confirming = false`
 - `.onDisappear` で `confirming = false`。`isEnabled` が `false` になったら（`onChange`）`confirming = false`

@@ -140,14 +140,16 @@ final class NotificationStore {
     }
 
     /// 一覧からすぐに外し、ポーラーに操作を頼む。既読はポーラーがまだ無ければ、作るときまで取っておく
-    /// （起動の直後に通知をクリックされたとき）。
+    /// （起動の直後に通知をクリックされたとき）。Done はポーラーが無ければ何もしない（一覧の行はポーラーがあるときだけ出る）。
     private func perform(_ action: ThreadAction, in account: AccountID) {
+        let poller = pollers[account]?.poller
+        if poller == nil, case .done = action { return }
         let threadID = action.threadID
         feeds[account]?.threads.removeAll { $0.id == threadID }
         notifier?.threadRemoved(threadID, for: account)
-        if let poller = pollers[account]?.poller {
+        if let poller {
             Task { await poller.perform(action) }
-        } else if case .read = action {
+        } else {
             pendingReads[account, default: []].insert(threadID)
         }
     }
