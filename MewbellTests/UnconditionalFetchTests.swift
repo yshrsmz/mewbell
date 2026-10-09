@@ -11,11 +11,10 @@ struct UnconditionalFetchTests {
         fixture = try PollerFixture()
     }
 
-    private static let notModified = HTTPResponse(statusCode: 304)
-
     @Test func refetchesWithoutIfModifiedSinceEveryFiveMinutes() async {
         fixture.respond([
-            PollerFixture.ok(1...3), Self.notModified, PollerFixture.ok(1...2, lastModified: "LM-2"), Self.notModified,
+            PollerFixture.ok(1...3), PollerFixture.notModified, PollerFixture.ok(1...2, lastModified: "LM-2"),
+            PollerFixture.notModified,
         ])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
@@ -36,11 +35,16 @@ struct UnconditionalFetchTests {
         fixture.poller.stop()
     }
 
-    @Test func retriesWithoutIfModifiedSinceAfterAFailedUnconditionalFetch() async {
-        fixture.respond([PollerFixture.ok(1...1), HTTPResponse(statusCode: 500), Self.notModified])
+    /// 条件なしにした取得（5 分たった、または再読み込み）が失敗したら、次の取得もまた条件なしにする。
+    @Test(arguments: [false, true])
+    func retriesWithoutIfModifiedSinceAfterAFailedUnconditionalFetch(requested: Bool) async {
+        fixture.respond([PollerFixture.ok(1...1), HTTPResponse(statusCode: 500), PollerFixture.notModified])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
-        fixture.advance(by: 300)
+        if requested {
+            fixture.poller.requestUnconditionalFetch()
+        }
+        fixture.advance(by: requested ? 60 : 300)
         await fixture.sleeper.waitForSleeps(2)
         fixture.advance(by: 60)
         await fixture.sleeper.waitForSleeps(3)
@@ -49,7 +53,9 @@ struct UnconditionalFetchTests {
     }
 
     @Test func requestedFetchIsUnconditionalButNotEarlier() async {
-        fixture.respond([PollerFixture.ok(1...1), PollerFixture.ok(1...2, lastModified: "LM-2"), Self.notModified])
+        fixture.respond([
+            PollerFixture.ok(1...1), PollerFixture.ok(1...2, lastModified: "LM-2"), PollerFixture.notModified,
+        ])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         fixture.poller.requestUnconditionalFetch()
@@ -67,19 +73,6 @@ struct UnconditionalFetchTests {
         await fixture.sleeper.waitForSleeps(3)
         #expect(fixture.ifModifiedSince == [nil, nil, "LM-2"])
         #expect(fixture.sleeper.durations == [60, 60, 60].map { .seconds($0) })
-        fixture.poller.stop()
-    }
-
-    @Test func keepsTheRequestWhenTheRequestedFetchFails() async {
-        fixture.respond([PollerFixture.ok(1...1), HTTPResponse(statusCode: 500), Self.notModified])
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
-        fixture.poller.requestUnconditionalFetch()
-        fixture.advance(by: 60)
-        await fixture.sleeper.waitForSleeps(2)
-        fixture.advance(by: 60)
-        await fixture.sleeper.waitForSleeps(3)
-        #expect(fixture.ifModifiedSince == [nil, nil, nil])
         fixture.poller.stop()
     }
 

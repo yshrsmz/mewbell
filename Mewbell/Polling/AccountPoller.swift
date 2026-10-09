@@ -21,8 +21,8 @@ actor AccountPoller {
 
     /// 走っているループ。actor に入らずに起動・停止できるように、ロックで持つ
     private nonisolated let loop = Mutex<Task<Void, Never>?>(nil)
-    /// 次の取得を条件なしにする印（再読み込み）。actor に入らずに立てられるように、ロックで持つ
-    private nonisolated let unconditionalRequested = Mutex(false)
+    /// 次の取得を条件なしにする印（再読み込み）。actor に入らずに立てられるように、アトミックに持つ
+    private nonisolated let unconditionalRequested = Atomic(false)
 
     private var state = FeedState.loading
     /// 最後にすべてのページを取り終えた 200 の `Last-Modified`
@@ -65,7 +65,7 @@ actor AccountPoller {
 
     /// 次の取得を `If-Modified-Since` なしにする（再読み込みボタン）。取得を早めはしない。
     nonisolated func requestUnconditionalFetch() {
-        unconditionalRequested.withLock { $0 = true }
+        unconditionalRequested.store(true, ordering: .relaxed)
     }
 
     nonisolated func stop() {
@@ -126,13 +126,8 @@ actor AccountPoller {
     /// 1 回の取得をする。再読み込みの後と、最後の条件なしの取得から間隔がたった後は `If-Modified-Since` を付けない。
     private func fetch(with token: AccessToken) async -> NotificationsFetchResult {
         // 印は送る前に下ろす（取得中に押された再読み込みを、その前に始めた取得で消さないため）
-        let requested = unconditionalRequested.withLock { requested in
-            defer { requested = false }
-            return requested
-        }
-        let isDue =
-            requested
-            || lastUnconditionalFetch.map { now().timeIntervalSince($0) >= Self.unconditionalFetchInterval } ?? true
+        let requested = unconditionalRequested.exchange(false, ordering: .relaxed)
+        let isDue = requested || periodicUnconditionalFetchIsDue
         if isDue, lastModified != nil {
             Self.logger.info("Fetching \(self.accountID) without If-Modified-Since")
         }
@@ -145,9 +140,15 @@ actor AccountPoller {
             }
         } else if requested {
             // 取り終えられなかったので、次の取得もまた条件なしにする
-            unconditionalRequested.withLock { $0 = true }
+            unconditionalRequested.store(true, ordering: .relaxed)
         }
         return result
+    }
+
+    /// 最後の条件なしの取得から間隔がたったか。`lastModified` が nil の間はどのみち条件なしになり、
+    /// `lastModified` が入る 200 は条件なしの取得なので、ここで時刻も入る（トークンの取り直しなどで時刻を消す必要はない）
+    private var periodicUnconditionalFetchIsDue: Bool {
+        lastUnconditionalFetch.map { now().timeIntervalSince($0) >= Self.unconditionalFetchInterval } ?? true
     }
 
     /// 取得の結果を状態に反映し、次にすることを決める。`refreshedToken` は直前にトークンを取り直したか。
@@ -204,7 +205,6 @@ actor AccountPoller {
             return false
         }
         lastModified = nil
-        lastUnconditionalFetch = nil
         scopesVerified = false
         return true
     }
@@ -223,7 +223,6 @@ actor AccountPoller {
     private func stop(as phase: FeedPhase) async {
         state = FeedState(phase: phase, threads: [])
         lastModified = nil
-        lastUnconditionalFetch = nil
         scopesVerified = false
         consecutiveFailures = 0
         await publish(state)

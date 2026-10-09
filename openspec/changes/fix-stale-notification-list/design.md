@@ -27,9 +27,9 @@
 `AccountPoller` に次の 2 つを持たせる。
 
 - `lastUnconditionalFetch: Date?`: 条件なしで全ページを取り終えた時刻
-- `forceUnconditional: Bool`: 次の取得を条件なしにする印（再読み込みで立てる）
+- `unconditionalRequested`: 次の取得を条件なしにする印（再読み込みで立てる）
 
-取得の直前に印を読んで下ろし、印が立っていたか、`lastUnconditionalFetch` が無いか 5 分以上前なら `If-Modified-Since` を付けない。`lastModified` が nil のとき（最初の取得、トークンの取り直しの後）は、もともと条件なしになる。
+取得の直前に印を読んで下ろし、印が立っていたか、`lastUnconditionalFetch` が無いか 5 分以上前なら `If-Modified-Since` を付けない。`lastModified` が nil のとき（最初の取得、トークンの取り直しの後、止めた後）は、もともと条件なしになる。`lastModified` が入るのは条件なしの取得の `updated` だけで、そのとき `lastUnconditionalFetch` も入るので、トークンの取り直しや停止で `lastUnconditionalFetch` を消す必要はない。
 
 条件なしの取得で `updated` を受け取ったら、`lastUnconditionalFetch = now()` にする。取り終えられなかったときは時刻を変えないので、5 分を過ぎた分の取得は次もまた条件なしになる。印を立てた取得が取り終えられなかったときは、印を立て直す。印を送る前に下ろすのは、取得の途中で押された再読み込みを、その前に始めた取得の成功で消さないため。
 
@@ -42,7 +42,7 @@
 
 ### D2. 再読み込みからの指示はロックで渡す
 
-`AccountPoller` に `nonisolated func requestUnconditionalFetch()` を足す。今の `loop` と同じく `Mutex<Bool>` で印を持ち、ループが取得の直前に読んで下ろす。`@MainActor` の `NotificationStore` から、`await` も `Task` も作らずに呼べる。
+`AccountPoller` に `nonisolated func requestUnconditionalFetch()` を足す。`nonisolated` の `Atomic<Bool>` で印を持ち、ループが取得の直前に `exchange(false)` で読んで下ろす。`@MainActor` の `NotificationStore` から、`await` も `Task` も作らずに呼べる。
 
 ループを起こし直す（sleep を途中で止める）ことはしない。印を立てるだけなので、取得は次の予定の時刻に行われ、間隔より早まらない。
 
@@ -55,7 +55,7 @@ CLAUDE.md の「ポーリングは API の指示に従う」に「5 分ごとと
 ## スレッドとアクター
 
 - 判断と状態（`lastModified`、`lastUnconditionalFetch`）は `AccountPoller`（actor）の中だけで読み書きする
-- 再読み込みの印は `nonisolated` の `Mutex<Bool>` に置き、`@MainActor` の `NotificationStore` から同期的に立てる。読むのはポーラーのループだけ
+- 再読み込みの印は `nonisolated` の `Atomic<Bool>` に置き、`@MainActor` の `NotificationStore` から同期的に立てる。読むのはポーラーのループだけ
 - ネットワークは今までどおり `GitHubAPIClient` が `HTTPTransport` 経由で送る。テストは `FakeHTTPTransport` で `If-Modified-Since` の有無を確かめ、時刻は `now` の差し替え、待ちは `ManualSleeper` で進める
 
 ## セキュリティ

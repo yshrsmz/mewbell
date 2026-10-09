@@ -71,6 +71,8 @@ final class PollerFixture: Sendable {
             body: FakeHTTPTransport.page(ids))
     }
 
+    static let notModified = HTTPResponse(statusCode: 304)
+
     var ifModifiedSince: [String?] {
         transport.requests.map { $0.value(forHTTPHeaderField: "If-Modified-Since") }
     }
@@ -88,7 +90,7 @@ struct AccountPollerTests {
     }
 
     @Test func sendsIfModifiedSinceFromTheSecondFetch() async {
-        fixture.respond([PollerFixture.ok(1...3), HTTPResponse(statusCode: 304)])
+        fixture.respond([PollerFixture.ok(1...3), PollerFixture.notModified])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         #expect(
@@ -117,7 +119,7 @@ struct AccountPollerTests {
         await fixture.sleeper.waitForSleeps(1)
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
-        fixture.respond([HTTPResponse(statusCode: 304)])
+        fixture.respond([PollerFixture.notModified])
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(3)
         #expect(fixture.ifModifiedSince == [nil, "LM-1", nil, "LM-1"])
