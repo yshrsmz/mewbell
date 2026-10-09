@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Testing
 
 @testable import Mewbell
@@ -284,6 +284,69 @@ struct UnreadBadgeTests {
     @Test(arguments: [(0, String?.none), (-1, nil), (1, "1"), (99, "99"), (100, "99+"), (1_000, "99+")])
     func formats(_ count: Int, _ text: String?) {
         #expect(UnreadBadge.text(for: count) == text)
+    }
+}
+
+@MainActor
+struct MenuBarIconTests {
+    @Test func isATemplateOnlyWithoutUnread() {
+        #expect(MenuBarIcon.image(badge: nil).isTemplate)
+        #expect(!MenuBarIcon.image(badge: "1").isTemplate)
+    }
+
+    @Test func describesTheImageForVoiceOver() {
+        #expect(MenuBarIcon.image(badge: nil).accessibilityDescription == "Mewbell")
+        #expect(MenuBarIcon.image(badge: "5").accessibilityDescription == "Mewbell, 5 unread")
+    }
+
+    @Test func widensWithTheBadge() {
+        let cat = MenuBarIcon.image(badge: nil).size.width
+        let one = MenuBarIcon.image(badge: "1").size.width
+        let many = MenuBarIcon.image(badge: "99+").size.width
+        #expect(cat < one)
+        #expect(one < many)
+    }
+
+    /// 猫（左）は緑で、件数（右）は外観に合った文字の色で描かれる。
+    @Test(arguments: [(NSAppearance.Name.aqua, false), (.darkAqua, true)])
+    func drawsAGreenCatAndALabelColoredBadge(_ appearance: NSAppearance.Name, _ isDark: Bool) throws {
+        let image = MenuBarIcon.image(badge: "5")
+        let bitmap = try render(image, in: try #require(NSAppearance(named: appearance)))
+        // 猫だけの画像の幅で、猫と件数の列を分ける（ビットマップは 2 倍で描く）
+        let catColumns = Int(MenuBarIcon.image(badge: nil).size.width * 2)
+        let cat = pixels(of: bitmap, columns: 0..<catColumns)
+        let badge = pixels(of: bitmap, columns: catColumns..<bitmap.pixelsWide)
+        #expect(cat.contains { $0.greenComponent > 0.5 && $0.greenComponent > $0.redComponent + 0.2 })
+        #expect(
+            badge.contains { color in
+                let brightness = (color.redComponent + color.greenComponent + color.blueComponent) / 3
+                return isDark ? brightness > 0.7 : brightness < 0.3
+            })
+    }
+
+    private func render(_ image: NSImage, in appearance: NSAppearance) throws -> NSBitmapImageRep {
+        let bitmap = try #require(
+            NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: Int(image.size.width * 2), pixelsHigh: Int(image.size.height * 2),
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                bytesPerRow: 0, bitsPerPixel: 0))
+        bitmap.size = image.size
+        appearance.performAsCurrentDrawingAppearance {
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+            image.draw(in: NSRect(origin: .zero, size: image.size))
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        return bitmap
+    }
+
+    /// 指定した列の、ほぼ不透明な画素。
+    private func pixels(of bitmap: NSBitmapImageRep, columns: Range<Int>) -> [NSColor] {
+        columns.flatMap { column in
+            (0..<bitmap.pixelsHigh).compactMap { row in
+                bitmap.colorAt(x: column, y: row).flatMap { $0.alphaComponent > 0.8 ? $0 : nil }
+            }
+        }
     }
 }
 
