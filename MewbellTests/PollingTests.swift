@@ -33,15 +33,23 @@ final class PollerFixture: Sendable {
     let tokens = FakeTokenProvider([alice: "test-token-alice"])
     let sleeper = ManualSleeper()
     let updates = LockedValue<[FeedState]>([])
+    /// ポーラーが見る時刻。テストで進められる
+    let clock = LockedValue(now)
     let poller: AccountPoller
 
     init() throws {
         let updates = updates
-        let now = Self.now
+        let clock = clock
         poller = AccountPoller(
             accountID: Self.alice, endpoints: try #require(APIEndpoints(host: "github.com")),
-            client: GitHubAPIClient(transport: transport, now: { now }), tokens: tokens, sleep: sleeper.sleep,
-            now: { now }, onUpdate: { state in updates.withLock { $0.append(state) } })
+            client: GitHubAPIClient(transport: transport, now: { clock.value }), tokens: tokens,
+            sleep: sleeper.sleep, now: { clock.value }, onUpdate: { state in updates.withLock { $0.append(state) } })
+    }
+
+    /// 時刻を進めてから、待っているポーラーを次の取得に進める。
+    func advance(by seconds: TimeInterval) {
+        clock.withLock { $0 = $0.addingTimeInterval(seconds) }
+        sleeper.advance()
     }
 
     var last: FeedState? { updates.value.last }

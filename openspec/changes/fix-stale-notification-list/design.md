@@ -29,15 +29,9 @@
 - `lastUnconditionalFetch: Date?`: 条件なしで全ページを取り終えた時刻
 - `forceUnconditional: Bool`: 次の取得を条件なしにする印（再読み込みで立てる）
 
-取得の直前に、`lastModified` を付けるかを次のように決める。
+取得の直前に印を読んで下ろし、印が立っていたか、`lastUnconditionalFetch` が無いか 5 分以上前なら `If-Modified-Since` を付けない。`lastModified` が nil のとき（最初の取得、トークンの取り直しの後）は、もともと条件なしになる。
 
-```swift
-let ifModifiedSince: String? =
-    forceUnconditional || lastUnconditionalFetch.map { now().timeIntervalSince($0) >= 300 } ?? true
-    ? nil : lastModified
-```
-
-`lastModified` が nil のとき（最初の取得、トークンの取り直しの後）は、もともと条件なしになる。`updated` を受け取ったときは、送ったリクエストが条件なしだったなら `lastUnconditionalFetch = now()` にし、`forceUnconditional = false` にする。失敗したときは印も時刻も変えないので、次の取得でまた条件なしを試す。
+条件なしの取得で `updated` を受け取ったら、`lastUnconditionalFetch = now()` にする。取り終えられなかったときは時刻を変えないので、5 分を過ぎた分の取得は次もまた条件なしになる。印を立てた取得が取り終えられなかったときは、印を立て直す。印を送る前に下ろすのは、取得の途中で押された再読み込みを、その前に始めた取得の成功で消さないため。
 
 判断をポーラーの中に閉じ込めるのは、`lastModified` と同じ actor の状態で、取得のループだけが読み書きするから。時刻は今ある `now` を使うので、テストでは固定できる。スリープから戻ったときも、壁時計の差で判断するので 5 分を過ぎていれば条件なしになる。
 
@@ -52,7 +46,7 @@ let ifModifiedSince: String? =
 
 ループを起こし直す（sleep を途中で止める）ことはしない。印を立てるだけなので、取得は次の予定の時刻に行われ、間隔より早まらない。
 
-`NotificationStore` には `requestUnconditionalFetch()` を足し、止まっていないポーラーすべてに伝える。再読み込みボタンは、`resumeStopped()` に続けてこれを呼ぶ。止まっていたアカウントは `resume()` でトークンを取り直すので、`lastModified` が消えて、もともと条件なしになる。
+`NotificationStore` には `requestUnconditionalFetch()` を足し、ポーラーすべてに伝える。止まっているポーラーに印が残っても害はない（再開時はトークンを取り直して `lastModified` が消えるので、どのみち条件なしになる）。再読み込みボタンは、`resumeStopped()` に続けてこれを呼ぶ。止まっていたアカウントは `resume()` でトークンを取り直すので、`lastModified` が消えて、もともと条件なしになる。
 
 ### D3. CLAUDE.md の約束を書き足す
 

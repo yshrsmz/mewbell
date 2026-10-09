@@ -14,6 +14,7 @@ struct MenuBarContentView: View {
                 Button {
                     store.reload(userInitiated: true)
                     notifications.resumeStopped()
+                    notifications.requestUnconditionalFetch()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }

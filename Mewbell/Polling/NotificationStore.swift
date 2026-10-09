@@ -72,6 +72,13 @@ final class NotificationStore {
         }
     }
 
+    /// 各アカウントの次の取得を `If-Modified-Since` なしにする（再読み込みボタン）。取得は早めない。
+    func requestUnconditionalFetch() {
+        for entry in pollers.values {
+            entry.poller.requestUnconditionalFetch()
+        }
+    }
+
     /// すべてのポーラーを止めて状態を消す（終了時）。
     func stopAll() {
         for entry in pollers.values {
