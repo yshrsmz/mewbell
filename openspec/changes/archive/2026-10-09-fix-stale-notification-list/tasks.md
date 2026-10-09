@@ -13,7 +13,7 @@
 
 - [x] 3.1 ビルドが通る: `MEWBELL_WARNINGS_AS_ERRORS=YES` を付けた Debug と Release の `xcodebuild build` が成功する
 - [x] 3.2 テストが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` と `bash scripts/lint.sh` が成功し、`npx openspec validate --all --strict` も通る
-- [ ] 3.3 手元で起動して確認した: (a) 起動して API の未読（`gh api notifications --jq length`）と同じ件数が一覧に出る、(b) Web で 1 件既読にし、5 分ほど待つと一覧から消える、(c) Web で 1 件既読にした後に再読み込みを押すと、次の取得（60 秒以内）で消える。`log show` で、条件なしの取得のログが 5 分ごとに出ていることも見る
+- [ ] 3.3 手元で起動して確認した: (a) 起動して API の未読（`gh api notifications --jq length`）と同じ件数が一覧に出る、(b) Web で 1 件既読にし、5 分ほど待つと一覧から消える、(c) Web で 1 件既読にした後に再読み込みを押すと、次の取得（60 秒以内）で消える。`log show` で、条件なしの取得のログが 5 分ごとに出ていることも見る。結果: (a) は確認済み（起動し直すと API の未読 9 件が一覧に出た）。(b)(c) は未確認のまま、ユーザーの判断で archive した
 
 ## 4. 別コンテキストでのレビュー
 
