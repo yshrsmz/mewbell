@@ -20,7 +20,8 @@ actor AccountPoller {
     private let onUpdate: @Sendable (FeedState) async -> Void
 
     /// 走っているループ。actor に入らずに起動・停止できるように、ロックで持つ
-    private nonisolated let loop = Mutex<Task<Void, Never>?>(nil)
+    /// `discarded` は `stop()` で立て、その後は起動も再開もしない（取り除いたアカウントのトークンで取得し続けないため）
+    private nonisolated let loop = Mutex<(task: Task<Void, Never>?, discarded: Bool)>((nil, false))
     /// 次の取得を条件なしにする印（再読み込み）。actor に入らずに立てられるように、アトミックに持つ
     private nonisolated let unconditionalRequested = Atomic(false)
 
@@ -64,16 +65,19 @@ actor AccountPoller {
     /// ポーリングを始める。すでに始めていれば何もしない。
     nonisolated func start() {
         loop.withLock { loop in
-            guard loop == nil else { return }
-            loop = Task { await self.run(refreshingTokenFirst: false) }
+            guard loop.task == nil, !loop.discarded else { return }
+            loop.task = Task { await self.run(refreshingTokenFirst: false) }
         }
     }
 
-    /// 止まっているポーリングを、トークンを取り直してから再開する（再読み込みボタン）。
-    nonisolated func resume() {
+    /// 止まっているポーリングを、トークンを取り直してから再開する。`stop()` の後は何もせずに false を返す。
+    @discardableResult
+    nonisolated func resume() -> Bool {
         loop.withLock { loop in
-            loop?.cancel()
-            loop = Task { await self.run(refreshingTokenFirst: true) }
+            guard !loop.discarded else { return false }
+            loop.task?.cancel()
+            loop.task = Task { await self.run(refreshingTokenFirst: true) }
+            return true
         }
     }
 
@@ -86,34 +90,26 @@ actor AccountPoller {
     /// もう 1 回取得する。止まっていれば再開して最初の取得を待つ。レート制限中とループが無いときは、早めずにすぐ戻る。
     func refreshNow() async {
         requestUnconditionalFetch()
-        if case .retrying(_, rateLimited: true) = state.phase { return }
+        guard !state.phase.isRateLimited else { return }
         let stopped = state.phase.isStopped
         guard stopped || runningLoop != nil else { return }
         await withCheckedContinuation { continuation in
             refreshWaiters.add(continuation)
-            if stopped {
-                resume()
-            } else {
+            guard stopped else {
                 sleepTask?.cancel()
+                return
             }
+            // 止めたループがまだ終わっていなくても、その終わりで新しい待ちを起こさないように、先に外す
+            runningLoop = nil
+            if !resume() { refreshWaiters.finish(all: true) }
         }
     }
 
     nonisolated func stop() {
         loop.withLock { loop in
-            loop?.cancel()
-            loop = nil
+            loop.task?.cancel()
+            loop = (nil, true)
         }
-    }
-
-    /// 1 回の取得の後にすること。
-    private enum Step {
-        /// 待ってから次の取得をする
-        case wait(Duration)
-        /// トークンを取り直したので、すぐに取得をやり直す
-        case retryNow
-        /// 止まった
-        case stop
     }
 
     private func run(refreshingTokenFirst: Bool) async {
@@ -158,6 +154,8 @@ actor AccountPoller {
 
     /// 次の取得まで `delay` 待つ。再読み込みの待ちがあれば、前の取得の開始から下限までの残りだけ待つ。止められたら false。
     private func pause(for delay: Duration) async -> Bool {
+        // レート制限の待ちは早めない（取得の途中で押されていても）
+        if state.phase.isRateLimited { refreshWaiters.finish(all: true) }
         if refreshWaiters.isEmpty {
             let task = Task { [sleep] in try await sleep(delay) }
             sleepTask = task
@@ -222,7 +220,7 @@ actor AccountPoller {
     }
 
     /// 取得の結果を状態に反映し、次にすることを決める。`refreshedToken` は直前にトークンを取り直したか。
-    private func handle(_ result: NotificationsFetchResult, refreshedToken: Bool) async -> Step {
+    private func handle(_ result: NotificationsFetchResult, refreshedToken: Bool) async -> PollStep {
         switch result {
         case .updated(let threads, let lastModified, let pollInterval, let scopes):
             if !scopesVerified {

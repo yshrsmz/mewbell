@@ -14,6 +14,11 @@ enum FeedPhase: Sendable, Equatable {
     case unauthorized
 
     /// 再読み込みを押すまで取得しない状態か。
+    /// レート制限で待っている
+    var isRateLimited: Bool {
+        if case .retrying(_, rateLimited: true) = self { true } else { false }
+    }
+
     var isStopped: Bool {
         switch self {
         case .scopeInsufficient, .unauthorized: true

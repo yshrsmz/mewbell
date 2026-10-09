@@ -83,6 +83,38 @@ struct RefreshNowTests {
         fixture.poller.stop()
     }
 
+    @Test func doesNotHastenARateLimitReturnedByTheFetchInFlight() async {
+        fixture.respond([
+            PollerFixture.ok(1...1), HTTPResponse(statusCode: 403, headers: ["Retry-After": "300"]),
+            PollerFixture.notModified,
+        ])
+        await startAndWait()
+        fixture.transport.pausedMethod.value = "GET"
+        fixture.advance(by: 60)
+        await waitUntil { fixture.transport.requests.count == 2 }
+        let refresh = Task { await fixture.poller.refreshNow() }
+        try? await Task.sleep(for: .milliseconds(20))
+        fixture.transport.pausedMethod.value = nil
+        await refresh.value
+        await fixture.sleeper.waitForSleeps(2)
+        #expect(fixture.sleeper.durations == [.seconds(60), .seconds(300)])
+        #expect(fixture.transport.requests.count == 2)
+        fixture.poller.stop()
+    }
+
+    @Test func doesNotResumeAfterStop() async {
+        fixture.respond([HTTPResponse(statusCode: 401), PollerFixture.ok(1...1)])
+        fixture.poller.start()
+        await waitUntil { fixture.last?.phase == .unauthorized }
+        fixture.poller.stop()
+        fixture.tokens.refreshedValue.value = "test-token-alice"
+        await fixture.poller.refreshNow()
+        try? await Task.sleep(for: .milliseconds(20))
+        // 取り除いたアカウントのトークンを取り直さず、取得もしない
+        #expect(fixture.tokens.refreshCount.value == 1)
+        #expect(fixture.transport.requests.count == 1)
+    }
+
     @Test func resumesAStoppedPollerAndWaitsForItsFirstFetch() async {
         fixture.respond([HTTPResponse(statusCode: 401), PollerFixture.ok(1...2)])
         fixture.poller.start()
