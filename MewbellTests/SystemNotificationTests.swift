@@ -264,3 +264,22 @@ struct UnreadBadgeTests {
         #expect(UnreadBadge.text(for: count) == text)
     }
 }
+
+@MainActor
+struct NotificationPermissionTests {
+    @Test func keepsTheRequestResultOverAStaleRefresh() async {
+        let center = FakeUserNotificationCenter()
+        center.status.value = .denied
+        let permission = NotificationPermission(center: center)
+        permission.request()
+        // 求めている途中の読み直しは何もしない
+        permission.refresh()
+        await waitUntil { MainActor.assumeIsolated { permission.authorization != nil } }
+        #expect(permission.authorization == .denied)
+        #expect(permission.isDenied)
+        center.status.value = .allowed
+        permission.refresh()
+        await waitUntil { MainActor.assumeIsolated { permission.authorization == .allowed } }
+        #expect(!permission.isDenied)
+    }
+}

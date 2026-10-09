@@ -36,13 +36,11 @@ actor AccountPoller {
     private var fetchCount = 0
     /// 既読にしたので、取得の結果から取り除いているスレッド
     private var hidden: [String: HiddenUntil] = [:]
-    /// スレッドごとの、終わっていない既読化のリクエストの数（同じスレッドを続けて既読にしたとき、先に終わった分で隠すのをやめないように）
-    private var readsInFlight: [String: Int] = [:]
 
     /// 既読にしたスレッドを、いつまで取得の結果から取り除くか。
     private enum HiddenUntil {
-        /// 既読化のリクエストが終わるまで
-        case requestFinishes
+        /// 終わっていない既読化のリクエストがある（数を持つのは、同じスレッドを続けて既読にしたとき、先に終わった分で隠すのをやめないため）
+        case requestsInFlight(Int)
         /// この番号以降の取得の 200 が出るまで（既読化の後に始めた取得なら、結果をそのまま信じてよい）
         case fetch(Int)
     }
@@ -85,8 +83,11 @@ actor AccountPoller {
     /// スレッドを既読にする。一覧からすぐに外し、既読化のリクエストを送り、次の取得を条件なしにする。
     /// 止まっているときとトークンが無いときは送らない（次の条件なしの取得で、未読のままなら一覧に戻る）。
     func markRead(threadID: String) async {
-        hidden[threadID] = .requestFinishes
-        readsInFlight[threadID, default: 0] += 1
+        if case .requestsInFlight(let count) = hidden[threadID] {
+            hidden[threadID] = .requestsInFlight(count + 1)
+        } else {
+            hidden[threadID] = .requestsInFlight(1)
+        }
         if state.threads.contains(where: { $0.id == threadID }) {
             state.threads.removeAll { $0.id == threadID }
             await publish(state)
@@ -98,9 +99,9 @@ actor AccountPoller {
             }
         }
         // 既読化の結果が 304 に隠れないように、また失敗したスレッドが一覧に戻るように、次は条件なしで取り直す
-        readsInFlight[threadID, default: 1] -= 1
-        if readsInFlight[threadID] == 0 {
-            readsInFlight[threadID] = nil
+        if case .requestsInFlight(let count) = hidden[threadID], count > 1 {
+            hidden[threadID] = .requestsInFlight(count - 1)
+        } else {
             hidden[threadID] = .fetch(fetchCount)
         }
         unconditionalRequested.store(true, ordering: .relaxed)
