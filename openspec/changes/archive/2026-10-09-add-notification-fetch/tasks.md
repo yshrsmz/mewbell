@@ -41,7 +41,7 @@
 
 - [x] 6.1 ビルドが通る: `MEWBELL_WARNINGS_AS_ERRORS=YES` を付けた Debug と Release の `xcodebuild build` が成功する。Release の `.app` の Info.plist に ATS の例外が無く、`codesign -d --entitlements -` に緩める entitlement が無いことも確かめる
 - [x] 6.2 テストが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` と `bash scripts/lint.sh` が成功し、`npx openspec validate --all --strict` も通る
-- [ ] 6.3 手元で起動して確認した: (a) 自分のアカウントの未読がアカウント → リポジトリの順に出る、(b) PR・Issue のスレッドをクリックすると正しい Web ページが開き、一覧では未読のまま残る、(c) `log show --predicate 'subsystem == "com.codingfeline.mewbell"' --info --debug` で、2 回目以降の取得が 304 になり、間隔が 60 秒以上空いていることを確かめる、(d) 再読み込みを押しても間隔より早く取得しない、(e) ネットワークを切ると「失敗して待っている」になり一覧が残り、戻すと回復する、(f) スコープ不足・認証エラー・401 の取り直しは 4.4 のテストで確かめたものとし、PR 本文にそう書く
+- [x] 6.3 手元で起動して確認した: (a) 自分のアカウントの未読がアカウント → リポジトリの順に出る、(b) PR・Issue のスレッドをクリックすると正しい Web ページが開き、一覧では未読のまま残る、(c) `log show --predicate 'subsystem == "com.codingfeline.mewbell"' --info --debug` で、2 回目以降の取得が 304 になり、間隔が 60 秒以上空いていることを確かめる、(d) 再読み込みを押しても間隔より早く取得しない、(e) ネットワークを切ると「失敗して待っている」になり一覧が残り、戻すと回復する、(f) スコープ不足・認証エラー・401 の取り直しは 4.4 のテストで確かめたものとし、PR 本文にそう書く
 - [x] 6.4 トークンが残っていない・漏れていないことを確かめた: 一覧が出た後、`defaults read com.codingfeline.mewbell`、`~/Library/Application Support/com.codingfeline.mewbell/`、`~/Library/Caches/com.codingfeline.mewbell/`、`~/Library/HTTPStorages/com.codingfeline.mewbell/`、`log show`（6.3 と同じ条件）に `gh auth token` の出力が含まれないことを、`grep -c -F "$(gh auth token)"` のように件数だけで確かめる
 
 ## 7. 別コンテキストでのレビュー
