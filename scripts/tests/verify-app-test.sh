@@ -67,7 +67,7 @@ expect() {
   if [[ "$want" == pass && $rc -eq 0 ]] || [[ "$want" == fail && $rc -ne 0 && "$output" == *"$message"* ]]; then
     echo "ok: $description"
   else
-    echo "NG: $description（rc=$rc）" >&2
+    echo "NG: ${description}（rc=${rc}）" >&2
     echo "$output" | sed 's/^/    /' >&2
     failures=$((failures + 1))
   fi

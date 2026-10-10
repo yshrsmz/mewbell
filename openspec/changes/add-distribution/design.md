@@ -104,11 +104,11 @@
 
 homebrew-tap は OpenSpec の外なので、ここで形を決め、tasks で作る。
 
-- `.github/templates/mewbell.rb.template`（`@VERSION@` と `@SHA256@`）。中身は spec の「Homebrew Cask の中身」のとおり。mewbell の `packaging/homebrew/mewbell.rb.template` を正本にし、変えたときは tap にもコピーする（tap 側で生成に使うのは tap の雛形）
-- `.github/workflows/update-cask.yml`: `on: repository_dispatch: types: [mewbell-released]`、既定の `permissions: contents: read`、`environment: release`
+- `.github/templates/mewbell.rb.template`（`@VERSION@` と `@SHA256@`）。ワークフローは `.github/workflows/update-mewbell.yml`。中身は spec の「Homebrew Cask の中身」のとおり。mewbell の `packaging/homebrew/mewbell.rb.template` を正本にし、変えたときは tap にもコピーする（tap 側で生成に使うのは tap の雛形）
+- `.github/workflows/update-mewbell.yml`: `on: repository_dispatch: types: [mewbell-released]`、既定の `permissions: contents: read`、`environment: release`
   - `env: VERSION: ${{ github.event.client_payload.version }}` で受け、`[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]` でなければ失敗する
   - `curl -fsSL --proto '=https'` で `https://github.com/yshrsmz/mewbell/releases/download/v$VERSION/Mewbell-$VERSION.zip` と `.sha256` を取り、`shasum -a 256` の値と `.sha256` の値が一致することを確かめる
-  - 雛形から `Casks/mewbell.rb` を作り、tap 用 App のトークン（`repositories: homebrew-tap`、`permission-contents: write`、`permission-pull-requests: write`）でブランチ `mewbell-$VERSION` を push して PR を作り、`gh pr merge --auto --squash` を指定する
+  - 雛形から `Casks/mewbell.rb` を作り、tap 用 App のトークン（`repositories: homebrew-tap`、`permission-contents: write`、`permission-pull-requests: write`）で、API（`git/refs` と `contents`）でブランチ `mewbell-$VERSION` を作ってコミットし（git の資格情報をランナーに置かない。コミットは App の名前になる）、PR を作り、`gh pr merge --auto --squash` を指定する。やり直したときは同じブランチを `main` に戻して作り直す
 - `.github/workflows/ci.yml`: `pull_request` で `brew style Casks` と `brew audit --cask --strict`（`--online` は付けない）を `macos-latest` で動かす。`brew audit --cask` が Linux で動くかを確かめられなかったため、確実に動く macOS にする（リリースのためのワークフローなので macOS ランナーの例外に入り、Cask の PR のときだけ動く）
 - ruleset: `main` へのマージに `ci` のチェックの成功を必須にする。リポジトリの設定で auto-merge を有効にする。App のトークンで作った PR は CI が走るので、auto-merge が働く
 
@@ -121,7 +121,7 @@ homebrew-tap は OpenSpec の外なので、ここで形を決め、tasks で作
 | mewbell 用（例: `mewbell-release`） | mewbell、homebrew-tap | Contents: Read and write、Pull requests: Read and write、Metadata: Read | mewbell の Environment `release` |
 | tap 用（例: `yshrsmz-tap-bot`） | homebrew-tap | Contents: Read and write、Pull requests: Read and write、Metadata: Read | homebrew-tap の Environment `release` |
 
-- App の Client ID は Environment の変数（`vars.RELEASE_APP_CLIENT_ID`）、秘密鍵はシークレット（`secrets.RELEASE_APP_PRIVATE_KEY`）にする
+- App の Client ID は Environment の変数、秘密鍵はシークレットにする。mewbell は `RELEASE_APP_CLIENT_ID` と `RELEASE_APP_PRIVATE_KEY`、homebrew-tap は `TAP_APP_CLIENT_ID` と `TAP_APP_PRIVATE_KEY`
 - Environment `release` は「Deployment branches and tags」を `main` だけにする。tap の `repository_dispatch` は既定のブランチ（`main`）で動くので、この制限を通る
 - mewbell 用 App は homebrew-tap にもインストールするが、mewbell のワークフローが tap 向けに発行するトークンは `permission-contents: write` だけに絞る（dispatch には Contents の書き込みが要る）
 - App は Webhook を無効にし、「Only on this account」でインストールを自分だけにする

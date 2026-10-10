@@ -76,5 +76,5 @@ verify_app() {
     done
     return 1
   fi
-  echo "verify_app: $app を検査しました（$version）"
+  echo "verify_app: $app を検査しました（${version}）"
 }
