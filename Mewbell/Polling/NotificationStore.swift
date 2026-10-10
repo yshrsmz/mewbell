@@ -137,13 +137,14 @@ final class NotificationStore {
         poller.start()
     }
 
-    /// 止めたポーラーの代わりに作るポーラーの最初の取得を、早めてよい時刻。レート制限で待っていればその再試行の時刻、
-    /// 取得できていれば最後の取得から再読み込みと同じ下限（`RefreshWaiters.minimumInterval`）がたった時刻。
+    /// 止めたポーラーの代わりに作るポーラーの最初の取得を、早めてよい時刻。失敗やレート制限で待っていればその再試行の時刻、
+    /// 取得できていれば最後の取得から、取得中なら今から、再読み込みと同じ下限（`RefreshWaiters.minimumInterval`）がたった時刻。
     private static func nextFetchNotBefore(_ feed: FeedState) -> Date? {
         switch feed.phase {
-        case .retrying(let nextAttempt, rateLimited: true): nextAttempt
+        case .retrying(let nextAttempt, _): nextAttempt
         case .loaded(let updatedAt): updatedAt.addingTimeInterval(RefreshWaiters.minimumInterval)
-        case .loading, .retrying, .scopeInsufficient, .unauthorized: nil
+        case .loading: Date().addingTimeInterval(RefreshWaiters.minimumInterval)
+        case .scopeInsufficient, .unauthorized: nil
         }
     }
 

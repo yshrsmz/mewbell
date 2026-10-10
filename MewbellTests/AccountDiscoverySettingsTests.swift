@@ -258,4 +258,18 @@ struct AccountDiscoveryRaceTests {
         #expect(fixture.tokenRequests.filter { $0.last == "alice" }.count == 2)
         #expect(await fixture.credentials.token(for: alice) != nil)
     }
+
+    @Test func keepsADisableThatArrivedBeforeAReloadWithOlderSettings() async throws {
+        let discovery = fixture.discovery()
+        await discovery.reload(userInitiated: false, options: DiscoveryOptions()) { _ in }
+        await discovery.disable(dave)
+        // 無効にする前の設定で作った読み直しが後から届いても、dave は無効のまま
+        await discovery.reload(userInitiated: false, options: DiscoveryOptions()) { _ in }
+        #expect(await fixture.credentials.token(for: dave) == nil)
+        #expect(fixture.tokenRequests.filter { $0.last == "dave" }.count == 1)
+        // 有効にし直すと、次の読み直しで取る
+        await discovery.enable(dave)
+        await discovery.reload(userInitiated: false, options: DiscoveryOptions()) { _ in }
+        #expect(await fixture.credentials.token(for: dave) != nil)
+    }
 }

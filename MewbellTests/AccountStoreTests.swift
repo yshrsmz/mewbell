@@ -174,7 +174,7 @@ struct AccountStoreSettingsTests {
         discovery.finish()
         store.setEnabled(true, for: bob.id)
         await store.waitForReload()
-        #expect(discovery.events.first == "reload")
+        #expect(discovery.events.prefix(2) == ["enable github.com/bob", "reload"])
         #expect(store.state == accounts(.ready, .ready))
     }
 
@@ -223,7 +223,7 @@ struct AccountStoreDisableOrderTests {
         store.setEnabled(false, for: bob)
         store.setEnabled(true, for: bob)
         await store.waitForReload()
-        #expect(discovery.events.prefix(2) == ["disable github.com/bob", "reload"])
+        #expect(discovery.events.prefix(3) == ["disable github.com/bob", "enable github.com/bob", "reload"])
     }
 }
 

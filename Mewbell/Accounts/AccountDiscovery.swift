@@ -63,8 +63,10 @@ protocol AccountDiscovering: Sendable {
     func reload(
         userInitiated: Bool, options: DiscoveryOptions, update: @escaping @Sendable (DiscoveryState) async -> Void
     ) async
-    /// アカウントのトークンを捨て、次の読み直しまで受け取らない（設定で無効にしたとき）。
+    /// アカウントのトークンを捨て、`enable` されるまで受け取らない（設定で無効にしたとき）。
     func disable(_ id: AccountID) async
+    /// `disable` を取り消す（設定で有効にし直したとき。トークンは次の読み直しで取る）。
+    func enable(_ id: AccountID) async
     /// すべてのトークンを捨てる（設定ディレクトリの上書きを変えたとき）。
     func discardAllTokens() async
     /// トークンをすべて捨て、以後は受け取らない（アプリの終了時）。
@@ -92,8 +94,8 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     /// 最後の読み直しで `hosts.yml` にあったアカウント。ここに無いアカウントのトークンは保存しない
     /// （取得の途中でアカウントが消えたときに、捨てたトークンを書き戻さないため）
     private var knownAccountIDs: Set<AccountID> = []
-    /// 無効なアカウント。読み直しの始めに設定から受け取り、読み直しの途中の `disable` でも足す
-    /// （読み直しの途中で無効にしたアカウントを、古い設定のまま `knownAccountIDs` に戻さないため）
+    /// 無効なアカウント。`disable` と `enable` で出し入れし、読み直しでは設定の値を足すだけにする
+    /// （読み直しより先に届いた `disable` を、読み直しが古い設定で消さないため）
     private var disabledIDs: Set<AccountID> = []
     /// `discardAllTokens` で進める。進む前に始めた `gh auth token` の結果は保存しない（前の設定ディレクトリのものなので）
     private var tokenEpoch = 0
@@ -130,7 +132,7 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     func reload(
         userInitiated: Bool, options: DiscoveryOptions, update: @escaping @Sendable (DiscoveryState) async -> Void
     ) async {
-        disabledIDs = options.disabled
+        disabledIDs.formUnion(options.disabled)
         let state = await discover(userInitiated: userInitiated, options: options, update: update)
         // アカウントを使えない状態になったら、持っているトークンをすべて捨てる
         if !state.hasAccounts {
@@ -149,6 +151,10 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         disabledIDs.insert(id)
         knownAccountIDs.remove(id)
         await credentials.remove(id)
+    }
+
+    func enable(_ id: AccountID) async {
+        disabledIDs.remove(id)
     }
 
     func discardAllTokens() async {

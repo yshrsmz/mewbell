@@ -97,6 +97,10 @@ final class BlockingDiscovery: AccountDiscovering {
         recordedEvents.withLock { $0.append("disable \(id)") }
     }
 
+    func enable(_ id: AccountID) async {
+        recordedEvents.withLock { $0.append("enable \(id)") }
+    }
+
     func discardAllTokens() async {
         recordedEvents.withLock { $0.append("discardAll") }
     }

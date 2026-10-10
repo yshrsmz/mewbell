@@ -36,12 +36,34 @@ struct OpenSettingsButton: View {
         dismiss()
         NSApp.activate()
         openSettings()
-        // ウィンドウはこの後に作られるので、できてから前面に出してキーにする
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(100))
-            NSApp.activate()
-            NSApp.windows.first { $0.identifier?.rawValue == "com_apple_SwiftUI_Settings_window" }?
-                .makeKeyAndOrderFront(nil)
+        // 初めて開くときは `SettingsWindowActivator` が、ウィンドウができたときに前面に出す。すでにあるウィンドウは、ここで出す
+        SettingsWindowActivator.bringToFront()
+    }
+}
+
+/// 設定ウィンドウに入れて、ウィンドウに載ったときに Mewbell を前面にし、そのウィンドウをキーにする
+/// （ポップオーバーから開くと、`LSUIElement` のアプリのウィンドウはほかのアプリの後ろに開くため）。
+struct SettingsWindowActivator: NSViewRepresentable {
+    /// 今の設定ウィンドウ
+    private static weak var window: NSWindow?
+
+    static func bringToFront() {
+        guard let window else { return }
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        ActivatingView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class ActivatingView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            SettingsWindowActivator.window = window
+            SettingsWindowActivator.bringToFront()
         }
     }
 }
