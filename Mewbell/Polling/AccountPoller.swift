@@ -175,8 +175,9 @@ actor AccountPoller {
             guard !Task.isCancelled else { return false }
             if refreshWaiters.isEmpty { return true }
         }
-        guard let remaining = refreshWaiters.remainingWait(now: now()) else { return true }
-        await announceNextFetch(after: remaining)
+        let remaining = refreshWaiters.remainingWait(now: now())
+        await announceNextFetch(after: remaining ?? .zero)
+        guard let remaining else { return true }
         return (try? await sleep(remaining)) != nil && !Task.isCancelled
     }
 
@@ -348,21 +349,20 @@ extension AccountPoller {
             state.threads.removeAll { $0.id == threadID }
             await publish(state)
         }
-        // 止まっているかは、トークンを待っている間に止められることがあるので待った後に見る
-        // 止まっているときは送らず、失敗も記録しない（止まっていることは取得の状態で伝わる）
+        // 止まっているかはトークンを待った後に見る。止まっていれば送らず、失敗も記録しない（取得の状態で伝わる）
         let token = await tokens.currentToken(for: accountID)
+        var failure: FailureKind?
         if !state.phase.isStopped {
-            let result =
-                if let token { await client.perform(action, endpoints: endpoints, token: token) } else {
-                    ThreadActionResult.failed(.noToken)
+            failure =
+                if let token { FailureKind(await client.perform(action, endpoints: endpoints, token: token)) } else {
+                    .noToken
                 }
-            if let kind = FailureKind(result) {
-                await recordActionFailure(ThreadActionKind(action), kind)
-            }
         }
         // 結果が 304 に隠れないように、また失敗したスレッドが一覧に戻るように、次は条件なしで取り直す
+        // （失敗を知らせる前に済ませる。知らせている間に始まった取得で、スレッドが戻らないまま知らせが消えないように）
         HiddenThreads.endRequest(for: threadID, fetchCount: fetchCount, in: &hidden)
         unconditionalRequested.store(true, ordering: .relaxed)
+        if let failure { await recordActionFailure(ThreadActionKind(action), failure) }
     }
 
     /// `newest`（ユーザーが押したときに表示していた一覧の `updated_at` の最大値）までを、すべて既読にする。
@@ -392,9 +392,9 @@ extension AccountPoller {
         readThroughs[serial]?.finish(
             succeeded: result == .succeeded, fetchCount: fetchCount, at: now(), holdFor: Self.unconditionalFetchInterval
         )
+        unconditionalRequested.store(true, ordering: .relaxed)
         if let failure = FailureKind(result) {
             await recordActionFailure(.markAllRead, failure)
         }
-        unconditionalRequested.store(true, ordering: .relaxed)
     }
 }

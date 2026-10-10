@@ -109,7 +109,7 @@ struct MarkAllReadButton: View {
     /// 一覧の最新のスレッドの `updated_at`。確認の途中で変わったら確認からやり直す
     let newest: Date?
     let isEnabled: Bool
-    /// 一覧に出ていない未読も既読にすることになるか（件数を出さない）
+    /// ボタンの文（一覧に出ていない未読も既読にすることになるときは、件数を出さない）
     let labels: MarkAllReadLabels
     let action: () -> Void
 
