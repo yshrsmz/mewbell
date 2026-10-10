@@ -25,7 +25,7 @@ struct ReloadButton: View {
 }
 
 /// 押している間とホバー中に、アイコンの後ろへ背景を付ける。
-private struct PressableIconButtonStyle: ButtonStyle {
+struct PressableIconButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         PressableIcon(configuration: configuration)
     }

@@ -21,6 +21,46 @@ struct GhConfigDirectoryTests {
     }
 }
 
+struct ConfigDirectoryValidatorTests {
+    private let directory: TemporaryDirectory
+
+    init() throws {
+        directory = try TemporaryDirectory()
+    }
+
+    @Test func acceptsAnOwnedDirectory() throws {
+        let path = directory.url.appending(path: "gh").path
+        try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)
+        #expect(ConfigDirectoryValidator.validate(path) != nil)
+    }
+
+    @Test func rejectsRelativeMissingAndFilePaths() throws {
+        let file = try directory.makeFile("hosts.yml", permissions: 0o600)
+        #expect(ConfigDirectoryValidator.validate("gh") == nil)
+        #expect(ConfigDirectoryValidator.validate(directory.url.appending(path: "missing").path) == nil)
+        #expect(ConfigDirectoryValidator.validate(file) == nil)
+    }
+
+    @Test func rejectsAWorldWritableDirectory() throws {
+        let path = directory.url.appending(path: "shared").path
+        try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: path)
+        #expect(ConfigDirectoryValidator.validate(path) == nil)
+    }
+
+    @Test func checksTheTargetOfASymbolicLink() throws {
+        let target = directory.url.appending(path: "shared").path
+        try FileManager.default.createDirectory(atPath: target, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: target)
+        let link = directory.url.appending(path: "link").path
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: target)
+        #expect(ConfigDirectoryValidator.validate(link) == nil)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: target)
+        #expect(ConfigDirectoryValidator.validate(link) != nil)
+    }
+}
+
 struct GhIdentifierTests {
     @Test(arguments: ["github.com", "acme.ghe.com", "GitHub.Example.com", "ghe-1.internal", "localhost"])
     func acceptsValidHosts(_ host: String) {

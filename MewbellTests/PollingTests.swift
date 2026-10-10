@@ -227,12 +227,13 @@ struct NotificationStoreTests {
 
     private func makeStore() -> NotificationStore {
         let client = GitHubAPIClient(transport: transport)
-        return NotificationStore { [tokens, sleeper, created] account, endpoints, onUpdate in
-            created.withLock { $0.append(account.id) }
-            return AccountPoller(
-                accountID: account.id, endpoints: endpoints, client: client, tokens: tokens, sleep: sleeper.sleep,
-                onUpdate: onUpdate)
-        }
+        return NotificationStore(
+            makePoller: { [tokens, sleeper, created] account, endpoints, _, _, _, onUpdate in
+                created.withLock { $0.append(account.id) }
+                return AccountPoller(
+                    accountID: account.id, endpoints: endpoints, client: client, tokens: tokens, sleep: sleeper.sleep,
+                    onUpdate: onUpdate)
+            }, openURL: { _ in })
     }
 
     private func status(_ user: String, _ state: TokenState, host: String = "github.com") -> AccountStatus {

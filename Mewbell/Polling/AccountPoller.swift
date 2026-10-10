@@ -15,6 +15,8 @@ actor AccountPoller {
     private let endpoints: APIEndpoints
     private let client: GitHubAPIClient
     private let tokens: any TokenProviding
+    private let participating: Bool  // `participating=true` で取得する（切り替えたらポーラーを作り直す）
+    private let firstFetchNotBefore: Date?  // 最初の取得をこの時刻まで待つ（`CarriedWait.until`）
     private let sleep: Sleep
     private let now: @Sendable () -> Date
     private let onUpdate: @Sendable (FeedState) async -> Void
@@ -51,6 +53,7 @@ actor AccountPoller {
 
     init(
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,
+        participating: Bool = false, initialPhase: FeedPhase? = nil, carriedWait: CarriedWait? = nil,
         sleep: @escaping Sleep = { try await Task.sleep(for: $0) }, now: @escaping @Sendable () -> Date = { Date() },
         onUpdate: @escaping @Sendable (FeedState) async -> Void
     ) {
@@ -58,6 +61,11 @@ actor AccountPoller {
         self.endpoints = endpoints
         self.client = client
         self.tokens = tokens
+        self.participating = participating
+        // 作り直す前の止まった状態（再読み込みでの再開を待つ）か、取得の待ち（`CarriedWait`）を持ち越す
+        state = (initialPhase ?? carriedWait?.initialPhase).map { FeedState(phase: $0, threads: []) } ?? .loading
+        firstFetchNotBefore = carriedWait?.until
+        refreshWaiters = RefreshWaiters(lastAttemptStartedAt: carriedWait?.lastAttemptStartedAt)
         self.sleep = sleep
         self.now = now
         self.onUpdate = onUpdate
@@ -119,12 +127,7 @@ actor AccountPoller {
         let thisLoop = loopCount
         runningLoop = thisLoop
         defer { endLoop(thisLoop) }
-        var refreshedToken = false
-        if refreshingTokenFirst {
-            await publish(.loading)
-            guard await refreshToken() else { return }
-            refreshedToken = true
-        }
+        guard var refreshedToken = await beginLoop(refreshingTokenFirst: refreshingTokenFirst) else { return }
         while !Task.isCancelled {
             refreshWaiters.startAttempt(at: now())
             // トークンが無いのは、読み直しが一時的にトークンを捨てたときなど。失敗として待ってから確かめ直す
@@ -194,12 +197,14 @@ actor AccountPoller {
         let startedAt = now()
         fetchCount += 1
         var result = await client.fetchNotifications(
-            endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince)
+            endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince, participating: participating)
         // 止められた（再開で新しいループに替わった）後に返った結果では、状態を書き換えない
         guard !Task.isCancelled else { return result }
         if case .updated(let threads, let lastModified, let pollInterval, let scopes) = result {
             result = .updated(
-                threads: revealOrHide(threads, fetchNumber: number, startedAt: startedAt), lastModified: lastModified,
+                threads: HiddenThreads.revealOrHide(
+                    threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt),
+                lastModified: lastModified,
                 pollInterval: pollInterval, scopes: scopes)
         }
         if case .updated = result {
@@ -305,8 +310,19 @@ actor AccountPoller {
     }
 }
 
-// 一覧のスレッドへの操作と、操作したスレッドを取得の結果から隠す処理
+// 最初の取得の待ち、一覧のスレッドへの操作と、操作したスレッドを取得の結果から隠す処理
 extension AccountPoller {
+    /// ループの最初。再開ならトークンを取り直し、そうでなければ `firstFetchNotBefore` まで待つ（ループの中で待つので、
+    /// レート制限の待ちでなければ再読み込みで早められる）。止めるなら nil、続けるならトークンを取り直したか。
+    fileprivate func beginLoop(refreshingTokenFirst: Bool) async -> Bool? {
+        if refreshingTokenFirst {
+            await publish(.loading)
+            return await refreshToken() ? true : nil
+        }
+        guard let firstFetchNotBefore, firstFetchNotBefore > now() else { return false }
+        return await pause(for: .seconds(firstFetchNotBefore.timeIntervalSince(now()))) ? false : nil
+    }
+
     /// スレッドを既読か Done にする。一覧からすぐに外し、リクエストを送り、次の取得を条件なしにする。
     /// 止まっているときとトークンが無いときは送らない（次の条件なしの取得で、未読のままなら一覧に戻る）。
     func perform(_ action: ThreadAction) async {
@@ -378,23 +394,5 @@ extension AccountPoller {
                 : .failed(fetchesBefore: fetchCount)
         }
         unconditionalRequested.store(true, ordering: .relaxed)
-    }
-
-    /// 操作の後に始めた取得の結果なら隠すのをやめ、そうでなければ既読・Done・すべて既読にしたスレッドを取り除く。
-    /// 取得は 1 つのループで順に行うので、番号と開始時刻は結果の届く順に増える。
-    private func revealOrHide(_ threads: [NotificationThread], fetchNumber: Int, startedAt: Date)
-        -> [NotificationThread]
-    {
-        hidden = hidden.filter { _, until in
-            guard case .fetch(let first) = until else { return true }
-            return fetchNumber < first
-        }
-        readThroughs = readThroughs.filter { _, readThrough in
-            readThrough.applies(toFetch: fetchNumber, startedAt: startedAt)
-        }
-        let cutoff = readThroughs.values.map(\.cutoff).max()
-        return threads.filter { thread in
-            hidden[thread.id] == nil && (cutoff.map { thread.updatedAt > $0 } ?? true)
-        }
     }
 }

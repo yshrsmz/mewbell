@@ -108,7 +108,9 @@ struct AccountDiscoveryTests {
 
     private func reload(_ discovery: AccountDiscovery) async -> [DiscoveryState] {
         let states = LockedValue<[DiscoveryState]>([])
-        await discovery.reload(userInitiated: false) { state in states.withLock { $0.append(state) } }
+        await discovery.reload(userInitiated: false, options: DiscoveryOptions()) { state in
+            states.withLock { $0.append(state) }
+        }
         return states.value
     }
 

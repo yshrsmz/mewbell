@@ -7,10 +7,14 @@ import os
 @MainActor
 @Observable
 final class NotificationStore {
-    /// ポーラーを作る。`onUpdate` はポーラーの状態が変わるたびに呼ばれる。
+    /// ポーラーを作る。`participating` は「参加しているスレッドだけにする」の設定。`initialPhase` は作り直す前の止まった状態、
+    /// `carriedWait` は作り直す前の取得の待ち。
+    /// 作り直す前の止まった状態かレート制限の待ちを持ち越す。`onUpdate` はポーラーの状態が変わるたびに呼ばれる。
     typealias PollerFactory =
         @MainActor (
-            _ account: Account, _ endpoints: APIEndpoints, _ onUpdate: @escaping @Sendable (FeedState) async -> Void
+            _ account: Account, _ endpoints: APIEndpoints, _ participating: Bool, _ initialPhase: FeedPhase?,
+            _ carriedWait: CarriedWait?,
+            _ onUpdate: @escaping @Sendable (FeedState) async -> Void
         )
         -> AccountPoller
 
@@ -20,77 +24,127 @@ final class NotificationStore {
 
     @ObservationIgnored private static let logger = Logger(category: "Polling")
     @ObservationIgnored private let makePoller: PollerFactory?
-    @ObservationIgnored private var pollers: [AccountID: (poller: AccountPoller, generation: Int)] = [:]
+    @ObservationIgnored private var pollers: [AccountID: PollerEntry] = [:]
     @ObservationIgnored private var nextGeneration = 0
     @ObservationIgnored private let notifier: (any ThreadNotifying)?
     @ObservationIgnored private let openURL: @MainActor (URL) -> Void
+    /// アカウントごとの設定（ポーラーを作るときの `participating`）
+    @ObservationIgnored private let preferences: @MainActor (AccountID) -> AccountPreferences
     /// ポーラーがまだ無いアカウントで、既読にするスレッド（起動の直後に通知をクリックされたとき）
     @ObservationIgnored private var pendingReads: [AccountID: Set<String>] = [:]
+    /// 止めたポーラーの、次の取得を早めてよい時刻（無効にしてすぐ有効に戻したときに間隔やレート制限の待ちを抜けないように）
+    @ObservationIgnored private var carriedWaits: [AccountID: CarriedWait] = [:]
 
     /// `makePoller` が nil のときはポーリングしない（テストのホストや SwiftUI プレビュー用）。
+    /// `openURL` は既定値を持たせない（テストで本物のブラウザを開かないように、呼び出し元に必ず渡させる）。
     init(
         makePoller: PollerFactory?, notifier: (any ThreadNotifying)? = nil,
-        openURL: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) },
+        openURL: @escaping @MainActor (URL) -> Void,
+        preferences: @escaping @MainActor (AccountID) -> AccountPreferences = { _ in .default },
         feeds: [AccountID: FeedState] = [:]
     ) {
         self.makePoller = makePoller
         self.notifier = notifier
         self.openURL = openURL
+        self.preferences = preferences
         self.feeds = feeds
     }
 
-    static func live(tokens: any TokenProviding, notifier: any ThreadNotifying) -> NotificationStore {
+    static func live(tokens: any TokenProviding, notifier: any ThreadNotifying, settings: AppSettings)
+        -> NotificationStore
+    {
         let client = GitHubAPIClient(transport: URLSessionTransport())
         return NotificationStore(
-            makePoller: { account, endpoints, onUpdate in
+            makePoller: { account, endpoints, participating, initialPhase, carriedWait, onUpdate in
                 AccountPoller(
-                    accountID: account.id, endpoints: endpoints, client: client, tokens: tokens, onUpdate: onUpdate)
-            }, notifier: notifier)
+                    accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
+                    participating: participating, initialPhase: initialPhase, carriedWait: carriedWait,
+                    onUpdate: onUpdate)
+            }, notifier: notifier, openURL: { NSWorkspace.shared.open($0) },
+            preferences: { settings.preferences(for: $0) })
     }
 
-    /// 全アカウントの未読の一覧の件数の合計（止まったアカウントはスレッドを持たないので 0 件）。
+    /// 全アカウントの未読の一覧の件数の合計（止まったアカウントと無効のアカウントはスレッドを持たないので 0 件）。
     var unreadCount: Int {
         feeds.values.reduce(0) { $0 + $1.threads.count }
     }
 
-    /// トークンが「使える」アカウントのポーラーを起動し、一覧から消えたアカウントのポーラーを止めて状態を消す
-    /// （全体の状態が「アカウントあり」以外になったら、すべて止める）。すでにポーラーがあるアカウントは、
-    /// トークンの取得中や「トークンを取れない」の間もそのままにする
+    /// トークンが「使える」アカウントのポーラーを起動し、一覧から消えたアカウントと無効にしたアカウントの
+    /// ポーラーを止めて状態を消す（全体の状態が「アカウントあり」以外になったら、すべて止める）。すでにポーラーが
+    /// あるアカウントは、トークンの取得中や「トークンを取れない」の間もそのままにする
     /// （作り直すと、止めたポーリングが勝手に再開したり、取り直しと重なったりするため）。
     func sync(with state: DiscoveryState) {
-        guard let makePoller else { return }
+        guard makePoller != nil else { return }
         let statuses: [AccountStatus] = if case .accounts(let statuses) = state { statuses } else { [] }
-        let keptIDs = Set(statuses.map(\.id))
+        let active = statuses.filter { $0.tokenState != .disabled }
+        let keptIDs = Set(active.map(\.id))
         for id in pollers.keys where !keptIDs.contains(id) {
-            pollers.removeValue(forKey: id)?.poller.stop()
+            let entry = pollers.removeValue(forKey: id)
+            entry?.poller.stop()
+            carriedWaits[id] = carriedWait(of: id, startedWith: entry?.carriedWait)
             feeds[id] = nil
             notifier?.accountRemoved(id)
         }
         if state != .checking {
             notifier?.retainOnly(keptIDs)
-            // 読み込みが終わっても一覧に無いか、トークンを取れないアカウントの既読化は捨てる
-            let waitingIDs = Set(statuses.filter { $0.tokenState != .unavailable }.map(\.id))
+            // 読み込みが終わっても一覧に無いか、トークンを取れない・無効のアカウントの既読化は捨てる
+            let waitingIDs = Set(active.filter { $0.tokenState != .unavailable }.map(\.id))
             pendingReads = pendingReads.filter { waitingIDs.contains($0.key) }
         }
         for account in statuses.filter({ $0.tokenState == .ready }).map(\.account) where pollers[account.id] == nil {
-            guard let endpoints = APIEndpoints(host: account.host) else {
-                Self.logger.error("Could not derive the API endpoints of \(account.id)")
-                continue
-            }
-            let generation = nextGeneration
-            nextGeneration += 1
-            let id = account.id
-            let poller = makePoller(account, endpoints) { [weak self] state in
-                await self?.apply(state, for: id, generation: generation)
-            }
-            pollers[id] = (poller, generation)
-            feeds[id] = .loading
-            Self.logger.info("Started polling \(id)")
-            for threadID in pendingReads.removeValue(forKey: id) ?? [] {
-                Task { await poller.perform(.read(threadID: threadID)) }
-            }
-            poller.start()
+            startPolling(account)
         }
+    }
+
+    /// 「参加しているスレッドだけにする」を切り替えたとき。ポーラーを止めて一覧を捨て、新しい設定で最初の取得から
+    /// 始め直す（前の `Last-Modified` や隠しているスレッドは別の一覧のものなので持ち越さない）。トークンは捨てない。
+    /// 「スコープ不足」「認証エラー」で止まっているアカウントは、止まったまま作り直す（再開は再読み込みのときだけ）。
+    /// それ以外は、取得の待ちを持ち越す（`CarriedWait`）。
+    func restart(_ id: AccountID) {
+        guard let entry = pollers.removeValue(forKey: id) else { return }
+        entry.poller.stop()
+        let initialPhase = feeds[id].flatMap { $0.phase.isStopped ? $0.phase : nil }
+        carriedWaits[id] = carriedWait(of: id, startedWith: entry.carriedWait)
+        feeds[id] = nil
+        notifier?.resetBaseline(id)
+        startPolling(entry.account, initialPhase: initialPhase)
+    }
+
+    private func startPolling(_ account: Account, initialPhase: FeedPhase? = nil) {
+        guard let makePoller else { return }
+        guard let endpoints = APIEndpoints(host: account.host) else {
+            Self.logger.error("Could not derive the API endpoints of \(account.id)")
+            return
+        }
+        let generation = nextGeneration
+        nextGeneration += 1
+        let id = account.id
+        let carriedWait = carriedWaits.removeValue(forKey: id).flatMap { $0.until > Date() ? $0 : nil }
+        let poller = makePoller(account, endpoints, preferences(id).participatingOnly, initialPhase, carriedWait) {
+            [weak self] state in
+            await self?.apply(state, for: id, generation: generation)
+        }
+        pollers[id] = PollerEntry(poller: poller, generation: generation, account: account, carriedWait: carriedWait)
+        if let initialPhase {
+            feeds[id] = FeedState(phase: initialPhase, threads: [])
+            return
+        }
+        feeds[id] = carriedWait?.initialPhase.map { FeedState(phase: $0, threads: []) } ?? .loading
+        Self.logger.info("Started polling \(id)")
+        for threadID in pendingReads.removeValue(forKey: id) ?? [] {
+            Task { await poller.perform(.read(threadID: threadID)) }
+        }
+        poller.start()
+    }
+
+    /// 止めるポーラーの代わりに作るポーラーに持ち越す待ち。止めるポーラー自身が持ち越した待ちをまだ待っている
+    /// （最初の取得をしていない）なら、その待ちも残す（作り直しを重ねて待ちが縮まないように）。
+    private func carriedWait(of id: AccountID, startedWith previous: CarriedWait?) -> CarriedWait? {
+        let current = feeds[id].flatMap { CarriedWait(from: $0, now: Date()) }
+        guard let previous, previous.until > Date(), feeds[id]?.threads.isEmpty != false,
+            feeds[id]?.phase == .loading || feeds[id]?.phase.isRateLimited == true
+        else { return current }
+        return previous.merged(with: current)
     }
 
     /// 再読み込み: 全アカウントを次の予定を待たずに `If-Modified-Since` なしで取得し、「スコープ不足」「認証エラー」で
@@ -177,4 +231,13 @@ final class NotificationStore {
         feeds[id] = state
         notifier?.feedChanged(for: id, from: old, to: state)
     }
+}
+
+/// 動いているポーラーと、その世代（止めたポーラーから遅れて届いた更新を捨てるため）、作ったときのアカウント。
+private struct PollerEntry {
+    let poller: AccountPoller
+    let generation: Int
+    let account: Account
+    /// 作ったときに持ち越した待ち
+    let carriedWait: CarriedWait?
 }

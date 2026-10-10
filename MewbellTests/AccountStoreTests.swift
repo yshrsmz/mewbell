@@ -112,3 +112,137 @@ struct AccountStoreTests {
         #expect(!store.isReloading)
     }
 }
+
+@MainActor
+struct AccountStoreSettingsTests {
+    private let alice = Account(id: AccountID(host: "github.com", user: "alice"), isActive: true)
+    private let bob = Account(id: AccountID(host: "github.com", user: "bob"), isActive: false)
+
+    private func accounts(_ alice: TokenState, _ bob: TokenState) -> DiscoveryState {
+        .accounts([
+            AccountStatus(account: self.alice, tokenState: alice), AccountStatus(account: self.bob, tokenState: bob),
+        ])
+    }
+
+    @Test func passesTheCurrentSettingsToEachReload() async {
+        let discovery = BlockingDiscovery()
+        let settings = AppSettings(storage: InMemorySettingsStorage())
+        settings.setEnabled(false, for: bob.id)
+        settings.setGhExecutableOverride("/Users/me/bin/gh")
+        let store = AccountStore(discovery: discovery, settings: settings)
+        discovery.finish()
+        store.reload()
+        await store.waitForReload()
+        #expect(
+            discovery.options == [
+                DiscoveryOptions(overrides: GhOverrides(executablePath: "/Users/me/bin/gh"), disabled: [bob.id])
+            ])
+    }
+
+    @Test func disablesAnAccountWithoutWaitingForAReload() async {
+        let discovery = BlockingDiscovery()
+        let settings = AppSettings(storage: InMemorySettingsStorage())
+        let store = AccountStore(discovery: discovery, settings: settings, state: accounts(.ready, .ready))
+        var reported: [DiscoveryState] = []
+        store.onStateChange = { reported.append($0) }
+        settings.setEnabled(false, for: bob.id)
+        store.setEnabled(false, for: bob.id)
+        #expect(store.state == accounts(.ready, .disabled))
+        #expect(reported == [accounts(.ready, .disabled)])
+        await waitUntil { discovery.events.contains("disable github.com/bob") }
+        #expect(discovery.callCount == 0)
+    }
+
+    @Test func keepsADisabledAccountDisabledWhenAnOlderReloadFinishes() async {
+        let discovery = BlockingDiscovery()
+        discovery.result = accounts(.ready, .ready)
+        let settings = AppSettings(storage: InMemorySettingsStorage())
+        let store = AccountStore(discovery: discovery, settings: settings, state: accounts(.ready, .ready))
+        store.reload()
+        settings.setEnabled(false, for: bob.id)
+        store.setEnabled(false, for: bob.id)
+        discovery.finish()
+        await store.waitForReload()
+        #expect(store.state == accounts(.ready, .disabled))
+    }
+
+    @Test func reloadsWhenAnAccountIsEnabledAgain() async {
+        let discovery = BlockingDiscovery()
+        discovery.result = accounts(.ready, .ready)
+        let settings = AppSettings(storage: InMemorySettingsStorage())
+        let store = AccountStore(discovery: discovery, settings: settings, state: accounts(.ready, .disabled))
+        discovery.finish()
+        store.setEnabled(true, for: bob.id)
+        await store.waitForReload()
+        #expect(discovery.events.prefix(2) == ["enable github.com/bob", "reload"])
+        #expect(store.state == accounts(.ready, .ready))
+    }
+
+    @Test func reloadsAsTheUserWhenTheGhPathChanges() async {
+        let discovery = BlockingDiscovery()
+        let store = AccountStore(discovery: discovery, settings: AppSettings(storage: InMemorySettingsStorage()))
+        discovery.finish()
+        store.ghExecutableChanged()
+        await store.waitForReload()
+        #expect(discovery.events.first == "reload(user)")
+    }
+
+    @Test func discardsTokensAndIgnoresOlderReloadsWhenTheConfigDirectoryChanges() async {
+        let discovery = BlockingDiscovery()
+        discovery.result = accounts(.ready, .ready)
+        let store = AccountStore(
+            discovery: discovery, settings: AppSettings(storage: InMemorySettingsStorage()),
+            state: accounts(.ready, .ready))
+        var reported: [DiscoveryState] = []
+        store.onStateChange = { reported.append($0) }
+        store.reload()
+        store.ghConfigDirectoryChanged()
+        #expect(store.state == .checking)
+        // 前の設定ディレクトリで始めた読み直しの結果（アカウントあり）は捨てる
+        discovery.finish()
+        await waitUntil { discovery.events.contains("reloadFinished") }
+        discovery.result = .notLoggedIn
+        discovery.finish()
+        await store.waitForReload()
+        #expect(reported == [.checking, .notLoggedIn])
+        let events = discovery.events
+        // 設定ディレクトリの変更では、ログインシェルで gh を探し直さない（ユーザーの再読み込みではない）
+        #expect(events == ["reload", "reloadFinished", "discardAll", "reload", "reloadFinished"])
+    }
+}
+
+@MainActor
+struct AccountStoreDisableOrderTests {
+    private let bob = AccountID(host: "github.com", user: "bob")
+
+    @Test func reloadsAfterTheDisableWhenEnabledRightAway() async {
+        let discovery = BlockingDiscovery()
+        let settings = AppSettings(storage: InMemorySettingsStorage())
+        let store = AccountStore(discovery: discovery, settings: settings, state: .accounts([]))
+        discovery.finish()
+        store.setEnabled(false, for: bob)
+        store.setEnabled(true, for: bob)
+        await store.waitForReload()
+        #expect(discovery.events.prefix(3) == ["disable github.com/bob", "enable github.com/bob", "reload"])
+    }
+}
+
+@MainActor
+struct AccountStoreOptionsTimingTests {
+    @Test func readsTheSettingsAfterWaitingForPendingDisables() async {
+        let discovery = BlockingDiscovery()
+        let settings = AppSettings(storage: InMemorySettingsStorage())
+        let store = AccountStore(discovery: discovery, settings: settings, state: .accounts([]))
+        let alice = AccountID(host: "github.com", user: "alice")
+        let bob = AccountID(host: "github.com", user: "bob")
+        discovery.finish()
+        settings.setEnabled(false, for: bob)
+        store.setEnabled(false, for: bob)
+        store.reload()
+        // 読み直しが無効化を待っている間に、もう 1 つ無効にする
+        settings.setEnabled(false, for: alice)
+        store.setEnabled(false, for: alice)
+        await store.waitForReload()
+        #expect(discovery.options.first?.disabled == [alice, bob])
+    }
+}

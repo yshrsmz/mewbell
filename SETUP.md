@@ -51,7 +51,8 @@ Claude Code を repo 直下で開き、まず探索せずに change を起こす
 | M2 | `add-notification-fetch` | GitHubAPI クライアント、ホスト種別判定、ポーリング（304 / X-Poll-Interval）、一覧（アカウント→リポジトリ）、クリックで開く |
 | M3 | `add-system-notifications` | UNUserNotificationCenter、1 スレッド 1 通知、クリックで開いて既読、未読バッジ |
 | M4 | `add-thread-actions` | 一覧からの既読（開かずに）・Done（`DELETE /notifications/threads/{id}`）・アカウントごとのすべて既読（`PUT /notifications`、2 段階の確認） |
-| M4 | `add-settings` | Settings シーン、participating 切替、アカウント ON/OFF、ログイン時起動、Diagnostics 表示、gh のパスの上書き（設定画面と UserDefaults。M1 の検出処理は上書きパスを受け取れる） |
+| M4 | `add-settings` | Settings シーン、participating 切替（アカウントごと）、アカウントの ON/OFF と macOS の通知のオン・オフ、ログイン時起動、通知の音、gh のパスと gh の設定ディレクトリの上書き（設定画面と UserDefaults。M1 の検出処理は上書きパスを受け取れる） |
+| M4 | `add-diagnostics` | Diagnostics の表示（gh のパスとバージョン、設定ディレクトリ、アカウントごとの取得の状態）、既読・Done・すべて既読の失敗の表示、通知の取得を 500 件で打ち切ったことの表示 |
 | M5 | `add-distribution`（任意） | 配布用のビルド、署名、Sparkle、Homebrew Cask |
 
 1 change が大きくなりそうなら分割する（例: M2 を `add-github-api-client` と `add-notification-list` に）。

@@ -10,6 +10,15 @@ final class AccountStore {
 
     @ObservationIgnored private static let logger = Logger(category: "Accounts")
     @ObservationIgnored private let discovery: (any AccountDiscovering)?
+    /// 読み直しに渡す設定（無効なアカウントと gh の上書き）。nil なら既定値
+    @ObservationIgnored private let settings: AppSettings?
+    /// 設定ディレクトリを変えるたびに進める。前の設定ディレクトリで始めた読み直しの結果は捨てる
+    @ObservationIgnored private var configGeneration = 0
+    /// 次の読み直しの前に、すべてのトークンを捨てる（設定ディレクトリを変えたとき）
+    @ObservationIgnored private var discardsTokensBeforeNextReload = false
+    /// 送った無効化・有効化。送った順に行い、後から始める読み直しはこれを待つ
+    /// （すぐ有効に戻したとき、遅れた無効化が取り直したトークンを消さないため）
+    @ObservationIgnored private var pendingDisable: Task<Void, Never>?
     private var reloadTask: Task<Void, Never>?
     /// 読み直している間に要求が来たか（終わった後にもう一度読み直す）
     @ObservationIgnored private var reloadRequested = false
@@ -23,8 +32,9 @@ final class AccountStore {
     var isReloading: Bool { reloadTask != nil }
 
     /// `discovery` が nil のときは読み込みを行わない（テストのホストや SwiftUI プレビュー用）。
-    init(discovery: (any AccountDiscovering)?, state: DiscoveryState = .checking) {
+    init(discovery: (any AccountDiscovering)?, settings: AppSettings? = nil, state: DiscoveryState = .checking) {
         self.discovery = discovery
+        self.settings = settings
         self.state = state
     }
 
@@ -46,9 +56,20 @@ final class AccountStore {
         if userInitiated && !state.hasAccounts {
             state = .checking
         }
+        let generation = configGeneration
+        let discardsTokens = discardsTokensBeforeNextReload
+        discardsTokensBeforeNextReload = false
+        let pendingDisable = pendingDisable
         reloadTask = Task {
-            await discovery.reload(userInitiated: userInitiated) { state in
-                await self.apply(state)
+            await pendingDisable?.value
+            if discardsTokens {
+                await discovery.discardAllTokens()
+            }
+            // 設定は待った後に読む（待っている間に無効にしたアカウントを、古い設定で取り直さないため）
+            let options = DiscoveryOptions(
+                overrides: settings?.ghOverrides ?? GhOverrides(), disabled: settings?.disabledAccounts ?? [])
+            await discovery.reload(userInitiated: userInitiated, options: options) { state in
+                await self.apply(state, generation: generation)
             }
             reloadTask = nil
             if reloadRequested {
@@ -74,7 +95,62 @@ final class AccountStore {
         await discovery?.closeCredentials()
     }
 
-    private func apply(_ state: DiscoveryState) {
+    /// 設定でアカウントを有効・無効にしたとき。無効にしたら読み直しを待たずに一覧から外してトークンを捨て、
+    /// 有効にし直したら読み直してトークンを取る。
+    func setEnabled(_ enabled: Bool, for id: AccountID) {
+        guard enabled else {
+            disable(id)
+            return
+        }
+        guard let discovery else { return }
+        enqueue { await discovery.enable(id) }
+        reload()
+    }
+
+    /// gh のパスの上書きを変えたとき。新しい候補で gh を確かめ直す。
+    func ghExecutableChanged() {
+        reload(userInitiated: true)
+    }
+
+    /// gh の設定ディレクトリの上書きを変えたとき。別の `hosts.yml` では同じ `<host>/<user>` でも別のログインのことが
+    /// あるので、すべてのポーラーを止め、トークンをすべて捨ててから読み直す。走っている読み直しの結果は捨てる。
+    func ghConfigDirectoryChanged() {
+        guard discovery != nil, !isTerminating else { return }
+        configGeneration += 1
+        discardsTokensBeforeNextReload = true
+        if state != .checking {
+            state = .checking
+            onStateChange?(state)
+        }
+        // ログインシェルでの gh の検索はユーザーの再読み込みのときだけにする（設定ディレクトリは gh の場所に関係しない）
+        reload()
+    }
+
+    private func disable(_ id: AccountID) {
+        guard let discovery, !isTerminating else { return }
+        apply(state, generation: configGeneration)
+        // 走っている読み直しは待たない（すぐにトークンを捨てるため）
+        enqueue { await discovery.disable(id) }
+    }
+
+    /// 無効化・有効化を、送った順に 1 つずつ行う。
+    private func enqueue(_ operation: @escaping @Sendable () async -> Void) {
+        let previous = pendingDisable
+        pendingDisable = Task {
+            await previous?.value
+            await operation()
+        }
+    }
+
+    /// 今の設定で無効なアカウントを `.disabled` にする（無効にした直後に、前の設定で始めた読み直しが終わったときのため）。
+    private func applyingSettings(to state: DiscoveryState) -> DiscoveryState {
+        settings.map { state.markingDisabled($0.disabledAccounts) } ?? state
+    }
+
+    private func apply(_ state: DiscoveryState, generation: Int) {
+        // 前の設定ディレクトリで始めた読み直しの結果は捨てる
+        guard generation == configGeneration else { return }
+        let state = applyingSettings(to: state)
         // 変わっていなければ代入しない（ポップオーバーを開くたびに一覧を描き直さないため）
         guard self.state != state else { return }
         self.state = state

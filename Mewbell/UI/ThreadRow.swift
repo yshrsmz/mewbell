@@ -109,14 +109,20 @@ struct MarkAllReadButton: View {
     /// 一覧の最新のスレッドの `updated_at`。確認の途中で変わったら確認からやり直す
     let newest: Date?
     let isEnabled: Bool
+    /// `participating=true` で取得している（`PUT /notifications` は一覧に出ていない未読も既読にするので、件数を出さない）
+    let participatingOnly: Bool
     let action: () -> Void
 
     @State private var confirming: Bool
 
-    init(count: Int, newest: Date?, isEnabled: Bool, confirming: Bool = false, action: @escaping () -> Void) {
+    init(
+        count: Int, newest: Date?, isEnabled: Bool, participatingOnly: Bool = false, confirming: Bool = false,
+        action: @escaping () -> Void
+    ) {
         self.count = count
         self.newest = newest
         self.isEnabled = isEnabled
+        self.participatingOnly = participatingOnly
         self.action = action
         _confirming = State(initialValue: confirming)
     }
@@ -131,7 +137,7 @@ struct MarkAllReadButton: View {
             }
         } label: {
             if confirming {
-                Text("Mark \(count) as read?")
+                Text(participatingOnly ? "Mark all as read?" : "Mark \(count) as read?")
                     .font(.caption.weight(.semibold))
             } else {
                 Image(systemName: "checkmark.circle")
@@ -140,8 +146,8 @@ struct MarkAllReadButton: View {
         .buttonStyle(.borderless)
         .tint(confirming ? .accentColor : nil)
         .disabled(!isEnabled)
-        .help(confirming ? "Click again to mark all as read" : "Mark all as read")
-        .accessibilityLabel(confirming ? "Confirm marking \(count) as read" : "Mark all as read")
+        .help(help)
+        .accessibilityLabel(accessibilityLabel)
         // 確認の表示は 5 秒で戻す（`confirming` が変わると前の待ちは取り消される）
         .task(id: confirming) {
             guard confirming else { return }
@@ -157,6 +163,24 @@ struct MarkAllReadButton: View {
         .onChange(of: count) { confirming = false }
         .onChange(of: newest) { confirming = false }
         .onDisappear { confirming = false }
+    }
+}
+
+extension MarkAllReadButton {
+    private static let includesHidden =
+        "Also marks threads you are not participating in as read, up to the newest one shown here."
+
+    private var help: String {
+        let base = confirming ? "Click again to mark all as read" : "Mark all as read"
+        return participatingOnly ? "\(base). \(Self.includesHidden)" : base
+    }
+
+    private var accessibilityLabel: String {
+        let base =
+            confirming
+            ? (participatingOnly ? "Confirm marking all as read" : "Confirm marking \(count) as read")
+            : "Mark all as read"
+        return participatingOnly ? "\(base). \(Self.includesHidden)" : base
     }
 }
 
@@ -177,6 +201,7 @@ struct RelativeTimeText: View {
         MarkAllReadButton(count: 3, newest: .now, isEnabled: true) {}
         MarkAllReadButton(count: 3, newest: .now, isEnabled: true, confirming: true) {}
         MarkAllReadButton(count: 0, newest: nil, isEnabled: false) {}
+        MarkAllReadButton(count: 2, newest: .now, isEnabled: true, participatingOnly: true, confirming: true) {}
     }
     .padding()
 }

@@ -16,6 +16,24 @@ enum GhConfigDirectory {
     }
 }
 
+/// 設定で上書きした gh の設定ディレクトリの検証。
+enum ConfigDirectoryValidator {
+    /// 使えるとき、シンボリックリンクを解決した実体のディレクトリを返す。絶対パスで、実体がディレクトリで、
+    /// 所有者が現在のユーザーで、world-writable でないこと。確かめた後にリンクを差し替えられないよう、使うのは返した実体にする。
+    static func validate(_ path: String) -> URL? {
+        guard path.hasPrefix("/"), let resolvedPointer = realpath(path, nil) else { return nil }
+        let resolved = String(cString: resolvedPointer)
+        free(resolvedPointer)
+        var info = stat()
+        guard stat(resolved, &info) == 0,
+            info.st_mode & S_IFMT == S_IFDIR,
+            info.st_uid == getuid(),
+            info.st_mode & S_IWOTH == 0
+        else { return nil }
+        return URL(filePath: resolved, directoryHint: .isDirectory)
+    }
+}
+
 /// `hosts.yml` から読んだ値の検証。gh の引数に渡す前に必ず通す。
 enum GhIdentifier {
     /// DNS 名として妥当なホスト名（英数字とハイフンのラベルをドットでつなぐ。全体 253 文字以下）。

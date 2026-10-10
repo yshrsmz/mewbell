@@ -17,22 +17,38 @@ struct ThreadListActions {
 }
 
 /// アカウントの区画をアカウントの並び順に並べる。トークンや API の URL は表示しない。
+/// 無効のアカウントの区画は出さない。
 struct NotificationListView: View {
     let statuses: [AccountStatus]
     let feeds: [AccountID: FeedState]
+    /// 「参加しているスレッドだけにする」の設定
+    var participatingOnly: (AccountID) -> Bool = { _ in false }
     let actions: ThreadListActions
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(statuses) { status in
-                    AccountSectionView(status: status, feed: feeds[status.id], actions: actions)
-                }
+        let shown = statuses.filter { $0.tokenState != .disabled }
+        if shown.isEmpty && !statuses.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("All accounts are disabled", systemImage: "pause.circle")
+                    .font(.headline)
+                Text("Enable an account in Settings to get its notifications.")
+                OpenSettingsButton(style: .text)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .font(.callout)
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(shown) { status in
+                        AccountSectionView(
+                            status: status, feed: feeds[status.id], participatingOnly: participatingOnly(status.id),
+                            actions: actions)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 480)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxHeight: 480)
-        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -40,6 +56,7 @@ struct NotificationListView: View {
 struct AccountSectionView: View {
     let status: AccountStatus
     let feed: FeedState?
+    var participatingOnly = false
     let actions: ThreadListActions
 
     private var account: Account { status.account }
@@ -58,6 +75,9 @@ struct AccountSectionView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 CommandRow(command: "gh auth login --hostname \(account.host)")
+            case .disabled:
+                // 無効のアカウントの区画は `NotificationListView` が出さない
+                EmptyView()
             case .fetching, .ready:
                 // 401 の後などにトークンを取り直している間も、それまでの状態を出し続ける
                 if let feed {
@@ -87,10 +107,18 @@ struct AccountSectionView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            if participatingOnly {
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help("Showing only threads you are participating in")
+                    .accessibilityLabel("Participating only")
+            }
             Spacer(minLength: 0)
             if status.tokenState == .ready, let feed, !feed.phase.isStopped {
                 MarkAllReadButton(
-                    count: feed.threads.count, newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead
+                    count: feed.threads.count, newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead,
+                    participatingOnly: participatingOnly
                 ) {
                     actions.markAllRead(account.id)
                 }
@@ -112,6 +140,9 @@ struct AccountSectionView: View {
         case .unavailable:
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
                 .help("No token")
+        case .disabled:
+            Image(systemName: "pause.circle").foregroundStyle(.secondary)
+                .help("Disabled")
         }
     }
 
@@ -256,6 +287,15 @@ struct FeedStatusView: View {
             bob.id: .loading,
         ],
         actions: .none
+    )
+    .padding()
+    .frame(width: 380)
+}
+
+#Preview("All disabled") {
+    let alice = Account(id: AccountID(host: "github.com", user: "alice"), isActive: true)
+    return NotificationListView(
+        statuses: [AccountStatus(account: alice, tokenState: .disabled)], feeds: [:], actions: .none
     )
     .padding()
     .frame(width: 380)

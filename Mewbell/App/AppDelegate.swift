@@ -3,6 +3,8 @@ import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    let settings: AppSettings
+    let launchAtLogin: LaunchAtLogin
     let accountStore: AccountStore
     let notificationStore: NotificationStore
     let notificationPermission: NotificationPermission
@@ -11,16 +13,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     override init() {
         if LaunchContext.isTestHostOrPreview {
+            settings = AppSettings(storage: InMemorySettingsStorage())
+            launchAtLogin = LaunchAtLogin(service: InertLoginItem())
             accountStore = AccountStore(discovery: nil)
-            notificationStore = NotificationStore(makePoller: nil)
+            notificationStore = NotificationStore(makePoller: nil, openURL: { _ in })
             notificationPermission = NotificationPermission(center: nil)
             clickHandler = nil
         } else {
+            let settings = AppSettings(storage: UserDefaultsStorage())
+            launchAtLogin = LaunchAtLogin(service: MainAppLoginItem())
             let discovery = AccountDiscovery.live(credentials: CredentialStore())
             let center = LiveUserNotificationCenter()
-            let notificationStore = NotificationStore.live(
-                tokens: discovery, notifier: SystemNotifier(center: center))
-            accountStore = AccountStore(discovery: discovery)
+            let notifier = SystemNotifier(
+                center: center, notifies: { settings.preferences(for: $0).notifies },
+                playsSound: { settings.notificationSound })
+            let notificationStore = NotificationStore.live(tokens: discovery, notifier: notifier, settings: settings)
+            settings.onNotificationsChange = { id, notifies in
+                if !notifies {
+                    notifier.notificationsDisabled(id)
+                }
+            }
+            self.settings = settings
+            accountStore = AccountStore(discovery: discovery, settings: settings)
             self.notificationStore = notificationStore
             notificationPermission = NotificationPermission(center: center)
             clickHandler = NotificationClickHandler { request in
@@ -30,6 +44,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
         accountStore.onStateChange = { [notificationStore] state in
             notificationStore.sync(with: state)
+        }
+        settings.onAccountEnabledChange = { [accountStore] id, enabled in
+            accountStore.setEnabled(enabled, for: id)
+        }
+        settings.onParticipatingChange = { [notificationStore] id in
+            notificationStore.restart(id)
+        }
+        settings.onGhExecutableChange = { [accountStore] in
+            accountStore.ghExecutableChanged()
+        }
+        settings.onGhConfigDirectoryChange = { [accountStore] in
+            accountStore.ghConfigDirectoryChanged()
         }
         // 終了中の通知のクリックで起動されたときに取りこぼさないよう、起動が終わる前に設定する
         if let clickHandler {

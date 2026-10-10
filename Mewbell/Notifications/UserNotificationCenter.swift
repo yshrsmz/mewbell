@@ -49,7 +49,7 @@ struct LiveUserNotificationCenter: UserNotificationCenter {
         notification.body = content.body
         notification.threadIdentifier = content.threadIdentifier
         notification.userInfo = content.userInfo
-        notification.sound = .default
+        notification.sound = content.playsSound ? .default : nil
         do {
             try await center.add(
                 UNNotificationRequest(identifier: content.identifier, content: notification, trigger: nil))

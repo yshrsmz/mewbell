@@ -5,6 +5,7 @@ struct MenuBarContentView: View {
     let store: AccountStore
     let notifications: NotificationStore
     let permission: NotificationPermission
+    let settings: AppSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -12,6 +13,7 @@ struct MenuBarContentView: View {
                 Text("Mewbell")
                     .font(.headline)
                 Spacer()
+                OpenSettingsButton()
                 ReloadButton(isLoading: store.isReloading || notifications.isRefreshing) {
                     store.reload(userInitiated: true)
                     notifications.refresh()
@@ -27,13 +29,16 @@ struct MenuBarContentView: View {
             if case .accounts(let statuses) = store.state {
                 NotificationListView(
                     statuses: statuses, feeds: notifications.feeds,
+                    participatingOnly: { settings.preferences(for: $0).participatingOnly },
                     actions: ThreadListActions(
                         open: { notifications.open($0, in: $1) },
                         markRead: { notifications.markRead($0, in: $1) },
                         markDone: { notifications.markDone($0, in: $1) },
                         markAllRead: { notifications.markAllRead(in: $0) }))
             } else {
-                GuidanceView(state: store.state)
+                GuidanceView(
+                    state: store.state, ghExecutableOverridden: settings.ghExecutableOverride != nil,
+                    ghConfigDirectoryOverridden: settings.ghConfigDirectoryOverride != nil)
             }
 
             Divider()
@@ -60,7 +65,7 @@ struct MenuBarContentView: View {
             discovery: nil,
             state: .accounts([AccountStatus(account: Account(id: alice, isActive: true), tokenState: .ready)])),
         notifications: NotificationStore(
-            makePoller: nil,
+            makePoller: nil, openURL: { _ in },
             feeds: [
                 alice: FeedState(
                     phase: .loaded(updatedAt: Date()),
@@ -74,11 +79,13 @@ struct MenuBarContentView: View {
                         }
                     })
             ]),
-        permission: NotificationPermission(center: nil, authorization: .denied))
+        permission: NotificationPermission(center: nil, authorization: .denied),
+        settings: AppSettings(storage: InMemorySettingsStorage()))
 }
 
 #Preview("gh not found") {
     MenuBarContentView(
-        store: AccountStore(discovery: nil, state: .ghNotFound), notifications: NotificationStore(makePoller: nil),
-        permission: NotificationPermission(center: nil))
+        store: AccountStore(discovery: nil, state: .ghNotFound),
+        notifications: NotificationStore(makePoller: nil, openURL: { _ in }),
+        permission: NotificationPermission(center: nil), settings: AppSettings(storage: InMemorySettingsStorage()))
 }
