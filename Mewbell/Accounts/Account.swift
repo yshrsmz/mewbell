@@ -34,6 +34,13 @@ struct AccountID: Hashable, Sendable, CustomStringConvertible {
         self.user = user
     }
 
+    /// `hosts.yml` や保存した値など、信頼できない文字列から作る。ホスト名・ユーザー名が検証を通らなければ nil。
+    init?(validatingHost host: String, user: String) {
+        let host = host.lowercased()
+        guard GhIdentifier.isValidHost(host), GhIdentifier.isValidUser(user) else { return nil }
+        self.init(host: host, user: user)
+    }
+
     var description: String { "\(host)/\(user)" }
 }
 

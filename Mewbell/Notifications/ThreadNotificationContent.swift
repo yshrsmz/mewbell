@@ -61,11 +61,12 @@ struct ThreadOpenRequest: Sendable, Equatable {
     /// URL が検証を通らなければ、リポジトリのページに置き換える。
     init?(userInfo: [AnyHashable: Any]) {
         typealias Key = ThreadNotificationContent.Key
-        guard let host = (userInfo[Key.host] as? String)?.lowercased(), let user = userInfo[Key.user] as? String,
-            let threadID = userInfo[Key.threadID] as? String,
-            GhIdentifier.isValidHost(host), GhIdentifier.isValidUser(user), ThreadID.isValid(threadID),
-            let endpoints = APIEndpoints(host: host)
+        guard let rawHost = userInfo[Key.host] as? String, let user = userInfo[Key.user] as? String,
+            let threadID = userInfo[Key.threadID] as? String, ThreadID.isValid(threadID),
+            let account = AccountID(validatingHost: rawHost, user: user),
+            let endpoints = APIEndpoints(host: account.host)
         else { return nil }
+        let host = account.host
         if let url = (userInfo[Key.url] as? String).flatMap(URL.init(string:)), ThreadWebURL.isOpenable(url, host: host)
         {
             self.url = url
@@ -76,7 +77,7 @@ struct ThreadOpenRequest: Sendable, Equatable {
         } else {
             return nil
         }
-        account = AccountID(host: host, user: user)
+        self.account = account
         self.threadID = threadID
     }
 }

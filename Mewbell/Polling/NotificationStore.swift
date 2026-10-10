@@ -71,7 +71,8 @@ final class NotificationStore {
     func sync(with state: DiscoveryState) {
         guard makePoller != nil else { return }
         let statuses: [AccountStatus] = if case .accounts(let statuses) = state { statuses } else { [] }
-        let keptIDs = Set(statuses.filter { $0.tokenState != .disabled }.map(\.id))
+        let active = statuses.filter { $0.tokenState != .disabled }
+        let keptIDs = Set(active.map(\.id))
         for id in pollers.keys where !keptIDs.contains(id) {
             pollers.removeValue(forKey: id)?.poller.stop()
             feeds[id] = nil
@@ -80,8 +81,7 @@ final class NotificationStore {
         if state != .checking {
             notifier?.retainOnly(keptIDs)
             // 読み込みが終わっても一覧に無いか、トークンを取れない・無効のアカウントの既読化は捨てる
-            let waitingIDs = Set(
-                statuses.filter { $0.tokenState != .unavailable && $0.tokenState != .disabled }.map(\.id))
+            let waitingIDs = Set(active.filter { $0.tokenState != .unavailable }.map(\.id))
             pendingReads = pendingReads.filter { waitingIDs.contains($0.key) }
         }
         for account in statuses.filter({ $0.tokenState == .ready }).map(\.account) where pollers[account.id] == nil {

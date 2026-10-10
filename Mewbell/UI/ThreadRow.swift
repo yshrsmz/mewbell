@@ -176,11 +176,11 @@ extension MarkAllReadButton {
     }
 
     private var accessibilityLabel: String {
-        if participatingOnly {
-            return confirming
-                ? "Confirm marking all as read. \(Self.includesHidden)" : "Mark all as read. \(Self.includesHidden)"
-        }
-        return confirming ? "Confirm marking \(count) as read" : "Mark all as read"
+        let base =
+            confirming
+            ? (participatingOnly ? "Confirm marking all as read" : "Confirm marking \(count) as read")
+            : "Mark all as read"
+        return participatingOnly ? "\(base). \(Self.includesHidden)" : base
     }
 }
 

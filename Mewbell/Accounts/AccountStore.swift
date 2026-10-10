@@ -119,20 +119,13 @@ final class AccountStore {
 
     private func disable(_ id: AccountID) {
         guard let discovery, !isTerminating else { return }
-        if case .accounts(let statuses) = state {
-            apply(.accounts(statuses), generation: configGeneration)
-        }
+        apply(state, generation: configGeneration)
         Task { await discovery.disable(id) }
     }
 
     /// 今の設定で無効なアカウントを `.disabled` にする（無効にした直後に、前の設定で始めた読み直しが終わったときのため）。
     private func applyingSettings(to state: DiscoveryState) -> DiscoveryState {
-        guard let settings, case .accounts(let statuses) = state else { return state }
-        let disabled = settings.disabledAccounts
-        return .accounts(
-            statuses.map { status in
-                disabled.contains(status.id) ? AccountStatus(account: status.account, tokenState: .disabled) : status
-            })
+        settings.map { state.markingDisabled($0.disabledAccounts) } ?? state
     }
 
     private func apply(_ state: DiscoveryState, generation: Int) {

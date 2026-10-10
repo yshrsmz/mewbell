@@ -123,9 +123,6 @@ enum SettingsKey {
     static func accountID(from key: String) -> AccountID? {
         let parts = key.split(separator: "/", omittingEmptySubsequences: false)
         guard parts.count == 2 else { return nil }
-        let host = String(parts[0]).lowercased()
-        let user = String(parts[1])
-        guard GhIdentifier.isValidHost(host), GhIdentifier.isValidUser(user) else { return nil }
-        return AccountID(host: host, user: user)
+        return AccountID(validatingHost: String(parts[0]), user: String(parts[1]))
     }
 }

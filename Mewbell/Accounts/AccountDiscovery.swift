@@ -34,15 +34,18 @@ enum DiscoveryState: Sendable, Equatable {
         if case .accounts = self { true } else { false }
     }
 
-    /// 無効なアカウントを `.disabled` に、それ以外を `tokenState` にした「アカウントあり」。
+    /// `accounts` を `tokenState` にし、`disabled` に入るものを `.disabled` にした「アカウントあり」。
     static func accounts(
         _ accounts: [Account], disabled: Set<AccountID>, tokenState: (Account) -> TokenState
     ) -> DiscoveryState {
-        .accounts(
-            accounts.map { account in
-                AccountStatus(
-                    account: account, tokenState: disabled.contains(account.id) ? .disabled : tokenState(account))
-            })
+        .accounts(accounts.map { AccountStatus(account: $0, tokenState: tokenState($0)) }).markingDisabled(disabled)
+    }
+
+    /// `disabled` に入るアカウントを `.disabled` にする（「アカウントあり」以外はそのまま）。
+    func markingDisabled(_ disabled: Set<AccountID>) -> DiscoveryState {
+        guard case .accounts(let statuses) = self, !disabled.isEmpty else { return self }
+        return .accounts(
+            statuses.map { disabled.contains($0.id) ? AccountStatus(account: $0.account, tokenState: .disabled) : $0 })
     }
 }
 
@@ -66,12 +69,6 @@ protocol AccountDiscovering: Sendable {
     func discardAllTokens() async
     /// トークンをすべて捨て、以後は受け取らない（アプリの終了時）。
     func closeCredentials() async
-}
-
-extension AccountDiscovering {
-    func reload(userInitiated: Bool, update: @escaping @Sendable (DiscoveryState) async -> Void) async {
-        await reload(userInitiated: userInitiated, options: DiscoveryOptions(), update: update)
-    }
 }
 
 actor AccountDiscovery: AccountDiscovering, TokenProviding {
@@ -209,13 +206,15 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
             verifiedGhPath = nil
             return .ghNotFound
         }
-        let configDirectory: URL
-        switch resolveConfigDirectory(options.overrides.configDirectory) {
-        case .success(let url): configDirectory = url
-        case .failure(let unusable): return .hostsFileUnreadable(path: unusable.hostsFile.path)
+        // 設定で上書きした設定ディレクトリが使えなければ、ほかの候補に移らない（別の gh のログインを黙って使わないため）
+        let override = options.overrides.configDirectory
+        let overrideURL = override.map { URL(filePath: $0, directoryHint: .isDirectory) }
+        let configDirectory = overrideURL ?? self.configDirectory
+        if let override, !ConfigDirectoryValidator.validate(override) {
+            Self.logger.error("The overridden gh config directory is not usable")
+            return .hostsFileUnreadable(path: configDirectory.appending(path: "hosts.yml").path)
         }
-        let environment = GhEnvironment.make(
-            from: environment, configDirectory: options.overrides.configDirectory != nil ? configDirectory : nil)
+        let environment = GhEnvironment.make(from: environment, configDirectory: overrideURL)
         currentEnvironment = environment
         if verifiedConfigDirectory != configDirectory {
             verifiedGhPath = nil
@@ -257,17 +256,6 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         return .accounts(accounts, disabled: options.disabled) { failed.contains($0.id) ? .unavailable : .ready }
     }
 
-    /// 設定で上書きした設定ディレクトリが使えなければ、ほかの候補に移らない（別の gh のログインを黙って使わないため）。
-    private func resolveConfigDirectory(_ override: String?) -> Result<URL, UnusableConfigDirectory> {
-        guard let override else { return .success(configDirectory) }
-        let url = URL(filePath: override, directoryHint: .isDirectory)
-        guard ConfigDirectoryValidator.validate(override) else {
-            Self.logger.error("The overridden gh config directory is not usable")
-            return .failure(UnusableConfigDirectory(hostsFile: url.appending(path: "hosts.yml")))
-        }
-        return .success(url)
-    }
-
     /// アカウントごとの `gh auth token` を並べて実行し、取れたトークンを保存する。取れなかったアカウントを返す。
     private func fetchTokens(for accounts: [Account], using client: GhClient) async -> Set<AccountID> {
         await withTaskGroup(of: (AccountID, Bool).self) { group in
@@ -291,9 +279,4 @@ private final class TokenFetch: Sendable {
     init(task: Task<AccessToken?, Never>) {
         self.task = task
     }
-}
-
-/// 設定で上書きした、使えない設定ディレクトリ。
-private struct UnusableConfigDirectory: Error {
-    let hostsFile: URL
 }
