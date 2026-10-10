@@ -1,0 +1,29 @@
+# Tasks
+
+## 1. スレッドの番号（GitHubAPI / UI）
+
+- [ ] 1.1 `ThreadWebURL.subjectNumber(for:endpoints:)` を足し、`suffix(for:endpoints:)` が `["pull", id]` か `["issues", id]` を返したときだけ `id` を返す（D4）。確認: テストを足して通す: (a) `https://api.github.com/repos/octo/app/pulls/42` で `42`、(b) GHES の `https://ghe.example.com/api/v3/repos/team/svc/issues/7` で `7`、GHE Cloud の `https://api.acme.ghe.com/repos/acme/web/pulls/3` で `3`、(c) `https://evil.example.com/repos/octo/app/pulls/42` で `nil`、(d) リポジトリが一致しない `subject.url` で `nil`、(e) Commit・Release・Discussion・`subject.url` が無いスレッドで `nil`、(f) 番号が数字でない（`pulls/abc`）と `nil`。既存の `ThreadWebURL` のテストが通る
+- [ ] 1.2 `ThreadRow` に `number: String?` を足し、2 行目を `#<番号> · <理由> · <更新日時>` にする。`AccountSectionView` が `APIEndpoints(host:)` をアカウントごとに 1 回作って渡す（D4）。確認: プレビューに番号のある行と無い行を足して見る（件名が 2 行の行でも 2 行目の並びが崩れない）。ビルドが通る
+
+## 2. 折りたたみの状態（UI / App）
+
+- [ ] 2.1 `Mewbell/UI/ListExpansion.swift` に `ListExpansion` と `RepositoryKey` を作る（`isCollapsed`、`toggle`、`expand(account:repositories:)`、`retain`）（D1、D3）。確認: テストを足して通す: (a) 作った直後はどのアカウントもリポジトリも開いている、(b) `toggle` で折りたたみ、もう一度で開く。アカウントとリポジトリは別々に覚える、(c) 同じ `owner/name` でもアカウントが違えば別のもの、(d) `expand(account: alice, repositories: [octo/app])` で `alice` と `alice` の `octo/app` が開き、`alice` の `octo/lib` と `bob` の `octo/app` は折りたたんだまま、(e) `retain([alice])` で `bob` のアカウントとリポジトリの状態が消える
+- [ ] 2.2 `SystemNotifier` に `onNewThreads` を足し、`.loaded` で `changes.post` が空でないときに、`notifies` で絞る前の値で呼ぶ（D2）。確認: 偽の `UserNotificationCenter` でテストを足して通す: (a) 基準の取得では呼ばれない、(b) 次の取得で新しいスレッドが来ると、そのスレッドで呼ばれる、(c) `updated_at` が進んだスレッドで呼ばれる、(d) 「macOS の通知を出す」がオフでも呼ばれ、`add` はされない、(e) `threadRemoved` の後に同じ `updated_at` で戻ったスレッドでは呼ばれない、(f) `resetBaseline` の後の最初の取得では呼ばれない。既存の `SystemNotificationTests` と `SystemNotifierSettingsTests` が通る
+- [ ] 2.3 `AppDelegate` で `ListExpansion` を作り、`onNewThreads` を `expand` に、`accountStore.onStateChange` を `retain`（「無効」以外のアカウント）につなぎ、`MewbellApp` から `MenuBarContentView` に渡す（D1〜D3）。テスト用ホストとプレビューでも `ListExpansion` を作る。確認: ビルドが通り、既存のテストが通る
+
+## 3. 見出しの開閉（UI）
+
+- [ ] 3.1 `AccountSectionView` の見出しに開閉のボタンを足す。折りたたんだときはリポジトリのグループと「No unread notifications」を隠し、取得の状態・操作の失敗・トークンを取れないときの案内は出し続ける。折りたたんでいて未読があるときは件数を出す。「すべて既読」は別のボタンのまま（D5）。確認: プレビューに「開いたアカウント」「折りたたんだアカウント（件数あり）」「折りたたんだアカウントの取得の失敗」を足して見る。ツールチップとアクセシビリティのラベルが `Collapse` / `Expand` で変わることをプレビューで見る
+- [ ] 3.2 リポジトリの見出しを開閉のボタンにし、折りたたんだときはスレッドの行を隠して件数を出す。開閉のアニメーションは「視差効果を減らす」がオンなら付けない（D5）。確認: プレビューに「折りたたんだリポジトリと開いたリポジトリが並ぶアカウント」を足して見る。ビルドが通る
+
+## 4. 最終確認
+
+- [ ] 4.1 ビルドが通る: `MEWBELL_WARNINGS_AS_ERRORS=YES` を付けた Debug と Release の `xcodebuild build` が成功する
+- [ ] 4.2 テストが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` と `bash scripts/lint.sh` が成功し、`npx openspec validate --all --strict` も通る
+- [ ] 4.3 手元で起動して確認した: (a) Pull request と Issue の行に `#番号` が出て、クリックで開くページの番号と一致する。Release などの行には出ない、(b) リポジトリとアカウントを折りたたむと行が隠れて件数が出て、メニューバーの件数は変わらない、(c) ポップオーバーを閉じて開き直しても折りたたんだまま、(d) 再起動するとすべて開いている、(e) 折りたたんだリポジトリに新着を作ると、そのリポジトリとアカウントが開き、ほかの折りたたんだリポジトリは閉じたまま、(f) `defaults read com.codingfeline.mewbell` に折りたたみの状態が無い
+- [ ] 4.4 README の現状の説明を更新する（折りたたみと番号の表示）。確認: 差分を読み、spec と食い違いが無い
+
+## 5. 別コンテキストでのレビュー
+
+- [ ] 5.1 新しいコンテキストの opus サブエージェントで `simplify` スキルを実行し、作業ツリーに入った変更を確かめる。確認: `bash scripts/lint.sh` と `xcodebuild test` が引き続き通る
+- [ ] 5.2 別の新しいコンテキストの opus サブエージェントで `code-review` スキルを effort `medium` で実行し、指摘ごとに「直した / 直さない（理由）」を決めて対応する。ロジックに手を入れたら 5.2 をやり直す。確認: 指摘の件数と対応結果、セキュリティ上の確認を PR 本文に書いた
