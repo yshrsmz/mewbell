@@ -2,6 +2,7 @@ name: CI
 
 # macOS ランナーは高価なので、CI は ubuntu で動く範囲（lint と OpenSpec の検証）だけにする。
 # xcodebuild のビルドとテストは手元で実行する（README・tasks.md の最終確認を参照）。
+# macOS ランナーを使うのはリリースのワークフロー（release.yml）だけ。
 
 on:
   pull_request:
@@ -29,6 +30,26 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # release-please が書き換えるのは印の中の MARKETING_VERSION だけ。Xcode が project.xcproj を保存し直して
+      # コメントが消えたり、General タブの Version / Build がターゲットに値を書いたりすると、リリースのジョブが
+      # タグを作った後でバージョンの不一致で失敗するので、PR のうちに気づく
+      - name: Check the version settings
+        run: |
+          project=Mewbell.xcodeproj/project.xcproj
+          block="$(sed -n '/x-release-please-start-version/,/x-release-please-end/p' "$project")"
+          if ! grep -q 'x-release-please-end' "$project" ||
+            ! grep -Eq '"MARKETING_VERSION": "[0-9]+\.[0-9]+\.[0-9]+"' <<<"$block"; then
+            echo "$project の release-please の印（start と end）の中に MARKETING_VERSION（X.Y.Z）がありません" >&2
+            exit 1
+          fi
+          # [config=Release] のような構成ごとの上書きも数える
+          if [[ "$(grep -c '"MARKETING_VERSION[":[]' "$project")" != 1 ]] ||
+            [[ "$(grep -c '"CURRENT_PROJECT_VERSION[":[]' "$project")" != 1 ]] ||
+            ! grep -Fq '"CURRENT_PROJECT_VERSION": "$(MARKETING_VERSION)"' "$project"; then
+            echo "$project のバージョンは、プロジェクトの設定の MARKETING_VERSION 1 か所だけに書き、CURRENT_PROJECT_VERSION は \$(MARKETING_VERSION) にします" >&2
+            exit 1
+          fi
 
       - name: swift-format
         run: >-

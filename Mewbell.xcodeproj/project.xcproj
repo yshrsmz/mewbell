@@ -54,7 +54,6 @@
         "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
         "CODE_SIGN_INJECT_BASE_ENTITLEMENTS[config=Release]": "NO",
         "COMBINE_HIDPI_IMAGES": "YES",
-        "CURRENT_PROJECT_VERSION": "1",
         "ENABLE_APP_SANDBOX": "NO",
         "ENABLE_HARDENED_RUNTIME": "YES",
         "ENABLE_PREVIEWS": "YES",
@@ -67,7 +66,6 @@
           "$(inherited)",
           "@executable_path/../Frameworks",
         ],
-        "MARKETING_VERSION": "0.1.0",
         "PRODUCT_BUNDLE_IDENTIFIER": "com.codingfeline.mewbell",
         "PRODUCT_NAME": "$(TARGET_NAME)",
         "STRING_CATALOG_GENERATE_SYMBOLS": "YES",
@@ -89,9 +87,7 @@
       ],
       "build-settings": {
         "BUNDLE_LOADER": "$(TEST_HOST)",
-        "CURRENT_PROJECT_VERSION": "1",
         "GENERATE_INFOPLIST_FILE": "YES",
-        "MARKETING_VERSION": "0.1.0",
         "PRODUCT_BUNDLE_IDENTIFIER": "com.codingfeline.mewbell.tests",
         "PRODUCT_NAME": "$(TARGET_NAME)",
         "STRING_CATALOG_GENERATE_SYMBOLS": "NO",
@@ -156,6 +152,11 @@
     "GCC_WARN_UNUSED_VARIABLE": "YES",
     "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
     "MACOSX_DEPLOYMENT_TARGET": "26.0",
+    // release-please が書き換える（release-please-config.json）。Mewbell と MewbellTests で共有する
+    "CURRENT_PROJECT_VERSION": "$(MARKETING_VERSION)",
+    // x-release-please-start-version
+    "MARKETING_VERSION": "0.1.0",
+    // x-release-please-end
     "MEWBELL_WARNINGS_AS_ERRORS": "NO",
     "MTL_ENABLE_DEBUG_INFO[config=Debug]": "INCLUDE_SOURCE",
     "MTL_ENABLE_DEBUG_INFO[config=Release]": "NO",

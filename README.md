@@ -3,9 +3,55 @@
 macOS のメニューバーに常駐し、複数の GitHub アカウント（github.com / GHE Cloud データレジデンシー `*.ghe.com` / GHES 3.13+）の通知をまとめて受け取るアプリです。認証には [gh CLI](https://cli.github.com/) のログイン情報をそのまま使い、アプリ独自のログイン（PAT の入力や OAuth App）は持ちません。
 
 > [!NOTE]
-> 開発中です。現在は gh CLI にログイン済みのアカウントごとに未読の通知を取得してメニューバーのポップオーバーに一覧し、新しい通知を macOS の通知で知らせ、一覧からスレッドを既読・Done にしたり、アカウントごとにすべて既読にしたりでき、設定画面でアカウントごとの取得や通知、gh の場所を変え、Diagnostics で gh とアカウントの状態を確かめられる状態です（マイルストーン M4）。
+> 開発中です（マイルストーン M5）。gh CLI にログイン済みのアカウントごとに未読の通知を取得してメニューバーのポップオーバーに一覧し、新しい通知を macOS の通知で知らせます。一覧からスレッドを既読・Done にしたり、アカウントごとにすべて既読にしたりでき、設定画面でアカウントごとの取得や通知、gh の場所を変え、Diagnostics で gh とアカウントの状態を確かめられます。
 >
 > gh 2.40.0 以降が必要です（`gh auth token --user` を使うため）。
+
+## インストール
+
+macOS 26 以降で動きます。先に [gh CLI](https://cli.github.com/) を入れて `gh auth login` でログインしておいてください。
+
+### Homebrew
+
+```bash
+brew tap yshrsmz/tap
+brew trust --cask yshrsmz/tap/mewbell   # サードパーティの tap の cask は、信頼するまで Homebrew が読み込まない
+brew install --cask yshrsmz/tap/mewbell
+```
+
+`brew trust --tap yshrsmz/tap` で tap 全体を信頼することもできます。
+
+### GitHub Releases
+
+[Releases](https://github.com/yshrsmz/mewbell/releases) から `Mewbell-X.Y.Z.zip` をダウンロードして展開し、`Mewbell.app` を `/Applications` に移します。
+
+### 初回起動（Gatekeeper）
+
+Mewbell は ad-hoc 署名で、Apple の notarize を受けていません。そのため、初回の起動で macOS に「開けません」と止められます。次の手順で開いてください。
+
+1. 一度 Mewbell を起動しようとして、止められたダイアログを閉じる
+2. システム設定 → プライバシーとセキュリティ を開く
+3. 下の方にある「"Mewbell" は Mac を保護するためにブロックされました」の「このまま開く」を押し、確認でもう一度「開く」を押す
+
+Gatekeeper をシステム全体で無効にする必要はありません（しないでください）。
+
+### 更新
+
+```bash
+brew upgrade --cask mewbell
+```
+
+Releases から入れた場合は、新しい zip の `Mewbell.app` で置き換えます。どちらの場合も、更新の後の最初の起動で、また上の「このまま開く」の操作が要ります。
+
+### アンインストール
+
+```bash
+brew uninstall --cask mewbell          # アプリだけを消す
+# または
+brew uninstall --cask --zap mewbell    # 設定（~/Library/Preferences/com.codingfeline.mewbell.plist）と ~/Library/Application Support/com.codingfeline.mewbell も消す
+```
+
+Releases から入れた場合は、`/Applications/Mewbell.app` をゴミ箱に入れます。ログイン時に起動するように登録していた場合は、先に Mewbell の設定でオフにしておくか、消した後にシステム設定 → 一般 → ログイン項目と機能拡張 に残っていれば外してください（Homebrew の `zap` では外せません）。
 
 ## 通知の取得
 
@@ -63,6 +109,28 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEW
 ```
 
 CI（GitHub Actions）は ubuntu で lint と OpenSpec の検証だけを回します。ビルドとテストは CI で実行されないので、push する前に手元でテスト、lint、警告をエラー扱いにした Debug と Release のビルドを通してください。
+
+### リリース
+
+リリースは [release-please](https://github.com/googleapis/release-please) と GitHub Actions（`.github/workflows/release.yml`）で行います。
+
+1. `main` に PR をマージするたびに、release-please が Release PR を作る・更新する。バージョンは Conventional Commits（`feat:` は minor、`fix:` は patch。1.0.0 より前は破壊的変更も minor）で決まり、`project.xcproj` の `MARKETING_VERSION`（`CURRENT_PROJECT_VERSION` はこれを参照する）と `CHANGELOG.md` を書き換える
+2. Release PR をマージすると、タグ `vX.Y.Z` と draft の Release ができる
+3. macOS ランナー（`xcode-27` イメージ）がタグからテストとビルドを行い、署名と entitlement を検査して（`scripts/lib/verify-app.sh`）、zip・SHA-256・Cask（`mewbell.rb`。`brew style` と `brew audit` を通す）を作る。別のジョブがそれらに build provenance attestation を付けて添付してから、Release を公開する（tap は添付の `mewbell.rb` を使うので、手で直すときも 3 つとも添付する）
+4. 公開の後に [homebrew-tap](https://github.com/yshrsmz/homebrew-tap) へ知らせ、tap 側が Cask を更新する PR を作って、CI が通ったら自動でマージする
+
+最初の版は `release-please-config.json` の `initial-version`（`0.1.0`）で決まります。タグが 1 つも無いと release-please はマニフェスト（`0.0.0`）を前の版として使わず、`initial-version` が無いと `1.0.0` を出すためです。どちらも、最初のリリースが済むまでは変えないでください。
+
+配布物は手元でも `bash scripts/package-release.sh X.Y.Z` で同じように作れます（`build/dist/X.Y.Z/` に置き、添付や公開はしません）。
+
+うまくいかなかったとき:
+
+- ビルドや検査で失敗すると、Release は draft のまま残り、公開も tap の更新もされません。ランナーの一時的な失敗なら `gh run rerun <run-id> --failed` でやり直します。「Re-run all jobs」でやり直したときや、やり直せる期間（30 日）を過ぎたときは、`gh workflow run release.yml --ref main -f tag=vX.Y.Z` でそのタグをビルドし直します（公開済みなら tap への知らせだけを送り直します）
+- コードを直す必要があるときは、draft の Release とタグをそのまま残して、修正の PR をマージします。release-please は `.release-please-manifest.json` とタグ `vX.Y.Z` を前の版として扱い、次の版の Release PR を作ります（X.Y.Z は公開されない版になります）。次の版を公開した後で、古い draft の Release は消してかまいません（`gh release delete vX.Y.Z`。タグは残します）
+- ランナーのイメージが変わって Xcode が見つからないと、`Check Xcode` で止まります。手元の Xcode とそろえて、`release.yml` の `XCODE_APP` と `XCODE_BUILD` を上げます
+- `.claude/rules/security.md` の「アプリとビルドの設定」を変えたときは、`scripts/lib/verify-app.sh` の検査も見直します
+
+リリースには GitHub App を 2 つ使います（mewbell 用と homebrew-tap 用）。秘密鍵は、それぞれのリポジトリの、`main` だけに限定した Environment `release` のシークレットに置いています。鍵が漏れたおそれがあるときは、App の設定で鍵を失効させて新しい鍵を作り、シークレットを置き換えます。
 
 ### 進め方
 

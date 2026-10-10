@@ -26,7 +26,8 @@ struct DiagnosticsSettingsView: View {
         let info = Bundle.main.infoDictionary ?? [:]
         let version = info["CFBundleShortVersionString"] as? String ?? "?"
         let build = info["CFBundleVersion"] as? String ?? "?"
-        return "\(version) (\(build))"
+        // CFBundleVersion は MARKETING_VERSION と同じ値にしている（release-please が上げる）ので、違うときだけ添える
+        return build == version ? version : "\(version) (\(build))"
     }()
 
     private static let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
