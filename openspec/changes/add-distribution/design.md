@@ -30,7 +30,7 @@
 
 ### D1. release-please の設定
 
-`release-please-config.json` と `.release-please-manifest.json`（`{".": "0.1.0"}`）を置く。
+`release-please-config.json` と `.release-please-manifest.json`（`{".": "0.0.0"}`）を置く。
 
 ```json
 {
@@ -41,6 +41,7 @@
       "bump-minor-pre-major": true,
       "draft": true,
       "force-tag-creation": true,
+      "initial-version": "0.1.0",
       "extra-files": [
         { "type": "generic", "path": "Mewbell.xcodeproj/project.xcproj" }
       ]
@@ -52,7 +53,7 @@
 - `simple` は `CHANGELOG.md` と `version.txt` を更新する。`version.txt` は release-please の都合で作られるだけで、正本は `project.xcproj` とする（2 つは release-please が同時に書き換えるので食い違わない）
 - `draft: true` だと GitHub は公開までタグを作らず、release-please が前のリリースを見つけられなくなるので、`force-tag-creation: true` でタグをすぐに作る
 - `bump-minor-pre-major` で、1.0.0 より前の破壊的変更は minor を上げる。`feat:` は minor、`fix:` は patch
-- 最初のリリースは今の `0.1.0` にする。マニフェストに `0.1.0` を書くと次の Release PR は `0.1.1` か `0.2.0` になるので、最初の Release PR は `Release-As: 0.1.0` を含む空のコミットで `0.1.0` にする（実装で確かめる）
+- 最初のリリースは今の `0.1.0` にする。タグが 1 つも無いと release-please はマニフェストの値を使わずに初回の版（既定は `1.0.0`）を出すので、`initial-version: "0.1.0"` を指定する。release-please 17.11.2 の dry-run で、最初の Release PR が `release 0.1.0` になり、`CHANGELOG.md`・`version.txt`・`project.xcproj`・マニフェストを更新すること、generic updater が印の中の 2 つの値だけを書き換えることを確かめた
 
 代替案: 手元のスクリプトでタグを切る（最初の計画）。ユーザーが自動化を選んだため採らない。semantic-release は Node の依存とプラグインが多く、Release PR の形で変更を確かめられないため採らない。
 
@@ -162,7 +163,3 @@ homebrew-tap は OpenSpec の外なので、ここで形を決め、tasks で作
 4. 別の場所に `brew install --cask` で入れて、Gatekeeper の手順と起動を確かめる
 
 戻すとき: `release.yml` を消し、残った draft とタグを消す。tap の Cask を消す。アプリのコードは変えていないので、手元のビルドには影響しない。
-
-## Open Questions
-
-- `Release-As: 0.1.0` で最初の Release PR を `0.1.0` にできるか（できなければマニフェストを `0.0.0` から始める）。D1 の形は変わらない

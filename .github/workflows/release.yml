@@ -1,0 +1,125 @@
+name: Release
+
+# main への push ごとに release-please が Release PR を作る・更新する。
+# Release PR をマージするとタグと draft の Release ができ、macOS ランナーがタグからビルド・検査して
+# zip と SHA-256 を添付してから公開し、最後に homebrew-tap へ Cask の更新を知らせる
+# （openspec/specs/distribution）。macOS ランナーを使うのはこのワークフローだけ（CLAUDE.md）。
+# App の秘密鍵は main に限定した Environment `release` にだけ置く（.claude/rules/security.md）。
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  # ランナーの Xcode。イメージが変わって見つからなくなったら、手元の Xcode とそろえて上げる
+  XCODE_APP: /Applications/Xcode_27.2_beta_2.app
+  XCODE_BUILD: 27B5028f
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      # App のトークンで Release PR を作ると、その PR でも CI（lint）が走る
+      - id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          repositories: mewbell
+          permission-contents: write
+          permission-pull-requests: write
+
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+  build:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: xcode-27
+    timeout-minutes: 60
+    environment: release
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name }}
+      VERSION: ${{ needs.release-please.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          persist-credentials: false
+
+      - name: Check Xcode
+        run: |
+          if [[ ! -d "$XCODE_APP" ]]; then
+            echo "$XCODE_APP がありません。ランナーのイメージを確かめて XCODE_APP と XCODE_BUILD を上げてください" >&2
+            ls -d /Applications/Xcode*.app >&2 || true
+            exit 1
+          fi
+          export DEVELOPER_DIR="$XCODE_APP/Contents/Developer"
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >>"$GITHUB_ENV"
+          xcodebuild -version
+          actual="$(xcodebuild -version | sed -n 's/^Build version //p')"
+          if [[ "$actual" != "$XCODE_BUILD" ]]; then
+            echo "Xcode のビルド番号が $XCODE_BUILD ではありません: $actual" >&2
+            exit 1
+          fi
+
+      - name: Test
+        run: xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test
+
+      - name: Build with warnings as errors
+        run: |
+          for configuration in Debug Release; do
+            xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration "$configuration" \
+              MEWBELL_WARNINGS_AS_ERRORS=YES build
+          done
+
+      - name: Test verify_app
+        run: bash scripts/tests/verify-app-test.sh
+
+      - name: Package
+        run: bash scripts/package-release.sh "$VERSION"
+
+      # 添付してから公開する。ここまでのどこかで失敗したら Release は draft のまま残る
+      - name: Upload and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            "build/dist/$VERSION/Mewbell-$VERSION.zip" \
+            "build/dist/$VERSION/Mewbell-$VERSION.zip.sha256"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+
+      # tap へ知らせるトークンは homebrew-tap の Contents の書き込みだけに絞る（dispatch に要る）
+      - id: tap-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: yshrsmz
+          repositories: homebrew-tap
+          permission-contents: write
+
+      - name: Notify homebrew-tap
+        env:
+          GH_TOKEN: ${{ steps.tap-token.outputs.token }}
+        run: |
+          gh api repos/yshrsmz/homebrew-tap/dispatches \
+            -f event_type=mewbell-released \
+            -f "client_payload[version]=$VERSION"

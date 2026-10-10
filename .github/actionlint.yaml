@@ -1,0 +1,5 @@
+# actionlint がまだ知らない GitHub ホストランナーのラベル
+self-hosted-runner:
+  labels:
+    # Xcode 27 の public preview のイメージ（release.yml）
+    - xcode-27
