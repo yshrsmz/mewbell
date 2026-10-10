@@ -43,7 +43,7 @@ struct NotificationListView: View {
                     ForEach(shown) { status in
                         AccountSectionView(
                             status: status, feed: feeds[status.id], participatingOnly: participatingOnly(status.id),
-                            expansion: expansion, actions: actions)
+                            expansion: expansion.state(for: status.id), actions: actions)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -59,14 +59,15 @@ struct AccountSectionView: View {
     let status: AccountStatus
     let feed: FeedState?
     var participatingOnly = false
-    let expansion: ListExpansion
+    /// このアカウントの折りたたみの状態（ほかのアカウントの状態は読まない）
+    let expansion: AccountExpansion
     let actions: ThreadListActions
 
     private var account: Account { status.account }
 
     var body: some View {
         let disclosure = AccountDisclosure(
-            tokenState: status.tokenState, feed: feed, isStoredCollapsed: expansion.isCollapsed(account.id))
+            tokenState: status.tokenState, feed: feed, isStoredCollapsed: expansion.isCollapsed)
         VStack(alignment: .leading, spacing: 8) {
             header(disclosure)
             switch status.tokenState {
@@ -106,7 +107,7 @@ struct AccountSectionView: View {
                 isCollapsed: disclosure.isCollapsed, name: "\(account.user) (\(account.host))",
                 isEnabled: disclosure.isCollapsible
             ) {
-                expansion.toggle(account.id)
+                expansion.toggle()
             } label: {
                 title(collapsedCount: disclosure.collapsedCount)
             }
@@ -174,15 +175,14 @@ struct AccountSectionView: View {
     }
 
     @ViewBuilder private func threads(_ feed: FeedState) -> some View {
-        let groups = NotificationGrouping.groups(from: feed.threads)
-        if groups.isEmpty {
+        if feed.repositories.isEmpty {
             Text("No unread notifications")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.leading, 22)
         } else {
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(groups) { group in
+                ForEach(feed.repositories) { group in
                     RepositoryGroupView(
                         group: group, account: account.id, expansion: expansion, actions: actions)
                 }

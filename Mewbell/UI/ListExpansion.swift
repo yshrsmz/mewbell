@@ -1,58 +1,68 @@
 import Observation
 
-/// アカウントとリポジトリの組。リポジトリのグループの折りたたみを覚えるときの鍵。
-struct RepositoryKey: Hashable, Sendable {
-    let account: AccountID
-    let repository: RepositoryName
-}
-
-/// 一覧の折りたたみの状態。起動している間だけメモリに持ち、ディスクには書かない（再起動ですべて開く）。
-/// ポップオーバーを閉じても残るように、View ではなくアプリが 1 つだけ持つ。
+/// 1 アカウントの区画の折りたたみの状態（アカウントの見出しと、リポジトリのグループ）。
+/// アカウントごとに分ける理由は `ListExpansion` を参照。
 @MainActor
 @Observable
-final class ListExpansion {
-    private var collapsedAccounts: Set<AccountID> = []
-    private var collapsedRepositories: Set<RepositoryKey> = []
+final class AccountExpansion {
+    private(set) var isCollapsed = false
+    private var collapsedRepositories: Set<RepositoryName> = []
 
-    func isCollapsed(_ account: AccountID) -> Bool {
-        collapsedAccounts.contains(account)
-    }
-
-    func isCollapsed(_ repository: RepositoryKey) -> Bool {
+    func isCollapsed(_ repository: RepositoryName) -> Bool {
         collapsedRepositories.contains(repository)
     }
 
     /// 必ず変わるので、そのまま書き込む。
-    func toggle(_ account: AccountID) {
-        collapsedAccounts.toggle(account)
+    func toggle() {
+        isCollapsed.toggle()
     }
 
     /// 必ず変わるので、そのまま書き込む。
-    func toggle(_ repository: RepositoryKey) {
+    func toggle(_ repository: RepositoryName) {
         collapsedRepositories.toggle(repository)
     }
 
-    /// 新着が届いたアカウントと、新着を含むリポジトリを開く。ほかのリポジトリは変えない。
-    /// 中身が変わるときだけ書き込む（書き込むだけで、読んでいる View がすべて描き直されるため）。
+    /// このアカウントと、新着を含むリポジトリを開く。ほかのリポジトリは変えない。
+    /// 中身が変わるときだけ書き込む（書き込むだけで、読んでいる View が描き直されるため）。
+    func expand(repositories: Set<RepositoryName>) {
+        if isCollapsed {
+            isCollapsed = false
+        }
+        if !collapsedRepositories.isDisjoint(with: repositories) {
+            collapsedRepositories.subtract(repositories)
+        }
+    }
+}
+
+/// 一覧の折りたたみの状態。起動している間だけメモリに持ち、ディスクには書かない（再起動ですべて開く）。
+/// ポップオーバーを閉じても残るように、View ではなくアプリが 1 つだけ持つ。
+/// 状態の粒度を読む View の粒度に合わせる: 各区画は自分のアカウントの `AccountExpansion` だけを読むので、
+/// 開閉や新着で描き直されるのはその区画だけになる。そのためこの型は `@Observable` にせず、観測されるのは
+/// 各 `AccountExpansion` だけにする。
+@MainActor
+final class ListExpansion {
+    private var accounts: [AccountID: AccountExpansion] = [:]
+
+    /// アカウントの状態。無ければ（すべて開いた状態で）作る。
+    /// 描画の中から呼ばれるが、この辞書は観測されないので、ここで書き込んでもほかの View の描き直しは起きない。
+    func state(for account: AccountID) -> AccountExpansion {
+        if let state = accounts[account] {
+            return state
+        }
+        let state = AccountExpansion()
+        accounts[account] = state
+        return state
+    }
+
+    /// 新着が届いたアカウントと、新着を含むリポジトリを開く。
+    /// まだ作られていないアカウントは何も畳んでいないので、何もしない。
     func expand(account: AccountID, repositories: Set<RepositoryName>) {
-        if collapsedAccounts.contains(account) {
-            collapsedAccounts.remove(account)
-        }
-        let keys = repositories.map { RepositoryKey(account: account, repository: $0) }
-        if !collapsedRepositories.isDisjoint(with: keys) {
-            collapsedRepositories.subtract(keys)
-        }
+        accounts[account]?.expand(repositories: repositories)
     }
 
     /// `accounts` 以外のアカウントの状態を捨てる（一覧から消えた、無効にした）。
-    /// 中身が変わるときだけ書き込む（書き込むだけで、読んでいる View がすべて描き直されるため）。
     func retain(_ accounts: Set<AccountID>) {
-        if !collapsedAccounts.isSubset(of: accounts) {
-            collapsedAccounts.formIntersection(accounts)
-        }
-        if collapsedRepositories.contains(where: { !accounts.contains($0.account) }) {
-            collapsedRepositories = collapsedRepositories.filter { accounts.contains($0.account) }
-        }
+        self.accounts = self.accounts.filter { accounts.contains($0.key) }
     }
 }
 

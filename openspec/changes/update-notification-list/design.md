@@ -2,7 +2,7 @@
 
 ## Context
 
-- 一覧は `NotificationListView` → `AccountSectionView`（見出し、取得の状態、操作の失敗、`NotificationGrouping.groups` でまとめたリポジトリのグループ）→ `ThreadRow` の順に組み立てている。どれも `NotificationStore.feeds` を読むだけで、自分の状態を持たない
+- 一覧は `NotificationListView` → `AccountSectionView`（見出し、取得の状態、操作の失敗、リポジトリのグループ）→ `ThreadRow` の順に組み立てている。どれも `NotificationStore.feeds` を読むだけで、自分の状態を持たない
 - ポップオーバーは `MenuBarExtra`（`.window` スタイル）の中身で、開くたびに View が作り直されることがある。View の `@State` に置いた値が閉じた後も残るとは限らない
 - main では、新着の判定は `SystemNotifier` が持つ `NotificationTracker`（`Mewbell/Notifications/` にある）が行っている。notifications「新着の通知」で通知の対象にならない取得（アカウントの最初の成功した取得）では何も出さず、その後は初めて見たスレッドか `updated_at` が進んだスレッドを `Changes.post` に入れる。「macOS の通知を出す」がオフでも `tracker.update` は呼んでいて、通知を出すかどうかだけを `notifies` で決めている。この change で、この判定を `NotificationStore` に移し、`NotificationTracker` を `Mewbell/Polling/NotificationTracker.swift` に移す（D2）
 - ブラウザで開く URL は `ThreadWebURL.make` が `subject.url` の検証済みのパスから組み立てている（`suffix(for:endpoints:)`）。Issue と Pull request の番号はこの中で `ThreadID.isValid` を通った値として既に取り出している
@@ -23,10 +23,17 @@
 
 ## Decisions
 
-### D1. 折りたたみの状態は `AppDelegate` が持つ `@MainActor @Observable` のオブジェクトに置く
+### D1. 折りたたみの状態は `AppDelegate` が持つ `ListExpansion` に置き、アカウントごとの `@Observable` な `AccountExpansion` に分ける
 
-`Mewbell/UI/ListExpansion.swift` に `@MainActor @Observable final class ListExpansion` を作る。持つのは `collapsedAccounts: Set<AccountID>` と `collapsedRepositories: Set<RepositoryKey>`（`RepositoryKey` は `AccountID` と `RepositoryName` の組）だけ。操作は `isCollapsed(_:)`、`toggle(_:)`、`expand(account:repositories:)`、`retain(_ accounts: Set<AccountID>)`。`AppDelegate` が `NotificationStore` などと同じように 1 つ作って持ち、`MewbellApp` から `MenuBarContentView` → `NotificationListView` → `AccountSectionView` に渡す。
+`Mewbell/UI/ListExpansion.swift` に `@MainActor final class ListExpansion`（`@Observable` ではない）と `@MainActor @Observable final class AccountExpansion` を作る。
 
+- `AccountExpansion`: 1 つのアカウントの状態だけを持つ。そのアカウントが畳まれているかと、畳んだリポジトリの集合
+- `ListExpansion`: アカウントから `AccountExpansion` を引く辞書を持つ。操作は `state(for:)`（無ければ作る）、`expand(account:repositories:)`、`retain(_ accounts: Set<AccountID>)`。`ListExpansion` 自身は観測されない。`RepositoryKey` は持たない（アカウントごとに分けたので、リポジトリはアカウントの `AccountExpansion` の中でリポジトリ名だけで引ける）
+
+`AppDelegate` が `NotificationStore` などと同じように `ListExpansion` を 1 つ作って持ち、`MewbellApp` から `MenuBarContentView` → `NotificationListView` → `AccountSectionView` に渡す。各区画は `state(for:)` で自分のアカウントの `AccountExpansion` だけを読む。
+
+- 観測の粒度を、それを読む View の粒度に合わせる理由: 区画は自分のアカウントの `AccountExpansion` だけを読むので、そのアカウントの開閉や新着の自動展開で描き直されるのはその区画だけになる。ほかのアカウントの区画は描き直されない
+- 代替案: 1 つの `@Observable` が全アカウントの Set を持つ（前の形）。すべての区画が同じ Set を読むので、1 か所の開閉で全区画が描き直される
 - 代替案: View の `@State`。ポップオーバーを作り直すと消えることがあり、「閉じても残る」を満たせない
 - 代替案: `@SceneStorage` / `@AppStorage`。ディスクに残り、「起動中だけ」に反する
 - すべて `@MainActor` の上で動く。ネットワークやポーラーの actor には触れない
@@ -37,7 +44,7 @@
 
 - `ThreadChangeDispatcher` にまとめる理由: tracker の操作と通知の取り下げを呼び出し側（`NotificationStore`）で組にしていると、新しい経路で片方だけ呼んで、tracker と出ている通知が食い違う。1 つの型にまとめ、組でしか呼べないようにする
 - macOS の通知: `ThreadNotifying` は `baselineSet(for:keeping:)`、`threadsChanged(for:posted:retracted:)`、`threadRemoved(_:for:)`、`retractAll(for:)`、`retainOnly(_:)` にする。`retractAll(for:)` は、今までの `accountRemoved` と `notificationsDisabled` をまとめたもの。`ThreadNotifying` から `feedChanged(for:from:to:)` と `resetBaseline(_:)` は無くす。`SystemNotifier` は判定を持たず、通知センターの操作だけをする（「macOS の通知を出す」がオフのアカウントの `posted` を出さないのは、今までどおり `SystemNotifier` が `notifies` で決める）
-- 一覧の自動展開: `NotificationStore` の init の引数 `onNewThreads`（`ThreadChangeDispatcher` に渡して持たせる）に、新着のスレッドを、「macOS の通知を出す」で絞る前の値で渡す。`AppDelegate` がこれを `ListExpansion.expand(account:repositories:)` につなぐ。`expand` は、そのアカウントを `collapsedAccounts` から、新着のスレッドのリポジトリを `collapsedRepositories` から外す
+- 一覧の自動展開: `NotificationStore` の init の引数 `onNewThreads`（`ThreadChangeDispatcher` に渡して持たせる）に、新着のスレッドを、「macOS の通知を出す」で絞る前の値で渡す。`AppDelegate` がこれを `ListExpansion.expand(account:repositories:)` につなぐ。`expand` は、そのアカウントの `AccountExpansion` で、アカウントの畳みを外し、新着のスレッドのリポジトリを畳んだリポジトリの集合から外す
 
 notifications「新着の通知」で通知の対象にならない取得（アカウントの最初の成功した取得）と、同じ `updated_at` で戻ったスレッドは新着に入らないので、spec の「開いてはならない」場合はそのまま満たされる。macOS の通知と自動展開は同じ判定の結果から作るので、両者がずれて「通知は出たのに開かない」ことは起こらない。
 
@@ -53,7 +60,7 @@ notifications「新着の通知」で通知の対象にならない取得（ア�
 - 「アカウントあり」のときは、「無効」でないアカウントの ID を返す
 - それ以外（gh からログアウトした、gh が見つからない、`hosts.yml` を読めないなど）は空集合を返し、すべてを捨てる
 
-`NotificationStore.sync`（出ている通知と、まだ送っていない既読化）と `AppDelegate`（`accountStore.onStateChange` で `ListExpansion.retain(_:)` を呼ぶ）の両方がこれを使い、出ている通知の取り下げ（`retainOnly`）と同じ規則で状態を捨てる。確認中は、ポーラー・一覧・tracker は止めて捨てる（polling の既存の規則）が、出ている通知・送っていない既読化・折りたたみは残す。`retain` は、渡された ID 以外のアカウントの `collapsedAccounts` と `collapsedRepositories` を捨てる。
+`NotificationStore.sync`（出ている通知と、まだ送っていない既読化）と `AppDelegate`（`accountStore.onStateChange` で `ListExpansion.retain(_:)` を呼ぶ）の両方がこれを使い、出ている通知の取り下げ（`retainOnly`）と同じ規則で状態を捨てる。確認中は、ポーラー・一覧・tracker は止めて捨てる（polling の既存の規則）が、出ている通知・送っていない既読化・折りたたみは残す。`retain` は、渡された ID 以外のアカウントの `AccountExpansion`（アカウントの畳みと畳んだリポジトリ）を辞書ごと捨てる。
 
 リポジトリのグループが一覧から消えたとき（スレッドが無くなったとき）は、そのリポジトリの状態を捨てない。畳んだアカウントの区画のスレッドの一覧が一度消えて（止まった、「参加しているスレッドだけにする」の切り替えや再開の後の取得中）、または畳んだリポジトリのグループが一度消えて（すべて既読にした）、アカウントの最初の成功した取得で戻ってきたときは、畳んだまま戻す。最初の成功した取得のスレッドは新着ではないので D2 では開かず、ユーザーが開くか新着が届くまで畳んだままにする（ユーザーの判断）。
 
@@ -79,6 +86,13 @@ notifications「新着の通知」で通知の対象にならない取得（ア�
 - ユーザーが開閉したときは短いアニメーションを付けるが、「視差効果を減らす」がオンのときは付けない。新着で自動で開くときはアニメーションを付けない（ユーザーが開閉したときだけ付ける）
 - 字下げ（`padding(.leading, 22)`）は今のまま。山形は幅 16（スレッドの行の種類のアイコンと同じ）にし、アカウントの見出しではトークンの状態のアイコンの前に置く。これで、区画の中身はトークンの状態のアイコンの列に、リポジトリ名とスレッドの件名はユーザー名の列に揃う
 
+### D6. リポジトリのグループ分けは `FeedState` が受け取るときに 1 回だけ作る
+
+`RepositoryGroup` と `RepositoryGroup.groups(from:)` を `Mewbell/Polling/RepositoryGroup.swift` に移す（`UI/NotificationGrouping.swift` から。`NotificationGrouping.reasonText` は UI に残る）。`FeedState` はスレッドを受け取るとき（init と `threads` の書き換え）に 1 回だけグループ分けを作り、`repositories` に持つ。一覧の描画は `repositories` を並べるだけで、描画の中でグループ分けをしない。
+
+- 理由: グループ分けは取得のときにしか変わらない派生データなので、描画の中で作ると、開閉や新着で区画が描き直されるたびにやり直すことになる。取得のときに 1 回だけ作る
+- 代替案: 描画の中で `RepositoryGroup.groups(from:)` を呼ぶ（前の形）。描き直しのたびにグループ分けをやり直す
+
 ## Risks / Trade-offs
 
 - [新着で開くと、ユーザーが閉じたものが勝手に開く] → ユーザーの判断で決めた仕様。開くのは新着を含むグループだけに限る
@@ -97,7 +111,8 @@ notifications「新着の通知」で通知の対象にならない取得（ア�
 
 ## テストでの差し替え
 
-- `ListExpansion` は依存を持たないので、そのままテストする
+- `ListExpansion` と `AccountExpansion` は依存を持たないので、そのままテストする。観測の粒度は `withObservationTracking` で確かめる: あるアカウントの `AccountExpansion` を読んでいる間に、ほかのアカウントを開閉しても onChange が呼ばれず、そのアカウント自身を開閉すると呼ばれる
+- `FeedState.repositories` は、init と `threads` の書き換えのそれぞれで、スレッドのグループ分けが入ることをテストする
 - 新着は、`NotificationStore` に偽の `PollerFactory` と偽の notifier（`ThreadNotifying`）を渡し、`onNewThreads` に呼ばれた値を集めるクロージャを渡して確かめる。`ThreadChangeDispatcher` は `NotificationStore` の内部の型なので、`NotificationStore` を通して確かめる（`baselineSet(for:keeping:)`、`threadsChanged(for:posted:retracted:)`、`threadRemoved(_:for:)`、`retractAll(for:)`、`retainOnly(_:)` の呼ばれ方も同じテストで見る）
 - `SystemNotifier` は、既存の偽の `UserNotificationCenter` で、通知センターの操作だけを確かめる
 - `AccountDisclosure` と `DiscoveryState.retainedAccountIDs` は純粋な値なので、入力の状態ごとにそのままテストする

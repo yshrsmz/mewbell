@@ -42,13 +42,31 @@ enum FeedPhase: Sendable, Equatable {
 
 struct FeedState: Sendable, Equatable {
     var phase: FeedPhase
-    var threads: [NotificationThread]
+    var threads: [NotificationThread] {
+        didSet { repositories = RepositoryGroup.groups(from: threads) }
+    }
+    /// `threads` をリポジトリごとにまとめたもの。スレッドが変わったときに 1 回だけ作り、描画のたびには作らない
+    /// （`threads` から決まるので、Equatable の比較の結果は変わらない）。
+    private(set) var repositories: [RepositoryGroup]
     /// 最後に取得し終えた一覧が、10 ページで打ち切ったものか
-    var isTruncated = false
+    var isTruncated: Bool
     /// ポップオーバーで知らせる操作の失敗（その後に送った取得が成功したら消す）
     var actionFailure: ActionFailure?
     /// Diagnostics に出す値
-    var diagnostics = FeedDiagnostics()
+    var diagnostics: FeedDiagnostics
+
+    /// didSet は init では呼ばれないので、ここでも `repositories` を作る。
+    init(
+        phase: FeedPhase, threads: [NotificationThread], isTruncated: Bool = false, actionFailure: ActionFailure? = nil,
+        diagnostics: FeedDiagnostics = FeedDiagnostics()
+    ) {
+        self.phase = phase
+        self.threads = threads
+        self.repositories = RepositoryGroup.groups(from: threads)
+        self.isTruncated = isTruncated
+        self.actionFailure = actionFailure
+        self.diagnostics = diagnostics
+    }
 
     static let loading = FeedState(phase: .loading, threads: [])
 

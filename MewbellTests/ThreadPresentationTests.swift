@@ -16,7 +16,7 @@ private func thread(
 
 struct NotificationGroupingTests {
     @Test func ordersRepositoriesAndThreadsByTheNewestUpdate() throws {
-        let groups = NotificationGrouping.groups(from: [
+        let groups = RepositoryGroup.groups(from: [
             try thread(id: "1", repository: "octo/app", updatedAt: 100),
             try thread(id: "2", repository: "octo/lib", updatedAt: 300),
             try thread(id: "3", repository: "octo/app", updatedAt: 200),
@@ -27,7 +27,30 @@ struct NotificationGroupingTests {
     }
 
     @Test func returnsNoGroupsForNoThreads() {
-        #expect(NotificationGrouping.groups(from: []).isEmpty)
+        #expect(RepositoryGroup.groups(from: []).isEmpty)
+    }
+
+    @Test func feedStateGroupsItsThreadsWhenMadeAndWhenTheThreadsChange() throws {
+        let first = [
+            try thread(id: "1", repository: "octo/app", updatedAt: 100),
+            try thread(id: "2", repository: "octo/lib", updatedAt: 300),
+            try thread(id: "3", repository: "octo/app", updatedAt: 200),
+        ]
+        var feed = FeedState(phase: .loading, threads: first)
+        #expect(feed.repositories == RepositoryGroup.groups(from: first))
+        #expect(feed.repositories.map(\.id) == ["octo/lib", "octo/app"])
+        #expect(feed.repositories[1].threads.map(\.id) == ["3", "1"])
+
+        let second = [
+            try thread(id: "4", repository: "acme/web", updatedAt: 50),
+            try thread(id: "5", repository: "octo/app", updatedAt: 400),
+        ]
+        feed.threads = second
+        #expect(feed.repositories == RepositoryGroup.groups(from: second))
+        #expect(feed.repositories.map(\.id) == ["octo/app", "acme/web"])
+
+        feed.threads.removeAll()
+        #expect(feed.repositories.isEmpty)
     }
 
     @Test(arguments: [

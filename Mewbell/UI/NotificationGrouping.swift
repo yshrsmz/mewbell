@@ -1,32 +1,7 @@
 import Foundation
 
-/// 1 つのリポジトリのスレッド。
-struct RepositoryGroup: Identifiable, Equatable {
-    let repository: RepositoryName
-    /// 更新日時が新しい順
-    let threads: [NotificationThread]
-
-    var id: String { repository.description }
-}
-
+/// `reason` の表示名（一覧と macOS の通知で使う）。
 enum NotificationGrouping {
-    /// リポジトリごとにまとめる。リポジトリは最新のスレッドの更新日時が新しい順、スレッドは更新日時が新しい順。
-    static func groups(from threads: [NotificationThread]) -> [RepositoryGroup] {
-        Dictionary(grouping: threads, by: \.repository)
-            .map { repository, threads in
-                RepositoryGroup(repository: repository, threads: threads.sorted(by: isNewer))
-            }
-            .sorted { lhs, rhs in
-                let lhsDate = lhs.threads[0].updatedAt
-                let rhsDate = rhs.threads[0].updatedAt
-                return lhsDate != rhsDate ? lhsDate > rhsDate : lhs.id < rhs.id
-            }
-    }
-
-    private static func isNewer(_ lhs: NotificationThread, _ rhs: NotificationThread) -> Bool {
-        lhs.updatedAt != rhs.updatedAt ? lhs.updatedAt > rhs.updatedAt : lhs.id < rhs.id
-    }
-
     private static let reasonTexts = [
         "assign": "Assigned",
         "author": "Author",

@@ -4,18 +4,18 @@ import SwiftUI
 struct RepositoryGroupView: View {
     let group: RepositoryGroup
     let account: AccountID
-    let expansion: ListExpansion
+    /// このアカウントの折りたたみの状態
+    let expansion: AccountExpansion
     let actions: ThreadListActions
 
-    private var key: RepositoryKey { RepositoryKey(account: account, repository: group.repository) }
-    private var isCollapsed: Bool { expansion.isCollapsed(key) }
+    private var isCollapsed: Bool { expansion.isCollapsed(group.repository) }
 
     var body: some View {
         let collapsedCount = isCollapsed ? group.threads.count : nil
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 DisclosureButton(isCollapsed: isCollapsed, name: group.repository.description) {
-                    expansion.toggle(key)
+                    expansion.toggle(group.repository)
                 } label: {
                     Text(group.repository.description)
                         .font(.caption.weight(.semibold))
@@ -55,10 +55,10 @@ struct RepositoryGroupView: View {
         }
     }
     let expansion = ListExpansion()
-    expansion.toggle(alice.id)
-    expansion.toggle(dave.id)
+    expansion.state(for: alice.id).toggle()
+    expansion.state(for: dave.id).toggle()
     if let app = RepositoryName(fullName: "octo/app") {
-        expansion.toggle(RepositoryKey(account: bob.id, repository: app))
+        expansion.state(for: bob.id).toggle(app)
     }
     return NotificationListView(
         statuses: [
