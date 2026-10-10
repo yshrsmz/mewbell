@@ -14,7 +14,7 @@
 
 ## 3. GitHub App と Environment（ユーザーの作業を含む）
 
-- [ ] 3.1 2 つの GitHub App の作り方（D6 の表の権限、Webhook 無効、自分のアカウントだけ）、インストール先、Environment `release`（`main` だけ）、変数 `RELEASE_APP_CLIENT_ID` とシークレット `RELEASE_APP_PRIVATE_KEY` の置き場所を手順にまとめてユーザーに渡し、ユーザーが作る。確認: `gh api repos/yshrsmz/mewbell/environments/release` と `gh api repos/yshrsmz/homebrew-tap/environments/release` で Environment とブランチの制限が見え、`gh variable list --env release` に Client ID がある（シークレットの値は読まない）
+- [x] 3.1 2 つの GitHub App の作り方（D6 の表の権限、Webhook 無効、自分のアカウントだけ）、インストール先、Environment `release`（`main` だけ）、変数 `RELEASE_APP_CLIENT_ID` とシークレット `RELEASE_APP_PRIVATE_KEY` の置き場所を手順にまとめてユーザーに渡し、ユーザーが作る。確認: `gh api repos/yshrsmz/mewbell/environments/release` と `gh api repos/yshrsmz/homebrew-tap/environments/release` で Environment とブランチの制限が見え、`gh variable list --env release` に Client ID がある（シークレットの値は読まない） 結果: 両リポジトリの Environment `release`（`main` だけ）に変数とシークレットがあり、リポジトリ全体のシークレットが無いことを確かめた。App のインストール先は gh CLI のトークンでは読めないので、4.4 と 6.2 の実行で確かめる
 - [x] 3.2 homebrew-tap で auto-merge を有効にし、`main` に `ci` のチェックを必須にする ruleset を作ってよいかを AskUserQuestion で確かめてから設定する。確認: `gh api repos/yshrsmz/homebrew-tap --jq .allow_auto_merge` が `true`、`gh api repos/yshrsmz/homebrew-tap/rulesets` に ruleset がある 結果: Environment `release`（`main` だけ）は両リポジトリに私が作った。ruleset `main` は削除と force push の禁止、`ci`（GitHub Actions）の成功を必須にし、リポジトリの管理者はバイパスできる
 
 ## 4. ワークフロー
