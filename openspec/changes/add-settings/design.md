@@ -95,7 +95,7 @@ UserDefaults（`UserDefaults.standard`、ドメインは Bundle ID）に次の�
 - 有効にし直したときは `reload()` で、そのアカウントは `held` に無いので `.fetching` を経て取得される
 - `AccountStore.disable` が状態を先に書き換えるのは、`reload` を待たずにポップオーバーとバッジから外すため。その直後に走っていた読み直しが古い options で終わって `.ready` を返すことがあるので、`AccountStore.apply` で、今の `AppSettings` で無効なアカウントを `.disabled` に置き換えてから反映する
 - 通知のクリックで既読を取っておく `pendingReads` は、`.disabled` のアカウントの分も捨てる（spec notifications「通知のクリック」）
-- `AccountDiscovery` は無効なアカウントの集合（`disabledIDs`）を自分でも持つ。読み直しの始めに options から受け取り、`disable` でも足す。`knownAccountIDs` は `gh --version` などの await の後に `disabledIDs` から作るので、古い設定で始めた読み直しが、途中で無効にしたアカウントを戻してトークンを取り直すことはない
+- `AccountDiscovery` は無効なアカウントの集合（`disabledIDs`）を自分でも持つ。`disable` と `enable` で出し入れし、読み直しでは options の値を足すだけにする（読み直しより先に届いた `disable` を、古い設定で消さないため）。`AccountStore` は `disable` と `enable` を送った順に 1 つずつ行う。`knownAccountIDs` は `gh --version` などの await の後に `disabledIDs` から作るので、古い設定で始めた読み直しが、途中で無効にしたアカウントを戻してトークンを取り直すことはない
 - `AccountStore` は送った `disable` を `pendingDisable` に積み、後から始める読み直しはそれを待つ。読み直しに渡す options は、待ち終えてから `AppSettings` を読んで作る（待っている間に無効にしたアカウントを含めるため）。無効にしてすぐ有効に戻したとき、遅れて届いた `disable` が、有効に戻した後の読み直しで取ったトークンを消さないようにするため
 - `discardAllTokens` は走っている `gh auth token`（`inFlightTokenFetches`）を外し、`tokenEpoch` を進める。それより前に始めた取得の結果は保存せず、後の読み直しも合流しない（前の設定ディレクトリの取得なので）
 
@@ -106,7 +106,7 @@ UserDefaults（`UserDefaults.standard`、ドメインは Bundle ID）に次の�
 - `restart(id)` は、ポーラーを止めて取り除き、`feeds[id] = .loading`、`notifier.resetBaseline(id)` の後に、同じアカウントに新しい世代のポーラーを作って `start()` する。新しいポーラーは `Last-Modified` も `hidden` も持たないので、最初の取得は条件なしになる。トークンは `CredentialStore` にあるので gh は呼ばない
 - 作り直しで `hidden` と `readThroughs` が消えるので、直前に既読にしたスレッドが、GitHub の反映が遅れたときに一度だけ一覧に戻ることがある（Risks）
 - 「スコープ不足」「認証エラー」で止まっているアカウントは、`AccountPoller(initialPhase:)` で止まった状態のまま作り直し、始めない。再読み込みの `refreshNow` が、止まっているポーラーと同じく `resume()` で再開する
-- 作り直すポーラーには `firstFetchNotBefore` を渡し、最初の取得の前にその時刻まで待たせる。`NotificationStore` は止めたポーラーの状態から、レート制限で待っていればその再試行の時刻、取得できていれば最後の取得から `RefreshWaiters.minimumInterval`（10 秒）後を求めて覚えておく（`notBefore`）。`participating` の切り替えでも、無効にしてすぐ有効に戻したときでも、間隔やレート制限の待ちを抜けない（CLAUDE.md の「X-Poll-Interval」「レート制限で待っている間は早めない」）。レート制限の表示は `initialPhase` で持ち越す
+- 作り直すポーラーには `firstFetchNotBefore` を渡し、最初の取得の前にその時刻まで待たせる。`NotificationStore` は止めたポーラーの状態から、失敗やレート制限で待っていればその再試行の時刻、取得できていれば最後の取得から、取得中なら今から `RefreshWaiters.minimumInterval`（10 秒）後を求めて覚えておく（`notBefore`）。`participating` の切り替えでも、無効にしてすぐ有効に戻したときでも、間隔やレート制限の待ちを抜けない（CLAUDE.md の「X-Poll-Interval」「レート制限で待っている間は早めない」）。レート制限の表示は `initialPhase` で持ち越す
 - gh のパスと設定ディレクトリの上書きは、同じ値で確定し直しても読み直す（権限を直した後に確かめ直せるように）。入力欄が確定した値と違う間は「Press Return to apply.」を出す
 - `discardAllTokens` は、走っている `gh auth token` を止める（取り直しを待っているポーラーは、設定ディレクトリを変えたときにすべて止めているので、止めても影響しない）
 - 代替案: `AccountPoller` に `setParticipating(_:)` を足してループの中で切り替える → `Last-Modified`・隠しているスレッド・走っている取得の結果を、どちらの一覧のものか区別して捨てる処理が要る。作り直しなら、既存の世代の仕組みで遅れて届いた結果も捨てられる
@@ -127,7 +127,7 @@ UserDefaults（`UserDefaults.standard`、ドメインは Bundle ID）に次の�
 ### D9. 設定ウィンドウ
 
 - `MewbellApp` に `Settings { SettingsView(...) }` を足す。`SettingsView` は `TabView` で General / Accounts / gh の 3 タブ。UI の文言は既存に合わせて英語にする
-- ポップオーバーの `OpenSettingsButton`（歯車、`.keyboardShortcut(",")`、`.help("Settings")`）は `@Environment(\.openSettings)` を呼ぶ前に `NSApp.activate()` で Mewbell を前面にする。`LSUIElement` のアプリは前面にしないと設定ウィンドウがほかのアプリの後ろに開く。ポップオーバーは `MenuBarExtra` の `.window` がキーでなくなると閉じるので、閉じる処理は足さない（手動確認で確かめる。閉じなければ `dismiss` を呼ぶ）
+- ポップオーバーの `OpenSettingsButton`（歯車、`.keyboardShortcut(",")`、`.help("Settings")`）は、`dismiss()` でポップオーバーを閉じ、`NSApp.activate()` で Mewbell を前面にしてから `@Environment(\.openSettings)` を呼ぶ。`LSUIElement` のアプリは、これだけでは設定ウィンドウがキーにならずほかのアプリの後ろに残ることがあった（手動確認で分かった）。そこで設定ウィンドウに `SettingsWindowActivator`（`NSViewRepresentable`）を入れ、ウィンドウに載ったときにもう一度 `activate` して `makeKeyAndOrderFront` する。すでに開いているウィンドウは、覚えておいた参照で前面に出す。時間の待ちや SwiftUI の内部の識別子には頼らない
 - Accounts タブは `AccountStore.state` の `.accounts` を並べ、行ごとに 3 つの `Toggle` を出す。無効の行では 2 つを `.disabled(true)` にする。トグルの値は `AppSettings` から読み、変更はメソッドで書く
 - gh タブは、入力欄（`TextField` の `onSubmit` で確定）、`NSOpenPanel` を開く「Choose…」、上書きを消す「Reset」。使えない表示は、確定した値を `ExecutableValidator` / `ConfigDirectoryValidator` に通した結果で出す（gh は実行しない）
 - すべてのアカウントが無効のときのポップオーバーの表示と、上書きが使えないときの `GuidanceView` の案内にも `OpenSettingsButton` を置く。`GuidanceView` には `ghExecutableOverridden` と `ghConfigDirectoryOverridden` の Bool を渡す（パスの値は渡さない。`hostsFileUnreadable` は状態がパスを持っている）
