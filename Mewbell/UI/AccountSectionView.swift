@@ -224,7 +224,7 @@ struct FeedStatusView: View {
             }
             if isTruncated, phase.showsThreads {
                 Label(
-                    "Showing the newest 500 unread notifications. Older unread ones are not shown.",
+                    "Showing the newest \(GitHubAPIClient.threadLimit) unread notifications. Older unread ones are not shown.",
                     systemImage: "ellipsis.circle"
                 )
                 .foregroundStyle(.secondary)

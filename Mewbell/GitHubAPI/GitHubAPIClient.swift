@@ -64,6 +64,9 @@ enum ThreadActionResult: Sendable, Equatable {
 /// 状態を持たない。`AccountPoller` の中から呼ぶ。
 struct GitHubAPIClient: Sendable {
     static let pageLimit = 10
+    static let perPage = 50
+    /// 1 回の取得で取るスレッドの上限（これを超える古い未読は取らない）
+    static let threadLimit = pageLimit * perPage
     static let bodyLimit = 5 * 1024 * 1024
     private static let logger = Logger(category: "GitHubAPI")
     private static let userAgent =
@@ -82,7 +85,7 @@ struct GitHubAPIClient: Sendable {
         components?.queryItems = [
             URLQueryItem(name: "all", value: "false"),
             URLQueryItem(name: "participating", value: participating ? "true" : "false"),
-            URLQueryItem(name: "per_page", value: "50"),
+            URLQueryItem(name: "per_page", value: String(Self.perPage)),
         ]
         guard var url = components?.url else { return .failed(.rejectedURL) }
 

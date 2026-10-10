@@ -178,7 +178,7 @@ struct MarkAllReadLabels: Equatable {
     private static let notParticipating =
         "Also marks threads you are not participating in as read, up to the newest one shown here."
     private static let olderThanShown =
-        "Also marks older unread threads that are not shown here as read (only the newest 500 are fetched)."
+        "Also marks older unread threads that are not shown here as read (only the newest \(GitHubAPIClient.threadLimit) are fetched)."
 
     /// 一覧に出ていない未読も既読にすることになるか
     var includesUnlisted: Bool { participatingOnly || isTruncated }
