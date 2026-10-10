@@ -14,6 +14,7 @@ struct OpenSettingsButton: View {
     var style: Style = .icon
 
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         switch style {
@@ -32,8 +33,16 @@ struct OpenSettingsButton: View {
     }
 
     private func open() {
+        dismiss()
         NSApp.activate()
         openSettings()
+        // ウィンドウはこの後に作られるので、できてから前面に出してキーにする
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
+            NSApp.activate()
+            NSApp.windows.first { $0.identifier?.rawValue == "com_apple_SwiftUI_Settings_window" }?
+                .makeKeyAndOrderFront(nil)
+        }
     }
 }
 
