@@ -13,7 +13,10 @@ cask "mewbell" do
 
   uninstall quit: "com.codingfeline.mewbell"
 
-  zap trash: "~/Library/Preferences/com.codingfeline.mewbell.plist"
+  zap trash: [
+    "~/Library/Application Support/com.codingfeline.mewbell",
+    "~/Library/Preferences/com.codingfeline.mewbell.plist",
+  ]
 
   caveats <<~EOS
     Mewbell is ad-hoc signed and not notarized, so macOS blocks it on the first

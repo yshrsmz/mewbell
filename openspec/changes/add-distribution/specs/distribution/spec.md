@@ -94,7 +94,7 @@ Gatekeeper の評価（`spctl --assess`）は ad-hoc 署名では通らないた
 
 ### Requirement: 公開の順序
 
-Release は、配布物の zip と SHA-256 を添付し終えた後でだけ公開しなければならない（MUST）。ビルド・検査・添付のどこかで失敗したときは、Release を draft のまま残し、公開してはならない（MUST NOT）。tap への知らせは、Release を公開した後でだけ送らなければならない（MUST）。
+Release は、配布物の zip と SHA-256 を添付し終え、そのバージョンの Cask の雛形が `brew style` と `brew audit` を通った後でだけ公開しなければならない（MUST）。Release を作った後のビルドは、後から来た `main` への push によって取り消されてはならない（MUST NOT）。ビルド・検査・添付のどこかで失敗したときは、Release を draft のまま残し、公開してはならない（MUST NOT）。tap への知らせは、Release を公開した後でだけ送らなければならない（MUST）。
 
 #### Scenario: 添付してから公開する
 
@@ -130,8 +130,10 @@ Mewbell は、Release を公開した後に `yshrsmz/homebrew-tap` へ `reposito
 
 - バージョンが `X.Y.Z` の形式でなければ何もせずに失敗する。payload の値をシェルのコマンドに直接埋め込まない
 - zip の URL をバージョンから `https://github.com/yshrsmz/mewbell/releases/download/vX.Y.Z/Mewbell-X.Y.Z.zip` として組み立て、それ以外の URL を使わない
-- zip を自分でダウンロードして SHA-256 を計算し、Release に添付された `.sha256` の値と一致しなければ失敗する
-- Cask を更新する PR を作り、tap の CI（`brew style` と `brew audit`）が通ったときだけ自動でマージする
+- zip を自分でダウンロードして SHA-256 を計算し、Release に添付された `.sha256` の値と一致しなければ失敗する（ダウンロードの破損を見つけるため。添付ファイルが正しいことは、Release に書けるのが Mewbell のリリースのワークフローだけであることに頼る）
+- Cask の雛形は、そのバージョンのタグの Mewbell のリポジトリにあるものを使う
+- いまの Cask と同じか古いバージョンの知らせでは、何も変えずに終わる
+- Cask を更新する PR を作り、tap の CI（`brew style` と `brew audit`）が通ったときだけ自動でマージする。前の試みの PR が開いているときは、その PR を更新する
 
 #### Scenario: Cask を更新する
 
@@ -144,6 +146,12 @@ Mewbell は、Release を公開した後に `yshrsmz/homebrew-tap` へ `reposito
 - **GIVEN** tap に `version: 0.2.0; rm -rf /` の知らせが届いた
 - **WHEN** tap のワークフローが動く
 - **THEN** 形式が違うことを表示して失敗し、ダウンロードも PR も行わない
+
+#### Scenario: 古い版の知らせ
+
+- **GIVEN** tap の Cask が `0.2.0` で、`version: 0.1.0` の知らせが届いた
+- **WHEN** tap のワークフローが動く
+- **THEN** 更新しないことを表示して終わり、ダウンロードも PR も行わない
 
 #### Scenario: SHA-256 が合わない
 
@@ -160,7 +168,7 @@ Homebrew Cask（`Casks/mewbell.rb`）は次を満たさなければならない�
 - `depends_on macos: :tahoe`（macOS 26 以上。今の Homebrew では `">= :tahoe"` ではなくこの書き方）を持つ
 - `app "Mewbell.app"` で `/Applications` に入れる
 - アンインストールのときに `com.codingfeline.mewbell` を終了させる
-- `zap` で `~/Library/Preferences/com.codingfeline.mewbell.plist` を消す
+- `zap` で `~/Library/Application Support/com.codingfeline.mewbell`（二重起動防止のロックファイル）と `~/Library/Preferences/com.codingfeline.mewbell.plist` を消す
 - `caveats` で、Mewbell が notarize されておらず初回起動で Gatekeeper に止められること、システム設定の「プライバシーとセキュリティ」の「このまま開く」で開けること、更新のたびに同じ操作が要ること、gh CLI が要ることを案内する
 
 Cask は quarantine 属性を消してはならず（MUST NOT）、`postflight` や `postflight_steps` などで `xattr` を実行したり Gatekeeper を迂回したりする処理を入れてはならない（MUST NOT）。

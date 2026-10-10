@@ -74,7 +74,7 @@
 
 ### D3. リリースのワークフロー（mewbell）
 
-`.github/workflows/release.yml`。`on: push: branches: [main]`、ワークフローの既定は `permissions: contents: read`、`concurrency: { group: release, cancel-in-progress: false }`。
+`.github/workflows/release.yml`。`on: push: branches: [main]`、ワークフローの既定は `permissions: contents: read`。concurrency はジョブごとに分ける。`release-please` は `group: release-please`（待っている実行が新しい push に置き換えられても、マージ済みで未リリースの Release PR は次の実行が拾う）。`build` は `group: release-build-<tag>` にして、後の push で取り消されないようにする（`release_created` はリリースを作った実行にしか出ないため）
 
 1. ジョブ `release-please`（`ubuntu-24.04`、`environment: release`）
    - `actions/create-github-app-token` で mewbell 用 App のトークンを発行する（`repositories: mewbell`、`permission-contents: write`、`permission-pull-requests: write`）
@@ -84,6 +84,7 @@
    - `DEVELOPER_DIR=/Applications/Xcode_27.2_beta_2.app/Contents/Developer` にし、`xcodebuild -version` のビルド番号が `27B5028f` でなければ失敗する。ビルド番号はワークフローの先頭に `XCODE_BUILD` として置き、Xcode を上げるときに一緒に変える
    - `bash scripts/tests/verify-app-test.sh`（数秒で終わるので先に）、`xcodebuild test`、`MEWBELL_WARNINGS_AS_ERRORS=YES` の Debug のビルド（Release の同じビルドは次の `package-release.sh` が兼ねる）
    - `bash scripts/package-release.sh "$VERSION"`（D4）
+   - Cask の雛形（`packaging/homebrew/mewbell.rb.template`）を、作った zip の SHA-256 で埋め、一時的な tap に置いて `brew style` と `brew audit --cask --strict` を通す（tap はこのタグの雛形を使うので、公開の前に確かめる）
    - `gh release upload "$TAG" … --clobber` で zip と `.sha256` を draft に添付し、`gh release edit "$TAG" --draft=false` で公開する。`GH_TOKEN` はジョブの `GITHUB_TOKEN`
    - mewbell 用 App のトークンを `owner: yshrsmz`、`repositories: homebrew-tap`、`permission-contents: write` だけで発行し、`gh api repos/yshrsmz/homebrew-tap/dispatches -f event_type=mewbell-released -F 'client_payload[version]=…'` を送る
 3. lint は今の `ci.yml` のまま（Release PR にも走る）
@@ -104,12 +105,13 @@
 
 homebrew-tap は OpenSpec の外なので、ここで形を決め、tasks で作る。
 
-- `.github/templates/mewbell.rb.template`（`@VERSION@` と `@SHA256@`）。ワークフローは `.github/workflows/update-mewbell.yml`。中身は spec の「Homebrew Cask の中身」のとおり。mewbell の `packaging/homebrew/mewbell.rb.template` を正本にし、変えたときは tap にもコピーする（tap 側で生成に使うのは tap の雛形）
+- Cask の雛形は mewbell の `packaging/homebrew/mewbell.rb.template`（`@VERSION@` と `@SHA256@`）だけに置き、tap は知らせを受けたバージョンのタグの雛形を `raw.githubusercontent.com` から取る。雛形をリリースと一緒に版管理し、2 つのリポジトリのコピーがずれないようにするため。雛形の検査は mewbell のリリースのジョブが公開の前に行う（D3）
 - `.github/workflows/update-mewbell.yml`: `on: repository_dispatch: types: [mewbell-released]`、既定の `permissions: contents: read`、`environment: release`
   - `env: VERSION: ${{ github.event.client_payload.version }}` で受け、`[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]` でなければ失敗する
-  - `curl -fsSL --proto '=https'` で `https://github.com/yshrsmz/mewbell/releases/download/v$VERSION/Mewbell-$VERSION.zip` と `.sha256` を取り、`shasum -a 256` の値と `.sha256` の値が一致することを確かめる
-  - 雛形から `Casks/mewbell.rb` を作り、tap 用 App のトークン（`repositories: homebrew-tap`、`permission-contents: write`、`permission-pull-requests: write`）で、API（`git/refs` と `contents`）でブランチ `mewbell-$VERSION` を作ってコミットし（git の資格情報をランナーに置かない。コミットは App の名前になる）、PR を作り、`gh pr merge --auto --squash` を指定する。やり直したときは同じブランチを `main` に戻して作り直す
-- `.github/workflows/ci.yml`: `pull_request` で `brew style Casks` と `brew audit --cask --strict`（`--online` は付けない）を `macos-latest` で動かす。`brew audit --cask` が Linux で動くかを確かめられなかったため、確実に動く macOS にする（リリースのためのワークフローなので macOS ランナーの例外に入り、Cask の PR のときだけ動く）
+  - いまの `Casks/mewbell.rb` の `version` と比べ、同じか新しいとき（`sort -V`）は何もせずに終わる。知らせのやり直しや古い版の知らせで、空の PR を作ったり Cask を戻したりしないため
+  - `curl -fsSL --proto '=https'` で `https://github.com/yshrsmz/mewbell/releases/download/v$VERSION/Mewbell-$VERSION.zip` と `.sha256` を取り、`sha256sum` の値と `.sha256` の値が一致することを確かめる。これはダウンロードの破損を見つけるためのもので、改ざんは防がない（`.sha256` も同じ Release にある）。添付ファイルが正しいことは、Release に書けるのが mewbell のリリースのワークフロー（`main` に限った Environment の App と `GITHUB_TOKEN`）だけであることに頼る
+  - 雛形から `Casks/mewbell.rb` を作り、tap 用 App のトークン（`repositories: homebrew-tap`、`permission-contents: write`、`permission-pull-requests: write`）で、API（`git/refs` と `contents`）でブランチ `mewbell-$VERSION` を作ってコミットし（git の資格情報をランナーに置かない。コミットは App の名前になる）、PR を作り、`gh pr merge --auto --squash` を指定する。前の試みのブランチが残っているときは `main` に戻さずにその上に書く（開いている PR の中身を一時的に空にして、空のまま自動でマージされないように）。API の失敗は 404 とそれ以外を分け、404 以外は失敗にする
+- `.github/workflows/ci.yml`: `pull_request` で、`Casks/` の各 Cask に `brew style --cask` と `brew audit --cask --strict`（`--online` は付けない）を `macos-latest` で動かす。`brew audit --cask` が Linux で動くかを確かめられなかったため、確実に動く macOS にする（リリースのためのワークフローなので macOS ランナーの例外に入り、Cask の PR のときだけ動く）
 - ruleset: `main` へのマージに `ci` のチェックの成功を必須にする。リポジトリの設定で auto-merge を有効にする。App のトークンで作った PR は CI が走るので、auto-merge が働く
 
 代替案: mewbell のワークフローから tap に直接 push する。tap に CI を通さない変更が入り、mewbell 側に tap の PR の権限まで持たせることになるので採らない。

@@ -13,10 +13,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: release
-  cancel-in-progress: false
-
 env:
   # ランナーの Xcode。イメージが変わって見つからなくなったら、手元の Xcode とそろえて上げる
   XCODE_APP: /Applications/Xcode_27.2_beta_2.app
@@ -25,6 +21,10 @@ env:
 jobs:
   release-please:
     runs-on: ubuntu-24.04
+    # 待っている実行が新しい push で置き換えられても、マージ済みで未リリースの Release PR は次の実行が拾う
+    concurrency:
+      group: release-please
+      cancel-in-progress: false
     timeout-minutes: 10
     environment: release
     outputs:
@@ -52,6 +52,10 @@ jobs:
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: xcode-27
     timeout-minutes: 60
+    # release_created はリリースを作った実行にしか出ないので、ビルドはタグごとに分けて取り消されないようにする
+    concurrency:
+      group: release-build-${{ needs.release-please.outputs.tag_name }}
+      cancel-in-progress: false
     environment: release
     permissions:
       contents: write
@@ -93,6 +97,23 @@ jobs:
 
       - name: Package
         run: bash scripts/package-release.sh "$VERSION"
+
+      # homebrew-tap はこのタグの雛形から Cask を作るので、公開する前に同じ形で確かめる
+      - name: Check the cask template
+        run: |
+          tap="$RUNNER_TEMP/homebrew-check"
+          mkdir -p "$tap/Casks"
+          sha256="$(cut -d ' ' -f 1 "build/dist/$VERSION/Mewbell-$VERSION.zip.sha256")"
+          sed -e "s/@VERSION@/$VERSION/" -e "s/@SHA256@/$sha256/" \
+            packaging/homebrew/mewbell.rb.template >"$tap/Casks/mewbell.rb"
+          git -C "$tap" init -q
+          git -C "$tap" add -A
+          git -C "$tap" -c user.name=ci -c user.email=ci@localhost commit -qm check
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          brew tap yshrsmz/check "$tap"
+          brew trust --tap yshrsmz/check
+          brew style --cask yshrsmz/check/mewbell
+          brew audit --cask --strict yshrsmz/check/mewbell
 
       # 添付してから公開する。ここまでのどこかで失敗したら Release は draft のまま残る
       - name: Upload and publish
