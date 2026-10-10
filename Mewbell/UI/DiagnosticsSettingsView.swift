@@ -53,6 +53,7 @@ struct DiagnosticsReportView: View {
                     Spacer()
                     Button(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc", action: copy)
                         .help("Copy the diagnostics as text")
+                        .accessibilityLabel(copied ? "Copied the diagnostics" : "Copy the diagnostics as text")
                 }
             }
         }
@@ -87,7 +88,7 @@ private struct DiagnosticsValueText: View {
                     Text(
                         "\(time.formatted(date: .omitted, time: .standard)) · \(time.formatted(.relative(presentation: .numeric, unitsStyle: .abbreviated)))"
                     )
-                    .foregroundStyle(row.text?.isEmpty == false ? .secondary : .primary)
+                    .foregroundStyle(.secondary)
                 }
             }
         }
