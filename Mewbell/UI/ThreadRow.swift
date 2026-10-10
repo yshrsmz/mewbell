@@ -47,7 +47,8 @@ struct ThreadRow: View {
         }
         .buttonStyle(.plain)
         .help("Open in browser and mark as read")
-        .overlay(alignment: .trailing) {
+        // 上端に揃えて件名の 1 行目の高さに置く（件名が 2 行の行でも位置が変わらず、Done で繰り上がった行でもカーソルの下に来るように）
+        .overlay(alignment: .topTrailing) {
             if isHovering {
                 ThreadActionButtons(markRead: markRead, markDone: markDone)
             }
