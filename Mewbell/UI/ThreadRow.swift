@@ -13,7 +13,7 @@ struct ThreadRow: View {
 
     /// `isHovering` はプレビューでボタンを出しておくため。
     init(
-        thread: NotificationThread, number: String? = nil, isHovering: Bool = false, open: @escaping () -> Void,
+        thread: NotificationThread, number: String?, isHovering: Bool = false, open: @escaping () -> Void,
         markRead: @escaping () -> Void, markDone: @escaping () -> Void
     ) {
         self.thread = thread
@@ -245,7 +245,7 @@ struct RelativeTimeText: View {
     }
     return VStack(alignment: .leading) {
         if let thread {
-            ThreadRow(thread: thread, open: {}, markRead: {}, markDone: {})
+            ThreadRow(thread: thread, number: nil, open: {}, markRead: {}, markDone: {})
             ThreadRow(thread: thread, number: "1234", open: {}, markRead: {}, markDone: {})
             ThreadRow(thread: thread, number: "1234", isHovering: true, open: {}, markRead: {}, markDone: {})
         }

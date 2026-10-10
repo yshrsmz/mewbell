@@ -28,7 +28,7 @@ struct NotificationListView: View {
     let actions: ThreadListActions
 
     var body: some View {
-        let shown = statuses.filter { $0.tokenState != .disabled }
+        let shown = statuses.enabled
         if shown.isEmpty && !statuses.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Label("All accounts are disabled", systemImage: "pause.circle")
@@ -63,19 +63,12 @@ struct AccountSectionView: View {
     let actions: ThreadListActions
 
     private var account: Account { status.account }
-    private var isCollapsed: Bool { expansion.isCollapsed(account.id) }
-
-    /// 畳むもの（スレッドの一覧か、未読が無いことの表示）があるか。
-    private var isCollapsible: Bool {
-        switch status.tokenState {
-        case .fetching, .ready: feed?.phase.showsThreads == true
-        case .unavailable, .disabled: false
-        }
-    }
 
     var body: some View {
+        let disclosure = AccountDisclosure(
+            tokenState: status.tokenState, feed: feed, isStoredCollapsed: expansion.isCollapsed(account.id))
         VStack(alignment: .leading, spacing: 8) {
-            header
+            header(disclosure)
             switch status.tokenState {
             case .fetching where feed == nil:
                 Text("Checking gh…")
@@ -98,7 +91,7 @@ struct AccountSectionView: View {
                         ActionFailureView(failure: failure, host: account.host)
                     }
                     // 折りたたんでも、取得の状態と操作の失敗は出し続ける
-                    if !isCollapsed {
+                    if !disclosure.isCollapsed {
                         threads(feed)
                     }
                 }
@@ -106,15 +99,16 @@ struct AccountSectionView: View {
         }
     }
 
-    private var header: some View {
+    private func header(_ disclosure: AccountDisclosure) -> some View {
         HStack(spacing: 6) {
             // 開閉のボタンと「すべて既読」は分ける（押し間違えて開閉しないように）
             DisclosureButton(
-                isCollapsed: isCollapsed, name: "\(account.user) (\(account.host))", isEnabled: isCollapsible
+                isCollapsed: disclosure.isCollapsed, name: "\(account.user) (\(account.host))",
+                isEnabled: disclosure.isCollapsible
             ) {
                 expansion.toggle(account.id)
             } label: {
-                title
+                title(collapsedCount: disclosure.collapsedCount)
             }
             Spacer(minLength: 0)
             if status.tokenState == .ready, let feed, !feed.phase.isStopped {
@@ -129,7 +123,7 @@ struct AccountSectionView: View {
     }
 
     /// 見出しのうち、開閉のボタンになる部分（山形は `DisclosureButton` が付ける）。
-    private var title: some View {
+    private func title(collapsedCount: Int?) -> some View {
         HStack(spacing: 6) {
             tokenIcon
                 .frame(width: 16)
@@ -138,9 +132,7 @@ struct AccountSectionView: View {
             if account.isActive {
                 Text("active")
                     .font(.caption)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(.tint.opacity(0.15), in: Capsule())
+                    .capsuleBadge(.tint.opacity(0.15))
                     .help("The active account for this host in gh")
             }
             Text("\(account.host) — \(account.hostKind.displayName)")
@@ -155,8 +147,8 @@ struct AccountSectionView: View {
                     .help("Showing only threads you are participating in")
                     .accessibilityLabel("Participating only")
             }
-            if isCollapsed, let feed, feed.phase.showsThreads, !feed.threads.isEmpty {
-                CollapsedCount(count: feed.threads.count)
+            if let collapsedCount {
+                CollapsedCount(count: collapsedCount)
             }
         }
     }

@@ -18,6 +18,11 @@ struct AccountStatus: Sendable, Equatable, Identifiable {
     var id: AccountID { account.id }
 }
 
+extension Array where Element == AccountStatus {
+    /// 無効にしていないアカウント（並び順のまま）。
+    var enabled: [AccountStatus] { filter { $0.tokenState != .disabled } }
+}
+
 /// gh とアカウントの全体の状態。
 enum DiscoveryState: Sendable, Equatable {
     case checking
@@ -37,7 +42,7 @@ enum DiscoveryState: Sendable, Equatable {
     /// 無効にしていないアカウント（「アカウントあり」以外は空）。ポーラーや一覧の状態を残すアカウントはこれで決める。
     var enabledStatuses: [AccountStatus] {
         guard case .accounts(let statuses) = self else { return [] }
-        return statuses.filter { $0.tokenState != .disabled }
+        return statuses.enabled
     }
 
     /// `accounts` を `tokenState` にし、`disabled` に入るものを `.disabled` にした「アカウントあり」。

@@ -4,19 +4,27 @@ import Foundation
 enum ThreadWebURL {
     /// 組み立てた URL。`https` でホストがアカウントのホストと一致しなければ nil（開かない）。
     static func make(for thread: NotificationThread, endpoints: APIEndpoints) -> URL? {
-        var url = repositoryBase(thread.repository, endpoints: endpoints)
-        if let suffix = suffix(for: thread, endpoints: endpoints) {
-            url = suffix.reduce(url) { $0.appending(path: $1) }
-        }
-        return isOpenable(url, host: endpoints.host) ? url : nil
+        url(for: thread, target: target(for: thread, endpoints: endpoints), endpoints: endpoints)
     }
 
     /// 一覧に出す Issue・Pull request の番号。開く URL と同じ検証を通ったときだけ返す（表示と開くページの番号を揃えるため）。
+    /// `make` が nil を返す（開かない）ときも nil。
     static func subjectNumber(for thread: NotificationThread, endpoints: APIEndpoints) -> String? {
-        guard let suffix = suffix(for: thread, endpoints: endpoints), suffix.count == 2,
-            suffix[0] == "pull" || suffix[0] == "issues"
-        else { return nil }
-        return suffix[1]
+        let target = target(for: thread, endpoints: endpoints)
+        guard url(for: thread, target: target, endpoints: endpoints) != nil else { return nil }
+        switch target {
+        case .pullRequest(let id), .issue(let id): return id
+        case .commit, .releases, .discussions, nil: return nil
+        }
+    }
+
+    /// `target` から組み立てた URL。`target` が nil ならリポジトリのページ。開けなければ nil。
+    private static func url(for thread: NotificationThread, target: Target?, endpoints: APIEndpoints) -> URL? {
+        var url = repositoryBase(thread.repository, endpoints: endpoints)
+        if let target {
+            url = target.pathComponents.reduce(url) { $0.appending(path: $1) }
+        }
+        return isOpenable(url, host: endpoints.host) ? url : nil
     }
 
     /// リポジトリのページの URL。`https` でホストがアカウントのホストと一致しなければ nil（開かない）。
@@ -36,11 +44,31 @@ enum ThreadWebURL {
             && components.port == nil && components.user == nil && components.password == nil
     }
 
-    /// リポジトリのページより後ろのパスの要素。組み立てられなければ nil（リポジトリのページを開く）。
-    private static func suffix(for thread: NotificationThread, endpoints: APIEndpoints) -> [String]? {
+    /// リポジトリのページより後ろに足すページ。
+    private enum Target {
+        case pullRequest(String)
+        case issue(String)
+        case commit(String)
+        case releases
+        case discussions
+
+        /// リポジトリのページより後ろのパスの要素。
+        var pathComponents: [String] {
+            switch self {
+            case .pullRequest(let id): ["pull", id]
+            case .issue(let id): ["issues", id]
+            case .commit(let id): ["commit", id]
+            case .releases: ["releases"]
+            case .discussions: ["discussions"]
+            }
+        }
+    }
+
+    /// リポジトリのページより後ろに足すページ。組み立てられなければ nil（リポジトリのページを開く）。
+    private static func target(for thread: NotificationThread, endpoints: APIEndpoints) -> Target? {
         switch thread.kind {
-        case .release: return ["releases"]
-        case .discussion: return ["discussions"]
+        case .release: return .releases
+        case .discussion: return .discussions
         default: break
         }
         guard let subjectURL = thread.subjectURL,
@@ -51,9 +79,9 @@ enum ThreadWebURL {
         else { return nil }
         let id = components[4]
         switch components[3] {
-        case "pulls" where ThreadID.isValid(id): return ["pull", id]
-        case "issues" where ThreadID.isValid(id): return ["issues", id]
-        case "commits" where isCommitSHA(id): return ["commit", id]
+        case "pulls" where ThreadID.isValid(id): return .pullRequest(id)
+        case "issues" where ThreadID.isValid(id): return .issue(id)
+        case "commits" where isCommitSHA(id): return .commit(id)
         default: return nil
         }
     }
