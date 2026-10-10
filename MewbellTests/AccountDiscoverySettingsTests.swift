@@ -272,4 +272,27 @@ struct AccountDiscoveryRaceTests {
         await discovery.reload(userInitiated: false, options: DiscoveryOptions()) { _ in }
         #expect(await fixture.credentials.token(for: dave) != nil)
     }
+
+    @Test func doesNotReportAnAccountEnabledDuringTheFetchAsReady() async throws {
+        let gated = GatedProcessRunner(base: fixture.runner)
+        let discovery = fixture.discovery(runner: gated)
+        await discovery.disable(dave)
+        gated.close()
+        let states = LockedValue<[DiscoveryState]>([])
+        async let reloaded: Void = discovery.reload(userInitiated: false, options: DiscoveryOptions(disabled: [dave])) {
+            state in states.withLock { $0.append(state) }
+        }
+        await gated.waitUntilWaiting(1)
+        // alice のトークンを取っている間に dave を有効に戻す
+        await discovery.enable(dave)
+        gated.open()
+        await reloaded
+        #expect(
+            states.value.last
+                == .accounts([
+                    AccountStatus(account: Account(id: alice, isActive: true), tokenState: .ready),
+                    AccountStatus(account: Account(id: dave, isActive: true), tokenState: .disabled),
+                ]))
+        #expect(await fixture.credentials.token(for: dave) == nil)
+    }
 }

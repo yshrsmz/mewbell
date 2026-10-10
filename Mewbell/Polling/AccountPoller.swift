@@ -74,10 +74,7 @@ actor AccountPoller {
     nonisolated func start() {
         loop.withLock { loop in
             guard loop.task == nil, !loop.discarded else { return }
-            loop.task = Task {
-                guard await self.waitForFirstFetch() else { return }
-                await self.run(refreshingTokenFirst: false)
-            }
+            loop.task = Task { await self.run(refreshingTokenFirst: false) }
         }
     }
 
@@ -129,12 +126,7 @@ actor AccountPoller {
         let thisLoop = loopCount
         runningLoop = thisLoop
         defer { endLoop(thisLoop) }
-        var refreshedToken = false
-        if refreshingTokenFirst {
-            await publish(.loading)
-            guard await refreshToken() else { return }
-            refreshedToken = true
-        }
+        guard var refreshedToken = await beginLoop(refreshingTokenFirst: refreshingTokenFirst) else { return }
         while !Task.isCancelled {
             refreshWaiters.startAttempt(at: now())
             // トークンが無いのは、読み直しが一時的にトークンを捨てたときなど。失敗として待ってから確かめ直す
@@ -319,10 +311,15 @@ actor AccountPoller {
 
 // 最初の取得の待ち、一覧のスレッドへの操作と、操作したスレッドを取得の結果から隠す処理
 extension AccountPoller {
-    /// `firstFetchNotBefore` まで待つ。止められたら false。
-    fileprivate func waitForFirstFetch() async -> Bool {
-        guard let firstFetchNotBefore, firstFetchNotBefore > now() else { return true }
-        return await pause(for: .seconds(firstFetchNotBefore.timeIntervalSince(now())))
+    /// ループの最初。再開ならトークンを取り直し、そうでなければ `firstFetchNotBefore` まで待つ（ループの中で待つので、
+    /// レート制限の待ちでなければ再読み込みで早められる）。止めるなら nil、続けるならトークンを取り直したか。
+    fileprivate func beginLoop(refreshingTokenFirst: Bool) async -> Bool? {
+        if refreshingTokenFirst {
+            await publish(.loading)
+            return await refreshToken() ? true : nil
+        }
+        guard let firstFetchNotBefore, firstFetchNotBefore > now() else { return false }
+        return await pause(for: .seconds(firstFetchNotBefore.timeIntervalSince(now()))) ? false : nil
     }
 
     /// スレッドを既読か Done にする。一覧からすぐに外し、リクエストを送り、次の取得を条件なしにする。

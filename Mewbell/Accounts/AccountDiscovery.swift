@@ -258,28 +258,36 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         }
 
         let client = GhClient(executable: ghPath, runner: runner, environment: environment)
-        if verifiedGhPath != ghPath {
-            verifiedGhPath = nil
-            let version = await client.version()
-            guard let version else { return .ghUnavailable }
-            guard version.isSupported else { return .ghOutdated(version: version) }
-            verifiedGhPath = ghPath
+        if let unusable = await verifyVersion(of: ghPath, using: client) {
+            return unusable
         }
 
         let accounts = hostsFile.map(Account.accounts(from:)) ?? []
         guard !accounts.isEmpty else { return .notLoggedIn }
 
-        // 無効なアカウントは gh を呼ばず、持っているトークンも捨てる（読み直しの途中で無効にしたものも含める）
-        let enabled = accounts.filter { !disabledIDs.contains($0.id) }
+        // 無効なアカウントは gh を呼ばず、持っているトークンも捨てる（読み直しの途中で無効にしたものも含める）。
+        // 返す状態もこの時点の集合で作る（取得の途中で有効に戻したアカウントを、トークンが無いまま「使える」にしないため）
+        let disabled = disabledIDs
+        let enabled = accounts.filter { !disabled.contains($0.id) }
         knownAccountIDs = Set(enabled.map(\.id))
         let held = await credentials.retainOnly(knownAccountIDs)
         let pending = enabled.filter { !held.contains($0.id) }
         if !pending.isEmpty {
-            await update(.accounts(accounts, disabled: disabledIDs) { held.contains($0.id) ? .ready : .fetching })
+            await update(.accounts(accounts, disabled: disabled) { held.contains($0.id) ? .ready : .fetching })
         }
 
         let failed = await fetchTokens(for: pending, using: client)
-        return .accounts(accounts, disabled: disabledIDs) { failed.contains($0.id) ? .unavailable : .ready }
+        return .accounts(accounts, disabled: disabled) { failed.contains($0.id) ? .unavailable : .ready }
+    }
+
+    /// gh のパスが前回確かめたものと違えば `gh --version` で確かめる。使えなければその状態を返す。
+    private func verifyVersion(of ghPath: URL, using client: GhClient) async -> DiscoveryState? {
+        guard verifiedGhPath != ghPath else { return nil }
+        verifiedGhPath = nil
+        guard let version = await client.version() else { return .ghUnavailable }
+        guard version.isSupported else { return .ghOutdated(version: version) }
+        verifiedGhPath = ghPath
+        return nil
     }
 
     /// アカウントごとの `gh auth token` を並べて実行し、取れたトークンを保存する。取れなかったアカウントを返す。

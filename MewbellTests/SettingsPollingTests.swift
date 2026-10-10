@@ -291,4 +291,18 @@ struct NotificationStoreSettingsTests {
         #expect(carried > .seconds(100) && carried <= .seconds(120))
         store.stopAll()
     }
+
+    @Test func letsAReloadSkipTheCarriedWait() async {
+        let store = await loadedStore()
+        let aliceGets = gets("alice").count
+        settings.setParticipatingOnly(true, for: alice)
+        store.restart(alice)
+        await sleeper.waitForSleeps(3)
+        #expect(gets("alice").count == aliceGets)
+        // 作り直したポーラーが最初の取得を待っている間でも、再読み込みで取得する
+        store.refresh()
+        await waitUntil { self.gets("alice").count > aliceGets }
+        #expect(gets("alice").count > aliceGets)
+        store.stopAll()
+    }
 }

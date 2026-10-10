@@ -191,7 +191,10 @@ struct PathOverrideField: View {
                 Button("Choose…", action: choose)
                 Button("Reset") {
                     text = ""
-                    commit(nil)
+                    // 保存していない下書きを消すだけなら、読み直さない
+                    if path != nil {
+                        commit(nil)
+                    }
                 }
                 .disabled(path == nil && text.isEmpty)
             }

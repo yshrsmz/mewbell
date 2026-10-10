@@ -106,7 +106,7 @@ UserDefaults（`UserDefaults.standard`、ドメインは Bundle ID）に次の�
 - `restart(id)` は、ポーラーを止めて取り除き、`feeds[id] = .loading`、`notifier.resetBaseline(id)` の後に、同じアカウントに新しい世代のポーラーを作って `start()` する。新しいポーラーは `Last-Modified` も `hidden` も持たないので、最初の取得は条件なしになる。トークンは `CredentialStore` にあるので gh は呼ばない
 - 作り直しで `hidden` と `readThroughs` が消えるので、直前に既読にしたスレッドが、GitHub の反映が遅れたときに一度だけ一覧に戻ることがある（Risks）
 - 「スコープ不足」「認証エラー」で止まっているアカウントは、`AccountPoller(initialPhase:)` で止まった状態のまま作り直し、始めない。再読み込みの `refreshNow` が、止まっているポーラーと同じく `resume()` で再開する
-- 作り直すポーラーには `firstFetchNotBefore` を渡し、最初の取得の前にその時刻まで待たせる。`NotificationStore` は止めたポーラーの状態から、失敗やレート制限で待っていればその再試行の時刻、取得できていれば最後の取得から、取得中なら今から `RefreshWaiters.minimumInterval`（10 秒）後を求めて覚えておく（`notBefore`）。`participating` の切り替えでも、無効にしてすぐ有効に戻したときでも、間隔やレート制限の待ちを抜けない（CLAUDE.md の「X-Poll-Interval」「レート制限で待っている間は早めない」）。レート制限の表示は `initialPhase` で持ち越す
+- 作り直すポーラーには `firstFetchNotBefore` を渡し、最初の取得の前にその時刻まで待たせる。`NotificationStore` は止めたポーラーの状態から、失敗やレート制限で待っていればその再試行の時刻、取得できていれば最後の取得から、取得中なら今から `RefreshWaiters.minimumInterval`（10 秒）後を求めて覚えておく（`notBefore`）。`participating` の切り替えと有効化はユーザーの操作なので、再読み込みと同じく `X-Poll-Interval` は待たずに 10 秒の下限だけを守り、失敗やレート制限の待ちは抜けない（CLAUDE.md の「再読み込み」「レート制限で待っている間は早めない」）。待ちは取得のループの中で行うので、再読み込みを押せば（レート制限の待ちを除いて）早められる。レート制限の表示は `initialPhase` で持ち越す
 - gh のパスと設定ディレクトリの上書きは、同じ値で確定し直しても読み直す（権限を直した後に確かめ直せるように）。入力欄が確定した値と違う間は「Press Return to apply.」を出す
 - `discardAllTokens` は、走っている `gh auth token` を止める（取り直しを待っているポーラーは、設定ディレクトリを変えたときにすべて止めているので、止めても影響しない）
 - 代替案: `AccountPoller` に `setParticipating(_:)` を足してループの中で切り替える → `Last-Modified`・隠しているスレッド・走っている取得の結果を、どちらの一覧のものか区別して捨てる処理が要る。作り直しなら、既存の世代の仕組みで遅れて届いた結果も捨てられる
