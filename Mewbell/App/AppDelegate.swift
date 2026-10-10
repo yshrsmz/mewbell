@@ -37,8 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     listExpansion.expand(account: account, repositories: Set(threads.map(\.repository)))
                 })
             settings.onNotificationsChange = { id, notifies in
+                // 新着の判定（`NotificationStore`）は通知の設定にかかわらず続くので、オンに戻しても、オフの間に届いたものを
+                // まとめて通知しない
                 if !notifies {
-                    notifier.notificationsDisabled(id)
+                    notifier.retractAll(for: id)
                 }
             }
             self.settings = settings

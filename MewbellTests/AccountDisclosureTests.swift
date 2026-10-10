@@ -43,11 +43,29 @@ struct AccountDisclosureTests {
         #expect(!disclosure.isCollapsed)
     }
 
-    @Test func doesNotCollapseAStoppedFeed() throws {
+    @Test(arguments: [FeedPhase.unauthorized, .scopeInsufficient])
+    func doesNotCollapseAStoppedFeed(_ phase: FeedPhase) throws {
         let disclosure = AccountDisclosure(
-            tokenState: .ready, feed: try feed(.unauthorized, threads: 0), isStoredCollapsed: true)
+            tokenState: .ready, feed: try feed(phase, threads: 0), isStoredCollapsed: true)
         #expect(!disclosure.isCollapsible)
         #expect(!disclosure.isCollapsed)
+    }
+
+    /// 参加のみの切り替えや再開の後の取得中は、畳むものが無い
+    @Test func doesNotCollapseWhileLoading() throws {
+        let disclosure = AccountDisclosure(
+            tokenState: .ready, feed: try feed(.loading, threads: 0), isStoredCollapsed: true)
+        #expect(!disclosure.isCollapsible)
+        #expect(!disclosure.isCollapsed)
+        #expect(disclosure.collapsedCount == nil)
+    }
+
+    /// トークンの取り直し中も、それまでの一覧を畳んだままにする
+    @Test func keepsCollapsedWhileTheTokenIsBeingFetchedAgain() throws {
+        let disclosure = AccountDisclosure(tokenState: .fetching, feed: try feed(threads: 2), isStoredCollapsed: true)
+        #expect(disclosure.isCollapsible)
+        #expect(disclosure.isCollapsed)
+        #expect(disclosure.collapsedCount == 2)
     }
 
     @Test func showsNoCountWhenExpanded() throws {

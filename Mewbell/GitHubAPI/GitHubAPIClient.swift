@@ -111,14 +111,12 @@ struct GitHubAPIClient: Sendable {
             default:
                 return classifyFailure(response)
             }
-            guard let pageThreads = NotificationThread.decodeList(from: response.body) else {
+            guard let pageThreads = NotificationThread.decodeList(from: response.body, endpoints: endpoints) else {
                 Self.logger.error("Could not decode notifications page \(page, privacy: .private)")
                 return .failed(.malformedBody)
             }
             // ページの取得の間に新着があると、ページの境目がずれて同じスレッドが 2 回返ることがある
-            for var thread in pageThreads where seenIDs.insert(thread.id).inserted {
-                // 一覧の番号は取得したときに 1 回だけ求める（描画のたびに `subject.url` を解析しない）
-                thread.subjectNumber = ThreadWebURL.subjectNumber(for: thread, endpoints: endpoints)
+            for thread in pageThreads where seenIDs.insert(thread.id).inserted {
                 threads.append(thread)
             }
             let first = firstResponse ?? response

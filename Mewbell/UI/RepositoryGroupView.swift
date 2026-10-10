@@ -11,16 +11,17 @@ struct RepositoryGroupView: View {
     private var isCollapsed: Bool { expansion.isCollapsed(key) }
 
     var body: some View {
+        let collapsedCount = isCollapsed ? group.threads.count : nil
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 0) {
+            HStack(spacing: 6) {
                 DisclosureButton(isCollapsed: isCollapsed, name: group.repository.description) {
                     expansion.toggle(key)
                 } label: {
                     Text(group.repository.description)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    if isCollapsed {
-                        CollapsedCount(count: group.threads.count)
+                    if let collapsedCount {
+                        CollapsedCount(count: collapsedCount)
                     }
                 }
                 Spacer(minLength: 0)

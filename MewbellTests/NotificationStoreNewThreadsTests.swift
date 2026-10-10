@@ -179,7 +179,7 @@ struct NotificationStoreNewThreadsTests {
         await send(feed([try thread("1")]))
         recorder.events = []
         await send(FeedState(phase: phase, threads: []))
-        #expect(recorder.events == ["accountRemoved github.com/alice"])
+        #expect(recorder.events == ["retractAll github.com/alice"])
         store.stopAll()
     }
 
@@ -203,6 +203,20 @@ struct NotificationStoreNewThreadsTests {
         await send(feed([try thread("1"), try thread("5")]))
         #expect(received.value.isEmpty)
         #expect(recorder.events == ["baselineSet github.com/alice 1", "baselineSet github.com/alice 1,5"])
+        store.stopAll()
+    }
+
+    @Test func staysQuietForTheFirstFetchAfterStoppingAll() async throws {
+        let store = makeStore()
+        await send(feed([try thread("1")]))
+        store.stopAll()
+        // ポーラーを作り直す
+        store.sync(
+            with: .accounts([AccountStatus(account: Account(id: alice, isActive: true), tokenState: .ready)]))
+        recorder.events = []
+        await send(feed([try thread("1"), try thread("2")]))
+        #expect(recorder.events == ["baselineSet github.com/alice 1,2"])
+        #expect(received.value.isEmpty)
         store.stopAll()
     }
 

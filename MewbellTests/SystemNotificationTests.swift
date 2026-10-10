@@ -205,10 +205,10 @@ struct SystemNotifierTests {
         center.delivered.value = [
             "github.com/alice/1", "github.com/alice/2", "github.com/bob/1", "github.com/alice2/1",
         ]
-        notifier.accountRemoved(alice)
+        notifier.retractAll(for: alice)
         await notifier.waitForPendingWork()
         #expect(center.delivered.value == ["github.com/bob/1", "github.com/alice2/1"])
-        notifier.accountRemoved(bob)
+        notifier.retractAll(for: bob)
         await notifier.waitForPendingWork()
         #expect(center.delivered.value == ["github.com/alice2/1"])
     }

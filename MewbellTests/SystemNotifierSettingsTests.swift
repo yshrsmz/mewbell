@@ -38,7 +38,7 @@ struct SystemNotifierSettingsTests {
     @Test func retractsOnlyThatAccountWhenNotificationsAreTurnedOff() async {
         let notifier = SystemNotifier(center: center)
         center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/bob/9"]
-        notifier.notificationsDisabled(alice)
+        notifier.retractAll(for: alice)
         await notifier.waitForPendingWork()
         #expect(center.delivered.value == ["github.com/bob/9"])
     }

@@ -91,7 +91,7 @@ struct AccountSectionView: View {
                         ActionFailureView(failure: failure, host: account.host)
                     }
                     // 折りたたんでも、取得の状態と操作の失敗は出し続ける
-                    if !disclosure.isCollapsed {
+                    if disclosure.isCollapsible && !disclosure.isCollapsed {
                         threads(feed)
                     }
                 }
@@ -174,22 +174,20 @@ struct AccountSectionView: View {
     }
 
     @ViewBuilder private func threads(_ feed: FeedState) -> some View {
-        if feed.phase.showsThreads {
-            let groups = NotificationGrouping.groups(from: feed.threads)
-            if groups.isEmpty {
-                Text("No unread notifications")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 22)
-            } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(groups) { group in
-                        RepositoryGroupView(
-                            group: group, account: account.id, expansion: expansion, actions: actions)
-                    }
-                }
+        let groups = NotificationGrouping.groups(from: feed.threads)
+        if groups.isEmpty {
+            Text("No unread notifications")
+                .font(.callout)
+                .foregroundStyle(.secondary)
                 .padding(.leading, 22)
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(groups) { group in
+                    RepositoryGroupView(
+                        group: group, account: account.id, expansion: expansion, actions: actions)
+                }
             }
+            .padding(.leading, 22)
         }
     }
 }
@@ -248,6 +246,31 @@ struct FeedStatusView: View {
         .font(.caption)
         .padding(.leading, 22)
         .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// アカウントの見出しの開閉の状態。畳めるか・畳まれているか・件数を出すかを 1 つの条件から決める
+/// （畳んだままトークンを取れなくなったときに、山形の無い見出しに件数だけが出ないように）。
+struct AccountDisclosure: Equatable {
+    /// 畳むもの（スレッドの一覧か、未読が無いことの表示）があるか
+    let isCollapsible: Bool
+    /// 畳んで表示しているか（畳めないときは、畳んだ状態を覚えていても false）
+    let isCollapsed: Bool
+    /// 畳んだ見出しに出す件数（畳んでいない、またはスレッドが無いときは nil）
+    let collapsedCount: Int?
+
+    init(tokenState: TokenState, feed: FeedState?, isStoredCollapsed: Bool) {
+        isCollapsible =
+            switch tokenState {
+            case .fetching, .ready: feed?.phase.showsThreads == true
+            case .unavailable, .disabled: false
+            }
+        isCollapsed = isCollapsible && isStoredCollapsed
+        if isCollapsed, let count = feed?.threads.count, count > 0 {
+            collapsedCount = count
+        } else {
+            collapsedCount = nil
+        }
     }
 }
 

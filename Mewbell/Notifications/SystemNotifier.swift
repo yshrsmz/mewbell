@@ -9,10 +9,8 @@ protocol ThreadNotifying: AnyObject {
     func threadsChanged(for account: AccountID, posted: [NotificationThread], retracted: Set<String>)
     /// スレッドを既読か Done にした。出ている通知を取り下げる。
     func threadRemoved(_ threadID: String, for account: AccountID)
-    /// アカウントのポーリングを止めた（一覧から消えた、無効にした、止まった）。出ている通知を取り下げる。
-    func accountRemoved(_ account: AccountID)
-    /// アカウントの macOS の通知をオフにした。出ている通知を取り下げる。
-    func notificationsDisabled(_ account: AccountID)
+    /// アカウントの出ている通知をすべて取り下げる（ポーリングを止めた、macOS の通知をオフにした）。
+    func retractAll(for account: AccountID)
     /// `accounts` 以外のアカウントの通知をすべて取り下げる。
     func retainOnly(_ accounts: Set<AccountID>)
 }
@@ -60,13 +58,7 @@ final class SystemNotifier: ThreadNotifying {
         enqueue { center in await center.removeDelivered(identifiers: [identifier]) }
     }
 
-    func accountRemoved(_ account: AccountID) {
-        removeStaleDelivered(for: account, keeping: [])
-    }
-
-    func notificationsDisabled(_ account: AccountID) {
-        // 新着の判定（`NotificationStore`）は通知の設定にかかわらず続くので、オンに戻しても、オフの間に届いたものを
-        // まとめて通知しない
+    func retractAll(for account: AccountID) {
         removeStaleDelivered(for: account, keeping: [])
     }
 

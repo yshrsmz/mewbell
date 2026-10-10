@@ -26,12 +26,8 @@ final class NotificationStore {
     @ObservationIgnored private let makePoller: PollerFactory?
     @ObservationIgnored private var pollers: [AccountID: PollerEntry] = [:]
     @ObservationIgnored private var nextGeneration = 0
-    @ObservationIgnored private let notifier: (any ThreadNotifying)?
-    /// 新着の判定（macOS の通知と一覧の自動展開で共有する）。通知の設定にかかわらず更新する
-    /// （通知をオフにしている間に見たスレッドを、オンに戻したときにまとめて通知しないため）
-    @ObservationIgnored private var tracker = NotificationTracker()
-    /// 新着（macOS の通知の対象と同じ判定）が届いた。アカウントの通知の設定にかかわらず呼ぶ（一覧の折りたたみを開くため）
-    @ObservationIgnored private let onNewThreads: (@MainActor (AccountID, [NotificationThread]) -> Void)?
+    /// 新着の判定と、macOS の通知・`onNewThreads` への受け渡し
+    @ObservationIgnored private let threadChanges: ThreadChangeDispatcher
     @ObservationIgnored private let openURL: @MainActor (URL) -> Void
     /// アカウントごとの設定（ポーラーを作るときの `participating`）
     @ObservationIgnored private let preferences: @MainActor (AccountID) -> AccountPreferences
@@ -50,8 +46,7 @@ final class NotificationStore {
         feeds: [AccountID: FeedState] = [:]
     ) {
         self.makePoller = makePoller
-        self.notifier = notifier
-        self.onNewThreads = onNewThreads
+        threadChanges = ThreadChangeDispatcher(notifier: notifier, onNewThreads: onNewThreads)
         self.openURL = openURL
         self.preferences = preferences
         self.feeds = feeds
@@ -59,7 +54,7 @@ final class NotificationStore {
 
     static func live(
         tokens: any TokenProviding, notifier: any ThreadNotifying, settings: AppSettings,
-        onNewThreads: (@MainActor (AccountID, [NotificationThread]) -> Void)? = nil
+        onNewThreads: @escaping @MainActor (AccountID, [NotificationThread]) -> Void
     ) -> NotificationStore {
         let client = GitHubAPIClient(transport: URLSessionTransport())
         return NotificationStore(
@@ -90,11 +85,10 @@ final class NotificationStore {
             entry?.poller.stop()
             carriedWaits[id] = carriedWait(of: id, startedWith: entry?.carriedWait)
             feeds[id] = nil
-            tracker.reset(id)
-            notifier?.accountRemoved(id)
+            threadChanges.accountRemoved(id)
         }
         if let retained = state.retainedAccountIDs {
-            notifier?.retainOnly(retained)
+            threadChanges.retainOnly(retained)
             // 読み込みが終わっても一覧に無いか、トークンを取れない・無効のアカウントの既読化は捨てる
             let waitingIDs = Set(active.filter { $0.tokenState != .unavailable }.map(\.id))
             pendingReads = pendingReads.filter { waitingIDs.contains($0.key) }
@@ -114,8 +108,7 @@ final class NotificationStore {
         let initialPhase = feeds[id].flatMap { $0.phase.isStopped ? $0.phase : nil }
         carriedWaits[id] = carriedWait(of: id, startedWith: entry.carriedWait)
         feeds[id] = nil
-        // 次の取得を基準にする。出ている通知は、その基準の取得で今の一覧に無いものだけを取り下げる
-        tracker.reset(id)
+        threadChanges.restarted(id)
         startPolling(entry.account, initialPhase: initialPhase)
     }
 
@@ -218,8 +211,7 @@ final class NotificationStore {
         if poller == nil, case .done = action { return }
         let threadID = action.threadID
         feeds[account]?.threads.removeAll { $0.id == threadID }
-        tracker.remove(threadID, for: account)
-        notifier?.threadRemoved(threadID, for: account)
+        threadChanges.threadRemoved(threadID, for: account)
         if let poller {
             Task { await poller.perform(action) }
         } else {
@@ -234,6 +226,7 @@ final class NotificationStore {
         }
         pollers.removeAll()
         feeds.removeAll()
+        threadChanges.stopAll()
     }
 
     private func apply(_ state: FeedState, for id: AccountID, generation: Int) {
@@ -241,31 +234,7 @@ final class NotificationStore {
         guard pollers[id]?.generation == generation, feeds[id] != state else { return }
         let old = feeds[id]
         feeds[id] = state
-        trackThreads(of: id, from: old, to: state)
-    }
-
-    /// 取得の状態の変化から新着と消えたスレッドを判定し、macOS の通知と `onNewThreads` に知らせる。
-    private func trackThreads(of id: AccountID, from old: FeedState?, to new: FeedState) {
-        switch new.phase {
-        // 最初の取得が失敗を挟んで成功したとき（`.retrying` から `.loaded`）も、基準にする
-        case .loaded where !tracker.hasBaseline(for: id):
-            tracker.baseline(new.threads, for: id)
-            notifier?.baselineSet(for: id, keeping: Set(new.threads.map(\.id)))
-        case .loaded:
-            guard old?.threads != new.threads else { return }
-            let changes = tracker.update(new.threads, for: id)
-            if !changes.post.isEmpty {
-                onNewThreads?(id, changes.post)
-            }
-            if !changes.post.isEmpty || !changes.retract.isEmpty {
-                notifier?.threadsChanged(for: id, posted: changes.post, retracted: changes.retract)
-            }
-        case .scopeInsufficient, .unauthorized:
-            tracker.reset(id)
-            notifier?.accountRemoved(id)
-        case .loading, .retrying:
-            break
-        }
+        threadChanges.feedChanged(for: id, from: old, to: state)
     }
 }
 

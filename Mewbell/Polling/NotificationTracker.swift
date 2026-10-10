@@ -1,26 +1,28 @@
 import Foundation
 
-/// 取得の結果から、どのスレッドの通知を出し、どれを取り下げるかを決める。通知センターには触れない。
+/// 取得の結果から、新着（初めて見たか `updated_at` が進んだスレッド）と、一覧から消えたスレッドを決める。
+/// macOS の通知と一覧の自動展開の両方が使う。通知センターには触れない。
 struct NotificationTracker {
     struct Changes: Equatable {
+        /// 新着として知らせるスレッド
         var post: [NotificationThread] = []
-        /// 取り下げるスレッドの ID
+        /// 一覧から消えたスレッドの ID
         var retract: Set<String> = []
     }
 
     /// アカウントごとの、見たスレッドと、最後に見たときの `updated_at`。一覧から消えたスレッドの分も残す
-    /// （同じ `updated_at` のまま一覧に戻ったスレッドを出し直さないため）
+    /// （同じ `updated_at` のまま一覧に戻ったスレッドを、新着として知らせ直さないため）
     private var seen: [AccountID: [String: Date]] = [:]
     /// アカウントごとの今の一覧
     private var current: [AccountID: Set<String>] = [:]
 
-    /// 基準の取得の結果を覚える。何も出さない。
+    /// 基準の取得の結果を覚える。新着として知らせるものは無い。
     mutating func baseline(_ threads: [NotificationThread], for account: AccountID) {
         seen[account] = Dictionary(threads.map { ($0.id, $0.updatedAt) }, uniquingKeysWith: max)
         current[account] = Set(threads.map(\.id))
     }
 
-    /// 基準の後の取得の結果から、出すものと取り下げるものを決める。基準がまだ無ければ基準にする。
+    /// 基準の後の取得の結果から、新着と一覧から消えたものを決める。基準がまだ無ければ基準にする。
     mutating func update(_ threads: [NotificationThread], for account: AccountID) -> Changes {
         guard var seenThreads = seen[account], let previous = current[account] else {
             baseline(threads, for: account)
@@ -39,7 +41,7 @@ struct NotificationTracker {
         return changes
     }
 
-    /// 既読にしたスレッドを今の一覧から外す（取り下げは呼び出し元がする）。
+    /// 既読か Done にしたスレッドを今の一覧から外す（通知の取り下げは呼び出し元がする）。
     mutating func remove(_ threadID: String, for account: AccountID) {
         current[account]?.remove(threadID)
     }

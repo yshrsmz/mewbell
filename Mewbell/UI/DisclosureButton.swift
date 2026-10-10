@@ -41,7 +41,7 @@ struct DisclosureButton<Label: View>: View {
 }
 
 /// 開閉を示す山形。開いているときは下を向く。幅はスレッドの行の種類のアイコンと揃える。
-struct DisclosureChevron: View {
+private struct DisclosureChevron: View {
     let isCollapsed: Bool
 
     var body: some View {
@@ -73,30 +73,5 @@ extension View {
         padding(.horizontal, 5)
             .padding(.vertical, 1)
             .background(fill, in: Capsule())
-    }
-}
-
-/// アカウントの見出しの開閉の状態。畳めるか・畳まれているか・件数を出すかを 1 つの条件から決める
-/// （畳んだままトークンを取れなくなったときに、山形の無い見出しに件数だけが出ないように）。
-struct AccountDisclosure: Equatable {
-    /// 畳むもの（スレッドの一覧か、未読が無いことの表示）があるか
-    let isCollapsible: Bool
-    /// 畳んで表示しているか（畳めないときは、畳んだ状態を覚えていても false）
-    let isCollapsed: Bool
-    /// 畳んだ見出しに出す件数（畳んでいない、またはスレッドが無いときは nil）
-    let collapsedCount: Int?
-
-    init(tokenState: TokenState, feed: FeedState?, isStoredCollapsed: Bool) {
-        isCollapsible =
-            switch tokenState {
-            case .fetching, .ready: feed?.phase.showsThreads == true
-            case .unavailable, .disabled: false
-            }
-        isCollapsed = isCollapsible && isStoredCollapsed
-        if isCollapsed, let count = feed?.threads.count, count > 0 {
-            collapsedCount = count
-        } else {
-            collapsedCount = nil
-        }
     }
 }

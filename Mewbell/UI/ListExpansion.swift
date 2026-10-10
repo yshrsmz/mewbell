@@ -11,7 +11,6 @@ struct RepositoryKey: Hashable, Sendable {
 @MainActor
 @Observable
 final class ListExpansion {
-    // 変わらないときは書き込まない（書き込むだけで、読んでいる View がすべて描き直される）
     private var collapsedAccounts: Set<AccountID> = []
     private var collapsedRepositories: Set<RepositoryKey> = []
 
@@ -23,15 +22,18 @@ final class ListExpansion {
         collapsedRepositories.contains(repository)
     }
 
+    /// 必ず変わるので、そのまま書き込む。
     func toggle(_ account: AccountID) {
         collapsedAccounts.toggle(account)
     }
 
+    /// 必ず変わるので、そのまま書き込む。
     func toggle(_ repository: RepositoryKey) {
         collapsedRepositories.toggle(repository)
     }
 
     /// 新着が届いたアカウントと、新着を含むリポジトリを開く。ほかのリポジトリは変えない。
+    /// 中身が変わるときだけ書き込む（書き込むだけで、読んでいる View がすべて描き直されるため）。
     func expand(account: AccountID, repositories: Set<RepositoryName>) {
         if collapsedAccounts.contains(account) {
             collapsedAccounts.remove(account)
@@ -43,6 +45,7 @@ final class ListExpansion {
     }
 
     /// `accounts` 以外のアカウントの状態を捨てる（一覧から消えた、無効にした）。
+    /// 中身が変わるときだけ書き込む（書き込むだけで、読んでいる View がすべて描き直されるため）。
     func retain(_ accounts: Set<AccountID>) {
         if !collapsedAccounts.isSubset(of: accounts) {
             collapsedAccounts.formIntersection(accounts)

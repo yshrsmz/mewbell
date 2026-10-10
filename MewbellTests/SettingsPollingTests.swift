@@ -79,12 +79,8 @@ final class RecordingNotifier: ThreadNotifying {
         events.append("threadRemoved \(account) \(threadID)")
     }
 
-    func accountRemoved(_ account: AccountID) {
-        events.append("accountRemoved \(account)")
-    }
-
-    func notificationsDisabled(_ account: AccountID) {
-        events.append("notificationsDisabled \(account)")
+    func retractAll(for account: AccountID) {
+        events.append("retractAll \(account)")
     }
 
     func retainOnly(_ accounts: Set<AccountID>) {
@@ -162,7 +158,7 @@ struct NotificationStoreSettingsTests {
         store.sync(with: .accounts([status(alice, .ready), status(bob, .disabled)]))
         #expect(store.feeds[bob] == nil)
         #expect(store.unreadCount == 3)
-        #expect(notifier.events == ["accountRemoved github.com/bob", "retainOnly github.com/alice"])
+        #expect(notifier.events == ["retractAll github.com/bob", "retainOnly github.com/alice"])
         let bobGets = gets("bob").count
         sleeper.advance()
         sleeper.advance()

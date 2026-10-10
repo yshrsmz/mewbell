@@ -7,8 +7,8 @@ enum ThreadWebURL {
         url(for: thread, target: target(for: thread, endpoints: endpoints), endpoints: endpoints)
     }
 
-    /// 一覧に出す Issue・Pull request の番号。開く URL と同じ検証を通ったときだけ返す（表示と開くページの番号を揃えるため）。
-    /// `make` が nil を返す（開かない）ときも nil。
+    /// Issue・Pull request の番号。`make` と同じ `subject.url` の検証（API ベース URL の下にあること、リポジトリの一致、
+    /// 番号の形）を通った Pull request と Issue の番号だけを返す。開く URL を組み立てられない（`make` が nil の）ときも nil。
     static func subjectNumber(for thread: NotificationThread, endpoints: APIEndpoints) -> String? {
         let target = target(for: thread, endpoints: endpoints)
         guard url(for: thread, target: target, endpoints: endpoints) != nil else { return nil }
