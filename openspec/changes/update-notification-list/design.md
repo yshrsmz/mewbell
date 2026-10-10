@@ -41,7 +41,7 @@
 
 ### D3. アカウントが消えたときの片付け
 
-`AppDelegate` の `accountStore.onStateChange` で、`NotificationStore.sync(with:)` に続けて `ListExpansion.retain(_:)` を、「無効」以外のアカウントの ID で呼ぶ。`retain` は、それ以外のアカウントの `collapsedAccounts` と `collapsedRepositories` を捨てる。リポジトリのグループが空になって消えたときは、そのリポジトリの状態を捨てない（次に現れるスレッドは新着なので D2 で開く。失敗して同じ `updated_at` で戻ったときは、折りたたんだままにしておく）。
+`AppDelegate` の `accountStore.onStateChange` で、`NotificationStore.sync(with:)` に続けて `ListExpansion.retain(_:)` を、「無効」以外のアカウントの ID で呼ぶ。全体の状態が「アカウントあり」でないとき（`.checking`、`hosts.yml` を読めないなど。gh の読み直しの途中で一時的になることがある）は呼ばない。`retain` は、それ以外のアカウントの `collapsedAccounts` と `collapsedRepositories` を捨てる。リポジトリのグループが空になって消えたときは、そのリポジトリの状態を捨てない（次に現れるスレッドは新着なので D2 で開く。失敗して同じ `updated_at` で戻ったときは、折りたたんだままにしておく）。
 
 ### D4. 番号は `ThreadWebURL` から取り出す
 
@@ -53,8 +53,10 @@
 
 - アカウントの見出し: 先頭に開閉の山形（`chevron.right`、開いているときは 90° 回す）のボタンを置き、ユーザー名・ホストまでを同じボタンにする。「すべて既読」のボタンは別のボタンのまま残す（押し間違えて開閉しないように）。折りたたんでいて未読が 1 件以上あるときは、件数を見出しに出す
 - リポジトリの見出し: 山形と `owner/name` をまとめて 1 つのボタンにし、折りたたんでいるときは件数を出す
-- ボタンには `.help` と、`accessibilityLabel`（例: `Collapse octo/app` / `Expand octo/app`）を付ける。開閉に短いアニメーションを付けるが、「視差効果を減らす」がオンのときは付けない
-- 字下げ（`padding(.leading, 22)`）は今のまま。山形はトークンの状態のアイコン（幅 16）の前ではなく、同じ列に収まるように配置を決め、プレビューで確かめる
+- ツールチップ（`Collapse alice (github.com)` / `Expand octo/app` など）は山形にだけ付け、ボタンには `accessibilityValue`（`Collapsed` / `Expanded`）と `accessibilityHint` を付ける。ボタン全体に `.help` や `accessibilityLabel` を付けると、見出しの中のトークンの状態のアイコンなどのツールチップと読み上げを上書きするため
+- トークンを取れないアカウントと、通知の一覧をまだ出していないアカウントでは、山形を出さずに同じ幅を空け、押せなくする（畳むものが無く、押しても山形の向きが変わるだけになるため）
+- 開閉に短いアニメーションを付けるが、「視差効果を減らす」がオンのときは付けない
+- 字下げ（`padding(.leading, 22)`）は今のまま。山形は幅 16（スレッドの行の種類のアイコンと同じ）にし、アカウントの見出しではトークンの状態のアイコンの前に置く。これで、区画の中身はトークンの状態のアイコンの列に、リポジトリ名とスレッドの件名はユーザー名の列に揃う
 
 ## Risks / Trade-offs
 

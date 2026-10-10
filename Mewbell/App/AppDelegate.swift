@@ -51,7 +51,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
         accountStore.onStateChange = { [notificationStore, listExpansion] state in
             notificationStore.sync(with: state)
-            listExpansion.retain(Set(state.enabledStatuses.map(\.id)))
+            // gh の読み直しの途中など、一時的に「アカウントあり」でない間は捨てない（同じアカウントが戻ってくるため）
+            if state.hasAccounts {
+                listExpansion.retain(Set(state.enabledStatuses.map(\.id)))
+            }
         }
         connectSettings()
         // 終了中の通知のクリックで起動されたときに取りこぼさないよう、起動が終わる前に設定する

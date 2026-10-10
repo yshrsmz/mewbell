@@ -65,6 +65,14 @@ struct AccountSectionView: View {
     private var account: Account { status.account }
     private var isCollapsed: Bool { expansion.isCollapsed(account.id) }
 
+    /// 畳むもの（スレッドの一覧か、未読が無いことの表示）があるか。
+    private var isCollapsible: Bool {
+        switch status.tokenState {
+        case .fetching, .ready: feed?.phase.showsThreads == true
+        case .unavailable, .disabled: false
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
@@ -101,7 +109,9 @@ struct AccountSectionView: View {
     private var header: some View {
         HStack(spacing: 6) {
             // 開閉のボタンと「すべて既読」は分ける（押し間違えて開閉しないように）
-            DisclosureButton(isCollapsed: isCollapsed, name: account.user) {
+            DisclosureButton(
+                isCollapsed: isCollapsed, name: "\(account.user) (\(account.host))", isEnabled: isCollapsible
+            ) {
                 expansion.toggle(account.id)
             } label: {
                 title

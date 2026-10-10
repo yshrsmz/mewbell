@@ -20,7 +20,7 @@
 
 - [x] 4.1 ビルドが通る: `MEWBELL_WARNINGS_AS_ERRORS=YES` を付けた Debug と Release の `xcodebuild build` が成功する
 - [x] 4.2 テストが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` と `bash scripts/lint.sh` が成功し、`npx openspec validate --all --strict` も通る
-- [ ] 4.3 手元で起動して確認した: (a) Pull request と Issue の行に `#番号` が出て、クリックで開くページの番号と一致する。Release などの行には出ない、(b) リポジトリとアカウントを折りたたむと行が隠れて件数が出て、メニューバーの件数は変わらない、(c) ポップオーバーを閉じて開き直しても折りたたんだまま、(d) 再起動するとすべて開いている、(e) 折りたたんだリポジトリに新着を作ると、そのリポジトリとアカウントが開き、ほかの折りたたんだリポジトリは閉じたまま、(f) `defaults read com.codingfeline.mewbell` に折りたたみの状態が無い
+- [ ] 4.3 手元で起動して確認した: (a) Pull request と Issue の行に `#番号` が出て、クリックで開くページの番号と一致する。Release などの行には出ない、(b) リポジトリとアカウントを折りたたむと行が隠れて件数が出て、メニューバーの件数は変わらない、(c) ポップオーバーを閉じて開き直しても折りたたんだまま、(d) 再起動するとすべて開いている、(e) 折りたたんだリポジトリに新着を作ると、そのリポジトリとアカウントが開き、ほかの折りたたんだリポジトリは閉じたまま、(f) `defaults read com.codingfeline.mewbell` に折りたたみの状態が無い、(g) 見出しの山形にマウスを載せると `Collapse <user> (<host>)` のツールチップが出て、トークンの状態のアイコン・active の印にマウスを載せるとそれぞれのツールチップ（`Ready` など）が出る
 - [x] 4.4 README の現状の説明を更新する（折りたたみと番号の表示）。確認: 差分を読み、spec と食い違いが無い
 
 ## 5. 別コンテキストでのレビュー
