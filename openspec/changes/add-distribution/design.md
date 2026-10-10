@@ -53,7 +53,7 @@
 - `simple` は `CHANGELOG.md` と `version.txt` を更新する。`version.txt` は release-please の都合で作られるだけで、正本は `project.xcproj` とする（2 つは release-please が同時に書き換えるので食い違わない）
 - `draft: true` だと GitHub は公開までタグを作らず、release-please が前のリリースを見つけられなくなるので、`force-tag-creation: true` でタグをすぐに作る
 - `bump-minor-pre-major` で、1.0.0 より前の破壊的変更は minor を上げる。`feat:` は minor、`fix:` は patch
-- 最初のリリースは今の `0.1.0` にする。タグが 1 つも無いと release-please はマニフェストの値を使わずに初回の版（既定は `1.0.0`）を出すので、`initial-version: "0.1.0"` を指定する。release-please 17.11.2 の dry-run で、最初の Release PR が `release 0.1.0` になり、`CHANGELOG.md`・`version.txt`・`project.xcproj`・マニフェストを更新すること、generic updater が印の中の 2 つの値だけを書き換えることを確かめた
+- 最初のリリースは今の `0.1.0` にする。タグが 1 つも無いと release-please はマニフェストの値を使わずに初回の版（既定は `1.0.0`）を出すので、`initial-version: "0.1.0"` を指定する。release-please 17.11.2 の dry-run で、最初の Release PR が `release 0.1.0` になり、`CHANGELOG.md`・`version.txt`・`project.xcproj`・マニフェストを更新すること、generic updater が印の中の値だけを書き換えることを確かめた（その後 D2 で印の中は `MARKETING_VERSION` だけにした）
 
 代替案: 手元のスクリプトでタグを切る（最初の計画）。ユーザーが自動化を選んだため採らない。semantic-release は Node の依存とプラグインが多く、Release PR の形で変更を確かめられないため採らない。
 
@@ -68,7 +68,7 @@
     // x-release-please-end
 ```
 
-`CURRENT_PROJECT_VERSION`（`CFBundleVersion`）も同じ `X.Y.Z` にする。release-please は整数のビルド番号を上げられず、`CFBundleVersion` は 3 つまでの整数を `.` でつないだ形を許すため。Xcode の IDE で `project.xcproj` を保存し直すとコメントが消えるおそれがあるので、検査（D4）で `CFBundleShortVersionString` がタグと一致することを確かめ、印が消えたら最初のリリースで気づけるようにする。
+`CURRENT_PROJECT_VERSION`（`CFBundleVersion`）も同じ `X.Y.Z` にする。release-please は整数のビルド番号を上げられず、`CFBundleVersion` は 3 つまでの整数を `.` でつないだ形を許すため。Xcode の IDE で `project.xcproj` を保存し直すとコメントが消えるおそれがあるので、PR の CI（`ci.yml`）で印の中に `MARKETING_VERSION` があることを確かめ、リリースの前に気づけるようにする。さらに検査（D4）で `CFBundleShortVersionString` と `CFBundleVersion` がタグと一致することを確かめる。
 
 代替案: xcconfig にバージョンを移す。JSON 形式の `project.xcproj` から xcconfig を参照する書き方を確かめられていないので採らない。`version.txt` を正本にして `xcodebuild` に引数で渡す。Xcode の IDE と `build.sh` のビルドでバージョンが変わるので採らない。
 
@@ -85,7 +85,8 @@
    - `bash scripts/tests/verify-app-test.sh`（数秒で終わるので先に）、`xcodebuild test`、`MEWBELL_WARNINGS_AS_ERRORS=YES` の Debug のビルド（Release の同じビルドは次の `package-release.sh` が兼ねる）
    - `bash scripts/package-release.sh "$VERSION"`（D4）
    - Cask の雛形（`packaging/homebrew/mewbell.rb.template`）を、作った zip の SHA-256 で埋め、一時的な tap に置いて `brew style` と `brew audit --cask --strict` を通す（tap はこのタグの雛形を使うので、公開の前に確かめる）
-   - `gh release upload "$TAG" … --clobber` で zip と `.sha256` を draft に添付し、`gh release edit "$TAG" --draft=false` で公開する。`GH_TOKEN` はジョブの `GITHUB_TOKEN`
+   - `actions/attest-build-provenance` で zip の build provenance attestation を作る（このジョブだけに `id-token: write` と `attestations: write` を与える）
+   - `gh release upload "$TAG" … --clobber` で zip と `.sha256` を draft に添付し、`gh release edit "$TAG" --draft=false` で公開する。Release がすでに公開済みのとき（公開の後の手順だけ失敗してやり直したとき）は、利用者が取った zip と Cask の SHA-256 を変えないよう、添付も公開もしない`GH_TOKEN` はジョブの `GITHUB_TOKEN`
    - mewbell 用 App のトークンを `owner: yshrsmz`、`repositories: homebrew-tap`、`permission-contents: write` だけで発行し、`gh api repos/yshrsmz/homebrew-tap/dispatches -f event_type=mewbell-released -F 'client_payload[version]=…'` を送る
 3. lint は今の `ci.yml` のまま（Release PR にも走る）
 
@@ -109,7 +110,8 @@ homebrew-tap は OpenSpec の外なので、ここで形を決め、tasks で作
 - `.github/workflows/update-mewbell.yml`: `on: repository_dispatch: types: [mewbell-released]`、既定の `permissions: contents: read`、`environment: release`
   - `env: VERSION: ${{ github.event.client_payload.version }}` で受け、`[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]` でなければ失敗する
   - いまの `Casks/mewbell.rb` の `version` と比べ、同じか新しいとき（`sort -V`）は何もせずに終わる。知らせのやり直しや古い版の知らせで、空の PR を作ったり Cask を戻したりしないため
-  - `curl -fsSL --proto '=https'` で `https://github.com/yshrsmz/mewbell/releases/download/v$VERSION/Mewbell-$VERSION.zip` と `.sha256` を取り、`sha256sum` の値と `.sha256` の値が一致することを確かめる。これはダウンロードの破損を見つけるためのもので、改ざんは防がない（`.sha256` も同じ Release にある）。添付ファイルが正しいことは、Release に書けるのが mewbell のリリースのワークフロー（`main` に限った Environment の App と `GITHUB_TOKEN`）だけであることに頼る
+  - `curl -fsSL --proto '=https'` で `https://github.com/yshrsmz/mewbell/releases/download/v$VERSION/Mewbell-$VERSION.zip` と `.sha256` を取り、`sha256sum` の値と `.sha256` の値が一致することを確かめる（ダウンロードの破損を見つける）
+  - `gh attestation verify` で、zip が `yshrsmz/mewbell` の `.github/workflows/release.yml` が `refs/heads/main` で作ったものであることを確かめる。Release の添付ファイルは Contents の書き込み権限があれば差し替えられ、`.sha256` も同じ Release にあるので、SHA-256 の照合だけでは改ざんを防げない。attestation は GitHub の OIDC でそのワークフローの実行にだけ発行される鍵で署名されるので、漏れたトークンで添付を差し替えても通らない
   - 雛形から `Casks/mewbell.rb` を作り、tap 用 App のトークン（`repositories: homebrew-tap`、`permission-contents: write`、`permission-pull-requests: write`）で、API（`git/refs` と `contents`）でブランチ `mewbell-$VERSION` を作ってコミットし（git の資格情報をランナーに置かない。コミットは App の名前になる）、PR を作り、`gh pr merge --auto --squash` を指定する。前の試みのブランチが残っているときは `main` に戻さずにその上に書く（開いている PR の中身を一時的に空にして、空のまま自動でマージされないように）。API の失敗は 404 とそれ以外を分け、404 以外は失敗にする
 - `.github/workflows/ci.yml`: `pull_request` で、`Casks/` の各 Cask に `brew style --cask` と `brew audit --cask --strict`（`--online` は付けない）を `macos-latest` で動かす。`brew audit --cask` が Linux で動くかを確かめられなかったため、確実に動く macOS にする（リリースのためのワークフローなので macOS ランナーの例外に入り、Cask の PR のときだけ動く）
 - ruleset: `main` へのマージに `ci` のチェックの成功を必須にする。リポジトリの設定で auto-merge を有効にする。App のトークンで作った PR は CI が走るので、auto-merge が働く
@@ -154,7 +156,7 @@ homebrew-tap は OpenSpec の外なので、ここで形を決め、tasks で作
   - アプリのトークン・gh サブプロセス・ネットワーク・URL を開く処理: 該当しない（アプリのコードに触れない）。spec のルールにある API のエンドポイントとステータスコードも、この capability はアプリから API を使わないので該当しない
   - アプリとビルドの設定: Release の Hardened Runtime、緩める entitlement と `get-task-allow` が無いこと、ATS の例外が無いことを `verify_app` で配布物ごとに確かめ、偽の .app のテストで検査そのものを確かめる
   - 依存とサプライチェーン: アプリの依存は増やさない。Action はコミット SHA で固定する。CI のシークレットと権限の約束は D7 のとおり改め、そのとおりに作る。`pull_request_target` は使わず、リリースのワークフローは `main` への push と（tap は）`repository_dispatch` だけで動く
-  - tap: `repository_dispatch` の payload は検証してから使い、URL と SHA-256 は自分で決める。Cask は `https` の GitHub Releases だけを指し、`sha256` を必ず入れる
+  - tap: `repository_dispatch` の payload は検証してから使い、URL と SHA-256 は自分で決める。zip は build provenance attestation で mewbell の `main` のリリースのワークフローが作ったものであることを確かめる。Cask は `https` の GitHub Releases だけを指し、`sha256` を必ず入れる
 - Gatekeeper: quarantine を消す処理を Cask に入れず、Gatekeeper をシステム全体で無効にする手順も案内しない
 
 ## Migration Plan

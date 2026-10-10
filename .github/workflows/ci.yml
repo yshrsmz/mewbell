@@ -31,6 +31,16 @@ jobs:
         with:
           persist-credentials: false
 
+      # Xcode が project.xcproj を保存し直すとコメントが消えることがある。消えると release-please が
+      # バージョンを上げられず、リリースのジョブがタグを作った後で失敗するので、PR のうちに気づく
+      - name: Check release-please markers
+        run: |
+          block="$(sed -n '/x-release-please-start-version/,/x-release-please-end/p' Mewbell.xcodeproj/project.xcproj)"
+          if ! grep -q '"MARKETING_VERSION": "[0-9]*\.[0-9]*\.[0-9]*"' <<<"$block"; then
+            echo "project.xcproj の release-please の印の中に MARKETING_VERSION がありません" >&2
+            exit 1
+          fi
+
       - name: swift-format
         run: >-
           docker run --rm -v "$PWD:/src:ro" -w /src "$SWIFT_IMAGE"

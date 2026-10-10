@@ -47,7 +47,7 @@ Releases から入れた場合は、新しい zip の `Mewbell.app` で置き換
 
 ```bash
 brew uninstall --cask mewbell
-brew uninstall --cask --zap mewbell   # 設定（~/Library/Preferences/com.codingfeline.mewbell.plist）も消す
+brew uninstall --cask --zap mewbell   # 設定（~/Library/Preferences/com.codingfeline.mewbell.plist）と ~/Library/Application Support/com.codingfeline.mewbell も消す
 ```
 
 Releases から入れた場合は、`/Applications/Mewbell.app` をゴミ箱に入れます。ログイン時に起動するように登録していた場合は、アプリを消すと macOS が登録を外します。

@@ -7,9 +7,9 @@ M4 までで Mewbell は日常的に使える状態になったが、今は手�
 ## What Changes
 
 - release-please を入れる。`main` へのマージ（Conventional Commits の PR タイトル）から Release PR を作り、バージョン（`project.xcproj` の `MARKETING_VERSION` と `CURRENT_PROJECT_VERSION`）と `CHANGELOG.md` を更新する。Release PR をマージすると、タグ `vX.Y.Z` と draft の GitHub Release を作る
-- 同じワークフローで、GitHub の macOS ランナー（Xcode 27 のイメージ）がタグからビルドする。テスト、警告をエラー扱いにしたビルド、Release ビルド、署名と entitlement の検査を通した後に、zip と SHA-256 を Release に添付してから公開する。どこかで失敗したら draft のまま残し、公開しない
+- 同じワークフローで、GitHub の macOS ランナー（Xcode 27 のイメージ）がタグからビルドする。テスト、警告をエラー扱いにしたビルド、Release ビルド、署名と entitlement の検査を通した後に、zip の build provenance attestation を作り、zip と SHA-256 を Release に添付してから公開する。どこかで失敗したら draft のまま残し、公開しない
 - 配布物を作る処理（Release ビルド → 検査 → zip → SHA-256）は `scripts/package-release.sh` にまとめ、CI と手元の両方で同じものを使う。検査は Hardened Runtime、`get-task-allow` や制限を緩める entitlement が無いこと、ATS の例外が無いこと、universal であること、バージョンがタグと一致することを確かめる
-- 公開の後に、`yshrsmz/homebrew-tap` に `repository_dispatch` でバージョンだけを知らせる。tap 側のワークフローはバージョンの形式を検証し、Release の zip を自分でダウンロードして SHA-256 を計算し、Cask を更新する PR を作る。tap の CI（`brew style` と `brew audit`）が通ったら自動でマージする
+- 公開の後に、`yshrsmz/homebrew-tap` に `repository_dispatch` でバージョンだけを知らせる。tap 側のワークフローはバージョンの形式を検証し、Release の zip を自分でダウンロードして SHA-256 を計算し、attestation で mewbell の `main` のリリースのワークフローが作ったことを確かめ、Cask を更新する PR を作る。tap の CI（`brew style` と `brew audit`）が通ったら自動でマージする
 - 資格情報は GitHub App にする。mewbell 用の App（release-please、Release の公開、tap への dispatch に使う）と tap 用の App（Cask の PR に使う）を作り、秘密鍵はそれぞれのリポジトリの、`main` だけに限定した Environment のシークレットに置く。トークンはジョブごとに対象のリポジトリと権限を絞って発行する。PAT は使わない
 - 署名は ad-hoc のまま（Developer ID は使わない）。notarize もしない。初回起動と更新のたびに Gatekeeper に止められるので、Cask の `caveats` と README で、システム設定の「このまま開く」で開く手順を案内する。quarantine 属性を消す処理は入れない
 - 自動更新（Sparkle など）は入れない。更新は `brew upgrade --cask` か、Releases から入れ直す

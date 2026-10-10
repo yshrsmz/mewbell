@@ -94,7 +94,7 @@ Gatekeeper の評価（`spctl --assess`）は ad-hoc 署名では通らないた
 
 ### Requirement: 公開の順序
 
-Release は、配布物の zip と SHA-256 を添付し終え、そのバージョンの Cask の雛形が `brew style` と `brew audit` を通った後でだけ公開しなければならない（MUST）。Release を作った後のビルドは、後から来た `main` への push によって取り消されてはならない（MUST NOT）。ビルド・検査・添付のどこかで失敗したときは、Release を draft のまま残し、公開してはならない（MUST NOT）。tap への知らせは、Release を公開した後でだけ送らなければならない（MUST）。
+Release は、配布物の zip の build provenance attestation を作り、zip と SHA-256 を添付し終え、そのバージョンの Cask の雛形が `brew style` と `brew audit` を通った後でだけ公開しなければならない（MUST）。Release を作った後のビルドは、後から来た `main` への push によって取り消されてはならない（MUST NOT）。ビルド・検査・添付のどこかで失敗したときは、Release を draft のまま残し、公開してはならない（MUST NOT）。公開済みの Release の添付ファイルを差し替えてはならない（MUST NOT）。tap への知らせは、Release を公開した後でだけ送らなければならない（MUST）。
 
 #### Scenario: 添付してから公開する
 
@@ -131,6 +131,7 @@ Mewbell は、Release を公開した後に `yshrsmz/homebrew-tap` へ `reposito
 - バージョンが `X.Y.Z` の形式でなければ何もせずに失敗する。payload の値をシェルのコマンドに直接埋め込まない
 - zip の URL をバージョンから `https://github.com/yshrsmz/mewbell/releases/download/vX.Y.Z/Mewbell-X.Y.Z.zip` として組み立て、それ以外の URL を使わない
 - zip を自分でダウンロードして SHA-256 を計算し、Release に添付された `.sha256` の値と一致しなければ失敗する（ダウンロードの破損を見つけるため。添付ファイルが正しいことは、Release に書けるのが Mewbell のリリースのワークフローだけであることに頼る）
+- zip の build provenance attestation を確かめ、`yshrsmz/mewbell` の `.github/workflows/release.yml` が `main` で作ったものでなければ失敗する
 - Cask の雛形は、そのバージョンのタグの Mewbell のリポジトリにあるものを使う
 - いまの Cask と同じか古いバージョンの知らせでは、何も変えずに終わる
 - Cask を更新する PR を作り、tap の CI（`brew style` と `brew audit`）が通ったときだけ自動でマージする。前の試みの PR が開いているときは、その PR を更新する
@@ -152,6 +153,12 @@ Mewbell は、Release を公開した後に `yshrsmz/homebrew-tap` へ `reposito
 - **GIVEN** tap の Cask が `0.2.0` で、`version: 0.1.0` の知らせが届いた
 - **WHEN** tap のワークフローが動く
 - **THEN** 更新しないことを表示して終わり、ダウンロードも PR も行わない
+
+#### Scenario: 差し替えられた zip
+
+- **GIVEN** 誰かが Release の zip と `.sha256` を、互いに一致する別のものに差し替えた
+- **WHEN** tap のワークフローが確かめる
+- **THEN** zip の attestation を確かめられずに失敗し、PR を作らない
 
 #### Scenario: SHA-256 が合わない
 
