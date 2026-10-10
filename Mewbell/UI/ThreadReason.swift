@@ -1,7 +1,7 @@
 import Foundation
 
 /// `reason` の表示名（一覧と macOS の通知で使う）。
-enum NotificationGrouping {
+enum ThreadReason {
     private static let reasonTexts = [
         "assign": "Assigned",
         "author": "Author",
@@ -17,7 +17,7 @@ enum NotificationGrouping {
     ]
 
     /// `reason` の表示名。知らない値は `_` を空白にして先頭を大文字にする。
-    static func reasonText(_ reason: String) -> String {
+    static func text(_ reason: String) -> String {
         reasonTexts[reason] ?? reason.replacing("_", with: " ").capitalizingFirstLetter
     }
 }

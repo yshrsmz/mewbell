@@ -114,7 +114,7 @@ struct NotificationStoreActionTests {
     private static func thread() throws -> NotificationThread {
         NotificationThread(
             id: "1", reason: "subscribed", updatedAt: .now, title: "Thread", kind: .issue, subjectURL: nil,
-            repository: try #require(RepositoryName(owner: "octo", name: "app")))
+            repository: try #require(RepositoryName(owner: "octo", name: "app")), subjectNumber: nil)
     }
 
     @Test(arguments: [

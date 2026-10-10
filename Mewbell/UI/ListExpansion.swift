@@ -8,7 +8,7 @@ final class AccountExpansion {
     private(set) var isCollapsed = false
     private var collapsedRepositories: Set<RepositoryName> = []
 
-    func isCollapsed(_ repository: RepositoryName) -> Bool {
+    func isRepositoryCollapsed(_ repository: RepositoryName) -> Bool {
         collapsedRepositories.contains(repository)
     }
 
@@ -18,7 +18,7 @@ final class AccountExpansion {
     }
 
     /// 必ず変わるので、そのまま書き込む。
-    func toggle(_ repository: RepositoryName) {
+    func toggleRepository(_ repository: RepositoryName) {
         collapsedRepositories.toggle(repository)
     }
 
@@ -56,8 +56,8 @@ final class ListExpansion {
 
     /// 新着が届いたアカウントと、新着を含むリポジトリを開く。
     /// まだ作られていないアカウントは何も畳んでいないので、何もしない。
-    func expand(account: AccountID, repositories: Set<RepositoryName>) {
-        accounts[account]?.expand(repositories: repositories)
+    func expand(account: AccountID, newThreads: [NotificationThread]) {
+        accounts[account]?.expand(repositories: Set(newThreads.map(\.repository)))
     }
 
     /// `accounts` 以外のアカウントの状態を捨てる（一覧から消えた、無効にした）。

@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 import Testing
 
@@ -15,28 +16,34 @@ struct ListExpansionTests {
         lib = try #require(RepositoryName(fullName: "octo/lib"))
     }
 
+    private func thread(_ id: String, in repository: RepositoryName) -> NotificationThread {
+        NotificationThread(
+            id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: 0), title: "Thread \(id)",
+            kind: .issue, subjectURL: nil, repository: repository, subjectNumber: nil)
+    }
+
     @Test func startsWithEverythingExpanded() {
         let state = ListExpansion().state(for: alice)
         #expect(!state.isCollapsed)
-        #expect(!state.isCollapsed(app))
+        #expect(!state.isRepositoryCollapsed(app))
     }
 
     @Test func togglesAccountsAndRepositoriesSeparately() {
         let state = ListExpansion().state(for: alice)
         state.toggle()
         #expect(state.isCollapsed)
-        #expect(!state.isCollapsed(app))
-        state.toggle(app)
-        #expect(state.isCollapsed(app))
+        #expect(!state.isRepositoryCollapsed(app))
+        state.toggleRepository(app)
+        #expect(state.isRepositoryCollapsed(app))
         state.toggle()
         #expect(!state.isCollapsed)
-        #expect(state.isCollapsed(app))
+        #expect(state.isRepositoryCollapsed(app))
     }
 
     @Test func keepsTheSameRepositoryOfAnotherAccountApart() {
         let expansion = ListExpansion()
-        expansion.state(for: alice).toggle(app)
-        #expect(!expansion.state(for: bob).isCollapsed(app))
+        expansion.state(for: alice).toggleRepository(app)
+        #expect(!expansion.state(for: bob).isRepositoryCollapsed(app))
     }
 
     @Test func returnsTheSameStateForTheSameAccount() {
@@ -49,27 +56,27 @@ struct ListExpansionTests {
         let expansion = ListExpansion()
         let aliceState = expansion.state(for: alice)
         let bobState = expansion.state(for: bob)
-        aliceState.toggle(app)
-        aliceState.toggle(lib)
-        bobState.toggle(app)
+        aliceState.toggleRepository(app)
+        aliceState.toggleRepository(lib)
+        bobState.toggleRepository(app)
         aliceState.toggle()
         bobState.toggle()
 
-        expansion.expand(account: alice, repositories: [app])
+        expansion.expand(account: alice, newThreads: [thread("1", in: app), thread("2", in: app)])
 
         #expect(!aliceState.isCollapsed)
-        #expect(!aliceState.isCollapsed(app))
-        #expect(aliceState.isCollapsed(lib))
+        #expect(!aliceState.isRepositoryCollapsed(app))
+        #expect(aliceState.isRepositoryCollapsed(lib))
         #expect(bobState.isCollapsed)
-        #expect(bobState.isCollapsed(app))
+        #expect(bobState.isRepositoryCollapsed(app))
     }
 
     @Test func expandingAnAccountWithoutStateDoesNothing() {
         let expansion = ListExpansion()
-        expansion.expand(account: alice, repositories: [app])
+        expansion.expand(account: alice, newThreads: [thread("1", in: app)])
         let state = expansion.state(for: alice)
         #expect(!state.isCollapsed)
-        #expect(!state.isCollapsed(app))
+        #expect(!state.isRepositoryCollapsed(app))
     }
 
     @Test func forgetsAccountsThatAreNoLongerShown() {
@@ -77,19 +84,19 @@ struct ListExpansionTests {
         let aliceState = expansion.state(for: alice)
         let bobState = expansion.state(for: bob)
         aliceState.toggle()
-        aliceState.toggle(app)
+        aliceState.toggleRepository(app)
         bobState.toggle()
-        bobState.toggle(app)
+        bobState.toggleRepository(app)
 
         expansion.retain([alice])
 
         #expect(expansion.state(for: alice) === aliceState)
         #expect(aliceState.isCollapsed)
-        #expect(aliceState.isCollapsed(app))
+        #expect(aliceState.isRepositoryCollapsed(app))
         let newBobState = expansion.state(for: bob)
         #expect(newBobState !== bobState)
         #expect(!newBobState.isCollapsed)
-        #expect(!newBobState.isCollapsed(app))
+        #expect(!newBobState.isRepositoryCollapsed(app))
     }
 
     /// 各区画は自分のアカウントの状態だけを読むので、ほかのアカウントの開閉では描き直されない。

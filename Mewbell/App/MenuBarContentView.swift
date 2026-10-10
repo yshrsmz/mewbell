@@ -29,7 +29,7 @@ struct MenuBarContentView: View {
 
             if case .accounts(let statuses) = store.state {
                 NotificationListView(
-                    statuses: statuses, feeds: notifications.feeds,
+                    statuses: statuses, feeds: notifications.feeds, repositories: notifications.repositories,
                     participatingOnly: { settings.preferences(for: $0).participatingOnly }, expansion: expansion,
                     actions: ThreadListActions(
                         open: { notifications.open($0, in: $1) },
@@ -76,7 +76,7 @@ struct MenuBarContentView: View {
                                 id: "\(index)", reason: "subscribed",
                                 updatedAt: Date().addingTimeInterval(-Double(index) * 600),
                                 title: "Thread \(index)", kind: .issue, subjectURL: nil,
-                                repository: repository)
+                                repository: repository, subjectNumber: nil)
                         }
                     })
             ]),

@@ -38,7 +38,7 @@ struct ThreadRow: View {
                                 .monospacedDigit()
                             Text("·")
                         }
-                        Text(NotificationGrouping.reasonText(thread.reason))
+                        Text(ThreadReason.text(thread.reason))
                         Text("·")
                         RelativeTimeText(date: thread.updatedAt)
                     }

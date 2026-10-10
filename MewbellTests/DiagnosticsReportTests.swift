@@ -20,7 +20,7 @@ struct DiagnosticsReportTests {
         NotificationThread(
             id: id, reason: "mention", updatedAt: noon, title: "Secret plan for ghp_ABCDEF \(id)", kind: .issue,
             subjectURL: URL(string: "https://api.github.com/repos/octo/app/issues/\(id)"),
-            repository: try #require(RepositoryName(fullName: "octo/app")))
+            repository: try #require(RepositoryName(fullName: "octo/app")), subjectNumber: nil)
     }
 
     private func report(

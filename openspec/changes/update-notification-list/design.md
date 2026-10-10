@@ -27,8 +27,8 @@
 
 `Mewbell/UI/ListExpansion.swift` に `@MainActor final class ListExpansion`（`@Observable` ではない）と `@MainActor @Observable final class AccountExpansion` を作る。
 
-- `AccountExpansion`: 1 つのアカウントの状態だけを持つ。そのアカウントが畳まれているかと、畳んだリポジトリの集合
-- `ListExpansion`: アカウントから `AccountExpansion` を引く辞書を持つ。操作は `state(for:)`（無ければ作る）、`expand(account:repositories:)`、`retain(_ accounts: Set<AccountID>)`。`ListExpansion` 自身は観測されない。`RepositoryKey` は持たない（アカウントごとに分けたので、リポジトリはアカウントの `AccountExpansion` の中でリポジトリ名だけで引ける）
+- `AccountExpansion`: 1 つのアカウントの状態だけを持つ。そのアカウントが畳まれているかと、畳んだリポジトリの集合。リポジトリの操作は `isRepositoryCollapsed(_:)` と `toggleRepository(_:)`
+- `ListExpansion`: アカウントから `AccountExpansion` を引く辞書を持つ。操作は `state(for:)`（無ければ作る）、`expand(account:newThreads:)`（新着のスレッドからリポジトリを取り出して開く。`expand(account:repositories:)` は外から使わない）、`retain(_ accounts: Set<AccountID>)`。`ListExpansion` 自身は観測されない。`RepositoryKey` は持たない（アカウントごとに分けたので、リポジトリはアカウントの `AccountExpansion` の中でリポジトリ名だけで引ける）
 
 `AppDelegate` が `NotificationStore` などと同じように `ListExpansion` を 1 つ作って持ち、`MewbellApp` から `MenuBarContentView` → `NotificationListView` → `AccountSectionView` に渡す。各区画は `state(for:)` で自分のアカウントの `AccountExpansion` だけを読む。
 
@@ -40,11 +40,14 @@
 
 ### D2. 新着は `NotificationStore` が判定して配る
 
-新着の判定（`NotificationTracker`）を `SystemNotifier` から `NotificationStore` に移す。`NotificationStore` は内部の型 `ThreadChangeDispatcher`（`Mewbell/Polling/ThreadChangeDispatcher.swift`）を 1 つ持ち、`NotificationTracker`、notifier、`onNewThreads` はこの中に置く。`ThreadChangeDispatcher` は `feedChanged(for:from:to:)`・`threadRemoved(_:for:)`・`accountRemoved(_:)`・`restarted(_:)`・`retainOnly(_:)`・`stopAll()` を持ち、どれも tracker の操作と通知の取り下げを必ず組にして行う。`NotificationStore` は取得の結果やスレッド・アカウントの増減を受けるたびにこれらを呼び、tracker の結果を 2 つの先に配る。
+新着の判定（`NotificationTracker`）を `SystemNotifier` から `NotificationStore` に移す。`NotificationStore` は内部の型 `ThreadChangeDispatcher`（`Mewbell/Polling/ThreadChangeDispatcher.swift`）を 1 つ持ち、`NotificationTracker`、notifier、`onNewThreads` はこの中に置く。`ThreadChangeDispatcher` は `feedChanged(for:from:to:)`・`threadRemoved(_:for:)`・`accountRemoved(_:)`・`restarted(_:)`・`retainOnly(_:)`・`stopAll()` を持ち、それぞれで tracker の操作と通知の取り下げの「どちらを行うか」をこの型の中で決める。`NotificationStore` は取得の結果やスレッド・アカウントの増減を受けるたびにこれらを呼び、tracker の結果を 2 つの先に配る。
 
-- `ThreadChangeDispatcher` にまとめる理由: tracker の操作と通知の取り下げを呼び出し側（`NotificationStore`）で組にしていると、新しい経路で片方だけ呼んで、tracker と出ている通知が食い違う。1 つの型にまとめ、組でしか呼べないようにする
+- 組にして行う: `feedChanged`（判定と、新着の通知・取り下げ）、`threadRemoved`（tracker から外し、そのスレッドの通知を取り下げる）、`accountRemoved`（tracker を捨て、`retractAll(for:)` でそのアカウントの通知を取り下げる）
+- tracker だけ: `restarted`（出ている通知は、次の最初の成功した取得で `baselineSet(for:keeping:)` が整理する）、`stopAll`（終了のとき）
+- 通知だけ: `retainOnly`（消えたアカウントの tracker は、その前に `accountRemoved` で捨てている）
+- `ThreadChangeDispatcher` にまとめる理由: tracker の操作と通知の取り下げのどちらを行うかを呼び出し側（`NotificationStore`）で決めていると、新しい経路で片方だけ呼んで、tracker と出ている通知が食い違う。どちらを行うかを 1 つの型の中で決め、呼び出し側は起きたことを知らせるだけにする
 - macOS の通知: `ThreadNotifying` は `baselineSet(for:keeping:)`、`threadsChanged(for:posted:retracted:)`、`threadRemoved(_:for:)`、`retractAll(for:)`、`retainOnly(_:)` にする。`retractAll(for:)` は、今までの `accountRemoved` と `notificationsDisabled` をまとめたもの。`ThreadNotifying` から `feedChanged(for:from:to:)` と `resetBaseline(_:)` は無くす。`SystemNotifier` は判定を持たず、通知センターの操作だけをする（「macOS の通知を出す」がオフのアカウントの `posted` を出さないのは、今までどおり `SystemNotifier` が `notifies` で決める）
-- 一覧の自動展開: `NotificationStore` の init の引数 `onNewThreads`（`ThreadChangeDispatcher` に渡して持たせる）に、新着のスレッドを、「macOS の通知を出す」で絞る前の値で渡す。`AppDelegate` がこれを `ListExpansion.expand(account:repositories:)` につなぐ。`expand` は、そのアカウントの `AccountExpansion` で、アカウントの畳みを外し、新着のスレッドのリポジトリを畳んだリポジトリの集合から外す
+- 一覧の自動展開: `NotificationStore` の init の引数 `onNewThreads`（`ThreadChangeDispatcher` に渡して持たせる）に、新着のスレッドを、「macOS の通知を出す」で絞る前の値で渡す。`AppDelegate` はこれを `ListExpansion.expand(account:newThreads:)` につなぐだけにする。`expand` は、新着のスレッドからリポジトリを取り出し、そのアカウントの `AccountExpansion` で、アカウントの畳みを外し、そのリポジトリを畳んだリポジトリの集合から外す
 
 notifications「新着の通知」で通知の対象にならない取得（アカウントの最初の成功した取得）と、同じ `updated_at` で戻ったスレッドは新着に入らないので、spec の「開いてはならない」場合はそのまま満たされる。macOS の通知と自動展開は同じ判定の結果から作るので、両者がずれて「通知は出たのに開かない」ことは起こらない。
 
@@ -60,38 +63,42 @@ notifications「新着の通知」で通知の対象にならない取得（ア�
 - 「アカウントあり」のときは、「無効」でないアカウントの ID を返す
 - それ以外（gh からログアウトした、gh が見つからない、`hosts.yml` を読めないなど）は空集合を返し、すべてを捨てる
 
-`NotificationStore.sync`（出ている通知と、まだ送っていない既読化）と `AppDelegate`（`accountStore.onStateChange` で `ListExpansion.retain(_:)` を呼ぶ）の両方がこれを使い、出ている通知の取り下げ（`retainOnly`）と同じ規則で状態を捨てる。確認中は、ポーラー・一覧・tracker は止めて捨てる（polling の既存の規則）が、出ている通知・送っていない既読化・折りたたみは残す。`retain` は、渡された ID 以外のアカウントの `AccountExpansion`（アカウントの畳みと畳んだリポジトリ）を辞書ごと捨てる。
+`retainedAccountIDs` が nil（確認中）なら何も捨てず、nil でなければその集合に無いアカウントの状態を捨てる。判断は `NotificationStore.sync` の 1 か所で行う。nil でないときに、出ている通知の整理（`ThreadChangeDispatcher` の `retainOnly`）と、まだ送っていない既読化の整理と一緒に、init の引数 `onAccountsRetained` でその集合を一覧に知らせる。`AppDelegate` は `onAccountsRetained` を `ListExpansion.retain(_:)` につなぐだけで、自分では判断しない。`retain` は、渡された ID 以外のアカウントの `AccountExpansion`（アカウントの畳みと畳んだリポジトリ）を辞書ごと捨てる。
+
+確認中は `enabledStatuses` が空なので、ポーラー・一覧・tracker を捨て、出ている通知も `accountRemoved` → `retractAll(for:)` で取り下げる（main と同じ。notifications「通知の取り下げ」の「全体の状態が『アカウントあり』以外になったとき」）。確認中に残るのは、まだ送っていない既読化（`pendingReads`）と一覧の折りたたみだけになる。
 
 リポジトリのグループが一覧から消えたとき（スレッドが無くなったとき）は、そのリポジトリの状態を捨てない。畳んだアカウントの区画のスレッドの一覧が一度消えて（止まった、「参加しているスレッドだけにする」の切り替えや再開の後の取得中）、または畳んだリポジトリのグループが一度消えて（すべて既読にした）、アカウントの最初の成功した取得で戻ってきたときは、畳んだまま戻す。最初の成功した取得のスレッドは新着ではないので D2 では開かず、ユーザーが開くか新着が届くまで畳んだままにする（ユーザーの判断）。
 
 ### D4. 番号は読み取るときに `NotificationThread.decodeList(from:endpoints:)` が 1 回だけ求める
 
-`NotificationThread.decodeList(from:endpoints:)` が API のレスポンスからスレッドを読み取るときに、そのアカウントの `APIEndpoints` で `ThreadWebURL.subjectNumber` を呼んで番号を求め、`NotificationThread` の `let subjectNumber: String?` に入れる。`GitHubAPIClient` のループで読み取った後から書き込むことはしない。求め方は `ThreadWebURL` の検証を共有する: `target(for:endpoints:)` が Pull request か Issue を返したときだけ、その `id` を番号にする。種類が Release と Discussion のスレッドは番号を持たない（`target` が URL の形を見ずに決まる）。それ以外は、番号を持つかどうかは種類ではなく `subject.url` の形で決まる。開く URL（`ThreadWebURL.make`）が nil になる（開かない）ときも持たせない。開く URL と同じ検証（API ベース URL の下にあること、リポジトリの一致、`ThreadID.isValid`）を通るので、表示する番号と開く URL は一致する。
+`NotificationThread.decodeList(from:endpoints:)` が API のレスポンスからスレッドを読み取るときに、`ThreadDTO` が `NotificationThread` を作る前に、そのアカウントの `APIEndpoints` で `ThreadWebURL.subjectNumber(kind:subjectURL:repository:endpoints:)` を呼んで番号を求め、その値を入れて `NotificationThread` を 1 回で作る。`NotificationThread` の `let subjectNumber: String?` には既定値が無い（必須）ので、作る経路が増えても番号の渡し忘れはコンパイルで分かる。`GitHubAPIClient` のループで読み取った後から書き込むことはしない。求め方は `ThreadWebURL` の検証を共有する: `target(for:endpoints:)` が Pull request か Issue を返したときだけ、その `id` を番号にする。種類が Release と Discussion のスレッドは番号を持たない（`target` が URL の形を見ずに決まる）。それ以外は、番号を持つかどうかは種類ではなく `subject.url` の形で決まる。開く URL（`ThreadWebURL.make`）が nil になる（開かない）ときも持たせない。開く URL と同じ検証（API ベース URL の下にあること、リポジトリの一致、`ThreadID.isValid`）を通るので、表示する番号と開く URL は一致する。
 
 番号を出さない分岐のうち「開く URL を組み立てられない（`make` が nil）」は、Web ベース URL がいつも `https` でアカウントのホストを持つので、API のデータからは届かない安全のための分岐で、テストは書いていない。
 
 `ThreadRow` は `thread.subjectNumber` を読むだけで、描画のときには計算せず、番号の引数も持たない。2 行目を `#<番号> · <理由> · <更新日時>` にする（番号が無ければ今と同じ）。
 
-- 代替案: 描画のたびに `ThreadWebURL.subjectNumber` を呼ぶ（`AccountSectionView` が `APIEndpoints` を作って `ThreadRow` に番号を渡す）。開閉や再描画のたびに全行の `subject.url` を解析し直すことになる。読み取るときに 1 回だけ求めるほうを選ぶ
+- 代替案: 描画のたびに `ThreadWebURL.subjectNumber(kind:subjectURL:repository:endpoints:)` を呼ぶ（`AccountSectionView` が `APIEndpoints` を作って `ThreadRow` に番号を渡す）。開閉や再描画のたびに全行の `subject.url` を解析し直すことになる。読み取るときに 1 回だけ求めるほうを選ぶ
 - 代替案: `GitHubAPIClient` のループで、読み取った後に `var subjectNumber` に書き込む（前の案）。読み取りの経路が増えたときに書き込み忘れが起こりうる。読み取るときに `let` で決めるほうを選ぶ
+- 代替案: `NotificationThread` を作った後にそれを引数にして番号を求め、番号を入れて作り直す（`subjectNumber` に既定値を置く、前の形）。同じスレッドを 2 回作ることになり、既定値があると番号を渡し忘れても気づけない。番号を先に求めて 1 回で作るほうを選ぶ
 
 ### D5. 見出しの見た目と操作
 
-- 共有の部品（`DisclosureButton`、`DisclosureChevron`、`CollapsedCount`、`capsuleBadge`）は `Mewbell/UI/DisclosureButton.swift` に置き、アカウントとリポジトリの見出しで使う
+- 共有の部品（`DisclosureButton`、`DisclosureChevron`、`CollapsedCount`、`capsuleBadge`）は `Mewbell/UI/DisclosureButton.swift` に置き、アカウントとリポジトリの見出しで使う。`DisclosureButton` は `isCollapsible`（畳めるか）と `collapsedCount: Int?`（件数のバッジ）を引数に取る
 - アカウントの見出し: 開閉のボタンは、山形（`chevron.right`、開いているときは 90° 回す）・トークンの状態のアイコン・ユーザー名・active の印・ホスト・参加のみの印・件数を覆う。右の余白は押せる範囲に入れない。「すべて既読」のボタンは別のボタンのまま残す（押し間違えて開閉しないように）
 - リポジトリの見出し: 開閉のボタンは、山形・`owner/name`・件数を覆う。右の余白は押せる範囲に入れない
 - 件数: 折りたたんでいて 1 件以上のときだけ出す（`CollapsedCount`）。VoiceOver では「N unread」と読む
 - ツールチップ（`Collapse alice (github.com)` / `Expand octo/app` など）は山形にだけ付け、ボタンには `accessibilityValue`（`Collapsed` / `Expanded`）と `accessibilityHint` を付ける。ボタン全体に `.help` や `accessibilityLabel` を付けると、見出しの中のトークンの状態のアイコンなどのツールチップと読み上げを上書きするため
-- 畳めるかどうか、件数を出すかどうか、スレッドの一覧を出すかどうかは `AccountDisclosure` の結果だけで決める。畳めるのは、トークンの状態が「取得中」か「使える」で、通知の一覧（スレッドの一覧か、未読が無いことの表示）を出しているときだけ。それ以外（トークンを取れない、取得の前、スコープ不足・認証エラーで止まった、「参加しているスレッドだけにする」の切り替えや再開の後の取得中）は、山形を出さずに同じ幅を空け、押せなくする（畳むものが無く、押しても山形の向きが変わるだけになるため）。このとき `ListExpansion` に覚えている状態は残すが、表示は開いた状態と同じにする（何も隠さず、件数も出さない）
+- 畳めるかどうか、件数を出すかどうか、通知の一覧を出すかどうかは `AccountDisclosure` の結果だけで決める。`AccountDisclosure` は `showsThreads`（通知の一覧を出すか）と `isCollapsible`（畳めるか）を分けて持つ。畳むものは通知の一覧だけなので、`isCollapsible` は `showsThreads` と同じ値になる。畳めるのは、トークンの状態が「取得中」か「使える」で、通知の一覧（スレッドの一覧か、未読の通知が無いことを示す表示）を出しているときだけ。それ以外（トークンを取れない、取得の前、スコープ不足・認証エラーで止まった、「参加しているスレッドだけにする」の切り替えや再開の後の取得中）は、山形を出さずに同じ幅を空け、押せなくする（畳むものが無く、押しても山形の向きが変わるだけになるため）。このとき `ListExpansion` に覚えている状態は残すが、表示は開いた状態と同じにする（何も隠さず、件数も出さない）
 - ユーザーが開閉したときは短いアニメーションを付けるが、「視差効果を減らす」がオンのときは付けない。新着で自動で開くときはアニメーションを付けない（ユーザーが開閉したときだけ付ける）
 - 字下げ（`padding(.leading, 22)`）は今のまま。山形は幅 16（スレッドの行の種類のアイコンと同じ）にし、アカウントの見出しではトークンの状態のアイコンの前に置く。これで、区画の中身はトークンの状態のアイコンの列に、リポジトリ名とスレッドの件名はユーザー名の列に揃う
 
-### D6. リポジトリのグループ分けは `FeedState` が受け取るときに 1 回だけ作る
+### D6. リポジトリのグループ分けは `NotificationStore` が feeds を更新したときにアカウントごとに 1 回だけ作る
 
-`RepositoryGroup` と `RepositoryGroup.groups(from:)` を `Mewbell/Polling/RepositoryGroup.swift` に移す（`UI/NotificationGrouping.swift` から。`NotificationGrouping.reasonText` は UI に残る）。`FeedState` はスレッドを受け取るとき（init と `threads` の書き換え）に 1 回だけグループ分けを作り、`repositories` に持つ。一覧の描画は `repositories` を並べるだけで、描画の中でグループ分けをしない。
+`RepositoryGroup` と `RepositoryGroup.groups(from:)` を `Mewbell/Polling/RepositoryGroup.swift` に移す（`UI/NotificationGrouping.swift` から。UI に残る理由の表示は、`Mewbell/UI/ThreadReason.swift` の `ThreadReason` に改名する）。`NotificationStore`（`@MainActor`）は `feeds` の `didSet` で、スレッドが変わったアカウントのグループ分けだけを作り直して `repositories: [AccountID: [RepositoryGroup]]` に持つ（ユーザーの判断）。取得の状態や診断の値だけが変わった更新では作り直さず、`feeds` から消えたアカウントは `repositories` からも消す。`FeedState` はグループ分けを持たない。一覧の描画は `NotificationStore` が持つグループ分けを並べるだけで、描画の中でグループ分けをしない。
 
-- 理由: グループ分けは取得のときにしか変わらない派生データなので、描画の中で作ると、開閉や新着で区画が描き直されるたびにやり直すことになる。取得のときに 1 回だけ作る
+- 理由: グループ分けは取得のときにしか変わらない派生データなので、描画の中で作ると、開閉や新着で区画が描き直されるたびにやり直すことになる。一覧だけが使う並べ方の計算なので、一覧が読む `NotificationStore` の上で、feeds の更新に合わせて 1 回だけ作る
 - 代替案: 描画の中で `RepositoryGroup.groups(from:)` を呼ぶ（前の形）。描き直しのたびにグループ分けをやり直す
+- 代替案: `FeedState` が持つ（スレッドを受け取るときに作る。6.3 の形）。一覧だけが使う並べ方の計算が、`FeedState` の書き換えのたびにポーラーの actor の上で走る。`FeedState` の比較（`==`）にグループ分けも入り、スレッドと同じ中身を 2 回比べることになる。Polling の値に一覧の都合が入る。`NotificationStore` に置くほうを選ぶ
 
 ## Risks / Trade-offs
 
@@ -105,16 +112,17 @@ notifications「新着の通知」で通知の対象にならない取得（ア�
 - 永続化: 折りたたみの状態はメモリにだけ持ち、UserDefaults にもファイルにも書かない。中身はアカウント ID とリポジトリ名だけで、トークンや API の URL は含まない
 - gh サブプロセス: 触れない
 - ネットワーク: リクエスト、オリジンの検査、リダイレクト、キャッシュの扱いは変えない
-- URL を開く処理: `ThreadWebURL.make` の振る舞いは変えない。番号の取り出し（読み取るときに `NotificationThread.decodeList(from:endpoints:)` が行う）は同じ検証を共有し、別のホストを指す `subject.url` からは番号を出さない（テストで確かめる）
+- URL を開く処理: `ThreadWebURL.make` の振る舞いは変えない。番号の取り出し（読み取るときに `NotificationThread.decodeList(from:endpoints:)` が `NotificationThread` を作る前に行う）は同じ検証を共有し、別のホストを指す `subject.url` からは番号を出さない（テストで確かめる）
 - ログ: 新しくログを出さない
 - 通知の本文: 変えない
 
 ## テストでの差し替え
 
 - `ListExpansion` と `AccountExpansion` は依存を持たないので、そのままテストする。観測の粒度は `withObservationTracking` で確かめる: あるアカウントの `AccountExpansion` を読んでいる間に、ほかのアカウントを開閉しても onChange が呼ばれず、そのアカウント自身を開閉すると呼ばれる
-- `FeedState.repositories` は、init と `threads` の書き換えのそれぞれで、スレッドのグループ分けが入ることをテストする
-- 新着は、`NotificationStore` に偽の `PollerFactory` と偽の notifier（`ThreadNotifying`）を渡し、`onNewThreads` に呼ばれた値を集めるクロージャを渡して確かめる。`ThreadChangeDispatcher` は `NotificationStore` の内部の型なので、`NotificationStore` を通して確かめる（`baselineSet(for:keeping:)`、`threadsChanged(for:posted:retracted:)`、`threadRemoved(_:for:)`、`retractAll(for:)`、`retainOnly(_:)` の呼ばれ方も同じテストで見る）
+- グループ分けは、`RepositoryGroup.groups(from:)` の並べ方と、`NotificationStoreRepositoriesTests` で `NotificationStore.repositories` が、届いた feed のグループになる・診断の値だけの変化では書き込まれない（`withObservationTracking`）・既読化で消える・無効にしたアカウントで消えることをテストする
+- 新着は、`NotificationStore` に偽の `PollerFactory` と偽の notifier（`ThreadNotifying`）を渡し、`onNewThreads` に呼ばれた値を集めるクロージャを渡して確かめる。`ThreadChangeDispatcher` は `NotificationStore` の内部の型なので、`NotificationStore` を通して確かめる（`baselineSet(for:keeping:)`、`threadsChanged(for:posted:retracted:)`、`threadRemoved(_:for:)`、`retractAll(for:)` の呼ばれ方も同じテストで見る）。アカウントを無効にしたときの `retractAll(for:)` と `retainOnly(_:)` の呼ばれ方は、`SettingsPollingTests.swift` の `NotificationStoreSettingsTests` で見る
+- `onAccountsRetained` は、`NotificationStore` のテスト（`NotificationStoreNewThreadsTests.swift` の `NotificationStoreRetainedAccountsTests`）で、`sync` に渡した全体の状態ごとに確かめる: 確認中では呼ばれず、それ以外では `retainedAccountIDs` の集合で呼ばれる
 - `SystemNotifier` は、既存の偽の `UserNotificationCenter` で、通知センターの操作だけを確かめる
 - `AccountDisclosure` と `DiscoveryState.retainedAccountIDs` は純粋な値なので、入力の状態ごとにそのままテストする
-- 番号は、`ThreadWebURL.subjectNumber` のテストと、`GitHubAPIClient` の取得のテスト（偽の `HTTPTransport` とレスポンスのフィクスチャ）で、`decodeList(from:endpoints:)` が入れた `NotificationThread.subjectNumber` を確かめる
+- 番号は、`ThreadWebURL.subjectNumber(kind:subjectURL:repository:endpoints:)` のテストと、`GitHubAPIClient` の取得のテスト（偽の `HTTPTransport` とレスポンスのフィクスチャ）で、`decodeList(from:endpoints:)` が入れた `NotificationThread.subjectNumber` を確かめる
 - 見た目はプレビュー（折りたたんだアカウント、折りたたんだリポジトリ、番号のある行と無い行）と手元での起動で確かめる

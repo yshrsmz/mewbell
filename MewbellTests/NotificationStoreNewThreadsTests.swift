@@ -9,7 +9,8 @@ private let bob = AccountID(host: "github.com", user: "bob")
 private func thread(_ id: String, updatedAt: TimeInterval = 0) throws -> NotificationThread {
     NotificationThread(
         id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: updatedAt), title: "Thread \(id)",
-        kind: .issue, subjectURL: nil, repository: try #require(RepositoryName(fullName: "octo/app")))
+        kind: .issue, subjectURL: nil, repository: try #require(RepositoryName(fullName: "octo/app")),
+        subjectNumber: nil)
 }
 
 /// ポーラーの `onUpdate` を受け取っておく（ポーラー自身の更新は捨て、テストが流す `FeedState` だけを届ける）。
@@ -260,6 +261,53 @@ struct NotificationStoreNewThreadsTests {
         await notifier.waitForPendingWork()
         #expect(center.added.value.map(\.identifier) == ["github.com/alice/789"])
         #expect(received.value == [["2", "3", "4", "5", "6"], ["789"]])
+        store.stopAll()
+    }
+}
+
+/// `NotificationStore.sync` が、残すアカウントが決まったときだけ `onAccountsRetained` を呼ぶこと
+/// （一覧の折りたたみの状態を、ポーラーと同じ判定で整理するため）。
+@MainActor
+struct NotificationStoreRetainedAccountsTests {
+    private let transport = FakeHTTPTransport()
+    private let tokens = FakeTokenProvider([alice: "test-token-alice", bob: "test-token-bob"])
+    private let sleeper = ManualSleeper()
+    /// `onAccountsRetained` に渡ったアカウント（呼ばれた順）
+    private let retained = LockedValue<[Set<AccountID>]>([])
+
+    private func makeStore() -> NotificationStore {
+        let client = GitHubAPIClient(transport: transport)
+        return NotificationStore(
+            makePoller: { [tokens, sleeper] account, endpoints, _, _, _, _ in
+                AccountPoller(
+                    accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
+                    sleep: sleeper.sleep, onUpdate: { _ in })
+            }, openURL: { _ in },
+            onAccountsRetained: { [retained] ids in retained.withLock { $0.append(ids) } })
+    }
+
+    @Test func reportsTheEnabledAccounts() {
+        let store = makeStore()
+        store.sync(
+            with: .accounts([
+                AccountStatus(account: Account(id: alice, isActive: true), tokenState: .ready),
+                AccountStatus(account: Account(id: bob, isActive: false), tokenState: .disabled),
+            ]))
+        #expect(retained.value == [[alice]])
+        store.stopAll()
+    }
+
+    @Test func reportsNothingWhileChecking() {
+        let store = makeStore()
+        store.sync(with: .checking)
+        #expect(retained.value.isEmpty)
+        store.stopAll()
+    }
+
+    @Test func reportsNoAccountsWhenNotLoggedIn() {
+        let store = makeStore()
+        store.sync(with: .notLoggedIn)
+        #expect(retained.value == [[]])
         store.stopAll()
     }
 }

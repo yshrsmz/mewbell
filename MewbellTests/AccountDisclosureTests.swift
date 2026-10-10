@@ -11,13 +11,15 @@ struct AccountDisclosureTests {
         let threads = (0..<count).map { index in
             NotificationThread(
                 id: "\(index + 1)", reason: "subscribed", updatedAt: Date(timeIntervalSince1970: Double(index)),
-                title: "Thread \(index + 1)", kind: .issue, subjectURL: nil, repository: repository)
+                title: "Thread \(index + 1)", kind: .issue, subjectURL: nil, repository: repository,
+                subjectNumber: nil)
         }
         return FeedState(phase: phase, threads: threads)
     }
 
     @Test func collapsesAReadyAccountWithThreadsAndShowsTheCount() throws {
         let disclosure = AccountDisclosure(tokenState: .ready, feed: try feed(threads: 3), isStoredCollapsed: true)
+        #expect(disclosure.showsThreads)
         #expect(disclosure.isCollapsible)
         #expect(disclosure.isCollapsed)
         #expect(disclosure.collapsedCount == 3)
@@ -25,6 +27,7 @@ struct AccountDisclosureTests {
 
     @Test func hidesTheCountWhenThereAreNoThreads() throws {
         let disclosure = AccountDisclosure(tokenState: .ready, feed: try feed(threads: 0), isStoredCollapsed: true)
+        #expect(disclosure.showsThreads)
         #expect(disclosure.isCollapsed)
         #expect(disclosure.collapsedCount == nil)
     }
@@ -32,6 +35,7 @@ struct AccountDisclosureTests {
     @Test func doesNotCollapseOrCountWhenTheTokenIsUnavailable() throws {
         let disclosure = AccountDisclosure(
             tokenState: .unavailable, feed: try feed(threads: 3), isStoredCollapsed: true)
+        #expect(!disclosure.showsThreads)
         #expect(!disclosure.isCollapsible)
         #expect(!disclosure.isCollapsed)
         #expect(disclosure.collapsedCount == nil)
@@ -39,6 +43,7 @@ struct AccountDisclosureTests {
 
     @Test func doesNotCollapseBeforeTheFirstFeed() {
         let disclosure = AccountDisclosure(tokenState: .ready, feed: nil, isStoredCollapsed: true)
+        #expect(!disclosure.showsThreads)
         #expect(!disclosure.isCollapsible)
         #expect(!disclosure.isCollapsed)
     }
@@ -47,6 +52,7 @@ struct AccountDisclosureTests {
     func doesNotCollapseAStoppedFeed(_ phase: FeedPhase) throws {
         let disclosure = AccountDisclosure(
             tokenState: .ready, feed: try feed(phase, threads: 0), isStoredCollapsed: true)
+        #expect(!disclosure.showsThreads)
         #expect(!disclosure.isCollapsible)
         #expect(!disclosure.isCollapsed)
     }
@@ -55,6 +61,7 @@ struct AccountDisclosureTests {
     @Test func doesNotCollapseWhileLoading() throws {
         let disclosure = AccountDisclosure(
             tokenState: .ready, feed: try feed(.loading, threads: 0), isStoredCollapsed: true)
+        #expect(!disclosure.showsThreads)
         #expect(!disclosure.isCollapsible)
         #expect(!disclosure.isCollapsed)
         #expect(disclosure.collapsedCount == nil)
@@ -63,6 +70,7 @@ struct AccountDisclosureTests {
     /// トークンの取り直し中も、それまでの一覧を畳んだままにする
     @Test func keepsCollapsedWhileTheTokenIsBeingFetchedAgain() throws {
         let disclosure = AccountDisclosure(tokenState: .fetching, feed: try feed(threads: 2), isStoredCollapsed: true)
+        #expect(disclosure.showsThreads)
         #expect(disclosure.isCollapsible)
         #expect(disclosure.isCollapsed)
         #expect(disclosure.collapsedCount == 2)
@@ -70,6 +78,7 @@ struct AccountDisclosureTests {
 
     @Test func showsNoCountWhenExpanded() throws {
         let disclosure = AccountDisclosure(tokenState: .ready, feed: try feed(threads: 3), isStoredCollapsed: false)
+        #expect(disclosure.showsThreads)
         #expect(disclosure.isCollapsible)
         #expect(!disclosure.isCollapsed)
         #expect(disclosure.collapsedCount == nil)

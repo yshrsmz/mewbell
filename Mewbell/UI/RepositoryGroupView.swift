@@ -8,21 +8,20 @@ struct RepositoryGroupView: View {
     let expansion: AccountExpansion
     let actions: ThreadListActions
 
-    private var isCollapsed: Bool { expansion.isCollapsed(group.repository) }
+    private var isCollapsed: Bool { expansion.isRepositoryCollapsed(group.repository) }
 
     var body: some View {
-        let collapsedCount = isCollapsed ? group.threads.count : nil
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
-                DisclosureButton(isCollapsed: isCollapsed, name: group.repository.description) {
-                    expansion.toggle(group.repository)
+                DisclosureButton(
+                    isCollapsed: isCollapsed, name: group.repository.description,
+                    collapsedCount: isCollapsed ? group.threads.count : nil
+                ) {
+                    expansion.toggleRepository(group.repository)
                 } label: {
                     Text(group.repository.description)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    if let collapsedCount {
-                        CollapsedCount(count: collapsedCount)
-                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -58,27 +57,28 @@ struct RepositoryGroupView: View {
     expansion.state(for: alice.id).toggle()
     expansion.state(for: dave.id).toggle()
     if let app = RepositoryName(fullName: "octo/app") {
-        expansion.state(for: bob.id).toggle(app)
+        expansion.state(for: bob.id).toggleRepository(app)
     }
+    let feeds: [AccountID: FeedState] = [
+        alice.id: FeedState(
+            phase: .loaded(updatedAt: now), threads: [thread(1, "octo/app", number: 1)].compactMap { $0 }),
+        bob.id: FeedState(
+            phase: .loaded(updatedAt: now),
+            threads: [
+                thread(2, "octo/app", number: 42), thread(3, "octo/app", number: 43),
+                thread(4, "octo/lib", number: 1234), thread(5, "octo/lib", number: nil),
+            ].compactMap { $0 }),
+        dave.id: FeedState(
+            phase: .retrying(nextAttempt: now.addingTimeInterval(240), rateLimited: true),
+            threads: [thread(6, "acme/web", number: 7)].compactMap { $0 }),
+    ]
     return NotificationListView(
         statuses: [
             AccountStatus(account: alice, tokenState: .ready),
             AccountStatus(account: bob, tokenState: .ready),
             AccountStatus(account: dave, tokenState: .ready),
         ],
-        feeds: [
-            alice.id: FeedState(
-                phase: .loaded(updatedAt: now), threads: [thread(1, "octo/app", number: 1)].compactMap { $0 }),
-            bob.id: FeedState(
-                phase: .loaded(updatedAt: now),
-                threads: [
-                    thread(2, "octo/app", number: 42), thread(3, "octo/app", number: 43),
-                    thread(4, "octo/lib", number: 1234), thread(5, "octo/lib", number: nil),
-                ].compactMap { $0 }),
-            dave.id: FeedState(
-                phase: .retrying(nextAttempt: now.addingTimeInterval(240), rateLimited: true),
-                threads: [thread(6, "acme/web", number: 7)].compactMap { $0 }),
-        ],
+        feeds: feeds, repositories: feeds.mapValues { RepositoryGroup.groups(from: $0.threads) },
         expansion: expansion, actions: .none
     )
     .padding()

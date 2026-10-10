@@ -70,20 +70,6 @@ struct NotificationThread: Hashable, Sendable, Identifiable {
     let repository: RepositoryName
     /// Issue・Pull request の番号。読み取るときに `ThreadWebURL.subjectNumber` で求める（開く URL と同じ検証を通らなければ nil）
     let subjectNumber: String?
-
-    init(
-        id: String, reason: String, updatedAt: Date, title: String, kind: SubjectKind, subjectURL: URL?,
-        repository: RepositoryName, subjectNumber: String? = nil
-    ) {
-        self.id = id
-        self.reason = reason
-        self.updatedAt = updatedAt
-        self.title = title
-        self.kind = kind
-        self.subjectURL = subjectURL
-        self.repository = repository
-        self.subjectNumber = subjectNumber
-    }
 }
 
 extension NotificationThread {
@@ -128,13 +114,12 @@ private struct ThreadDTO: Decodable {
         guard !id.isEmpty, let repository = RepositoryName(fullName: repository.fullName),
             let updatedAt = try? Date(updatedAt, strategy: .iso8601)
         else { return nil }
-        let thread = NotificationThread(
-            id: id, reason: reason ?? "", updatedAt: updatedAt, title: subject.title,
-            kind: SubjectKind(apiValue: subject.type), subjectURL: subject.url.flatMap(URL.init(string:)),
-            repository: repository)
+        let kind = SubjectKind(apiValue: subject.type)
+        let subjectURL = subject.url.flatMap(URL.init(string:))
         return NotificationThread(
-            id: thread.id, reason: thread.reason, updatedAt: thread.updatedAt, title: thread.title, kind: thread.kind,
-            subjectURL: thread.subjectURL, repository: thread.repository,
-            subjectNumber: ThreadWebURL.subjectNumber(for: thread, endpoints: endpoints))
+            id: id, reason: reason ?? "", updatedAt: updatedAt, title: subject.title, kind: kind,
+            subjectURL: subjectURL, repository: repository,
+            subjectNumber: ThreadWebURL.subjectNumber(
+                kind: kind, subjectURL: subjectURL, repository: repository, endpoints: endpoints))
     }
 }

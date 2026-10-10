@@ -8,7 +8,9 @@ struct DisclosureButton<Label: View>: View {
     /// ツールチップと説明に出す名前（`alice (github.com)`、`owner/name`）
     let name: String
     /// 畳むものが無いとき（トークンを取れない、取得の前など）は false。山形を出さず、押せなくする
-    var isEnabled = true
+    var isCollapsible = true
+    /// 畳んだ見出しに出す件数。nil なら出さない
+    var collapsedCount: Int?
     let toggle: () -> Void
     @ViewBuilder let label: Label
 
@@ -16,14 +18,14 @@ struct DisclosureButton<Label: View>: View {
 
     var body: some View {
         let hint = isCollapsed ? "Expand \(name)" : "Collapse \(name)"
-        if isEnabled {
+        if isCollapsible {
             Button {
                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.2), toggle)
             } label: {
                 HStack(spacing: 6) {
                     DisclosureChevron(isCollapsed: isCollapsed)
                         .help(hint)
-                    label
+                    labelWithCount
                 }
                 .contentShape(Rectangle())
             }
@@ -34,8 +36,16 @@ struct DisclosureButton<Label: View>: View {
             HStack(spacing: 6) {
                 // 山形の分の幅を空けて、ほかの見出しと字下げを揃える
                 DisclosureChevron(isCollapsed: isCollapsed).hidden()
-                label
+                labelWithCount
             }
+        }
+    }
+
+    /// 見出しの中身と、畳んだときの件数。
+    @ViewBuilder private var labelWithCount: some View {
+        label
+        if let collapsedCount {
+            CollapsedCount(count: collapsedCount)
         }
     }
 }

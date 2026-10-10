@@ -13,7 +13,7 @@ private func thread(
     NotificationThread(
         id: id, reason: reason, updatedAt: Date(timeIntervalSince1970: updatedAt), title: "Thread \(id)", kind: kind,
         subjectURL: subjectURL.flatMap(URL.init(string:)),
-        repository: try #require(RepositoryName(fullName: repository)))
+        repository: try #require(RepositoryName(fullName: repository)), subjectNumber: nil)
 }
 
 struct NotificationTrackerTests {

@@ -33,9 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 playsSound: { settings.notificationSound })
             let notificationStore = NotificationStore.live(
                 tokens: discovery, notifier: notifier, settings: settings,
-                onNewThreads: { [listExpansion] account, threads in
-                    listExpansion.expand(account: account, repositories: Set(threads.map(\.repository)))
-                })
+                onNewThreads: { [listExpansion] in listExpansion.expand(account: $0, newThreads: $1) },
+                onAccountsRetained: { [listExpansion] in listExpansion.retain($0) })
             settings.onNotificationsChange = { id, notifies in
                 // 新着の判定（`NotificationStore`）は通知の設定にかかわらず続くので、オンに戻しても、オフの間に届いたものを
                 // まとめて通知しない
@@ -52,11 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         super.init()
-        accountStore.onStateChange = { [notificationStore, listExpansion] state in
+        accountStore.onStateChange = { [notificationStore] state in
             notificationStore.sync(with: state)
-            if let retained = state.retainedAccountIDs {
-                listExpansion.retain(retained)
-            }
         }
         connectSettings()
         // 終了中の通知のクリックで起動されたときに取りこぼさないよう、起動が終わる前に設定する

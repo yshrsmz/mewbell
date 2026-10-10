@@ -21,6 +21,8 @@ struct ThreadListActions {
 struct NotificationListView: View {
     let statuses: [AccountStatus]
     let feeds: [AccountID: FeedState]
+    /// アカウントごとのリポジトリのグループ（`NotificationStore` が作ったもの）
+    let repositories: [AccountID: [RepositoryGroup]]
     /// 「参加しているスレッドだけにする」の設定
     var participatingOnly: (AccountID) -> Bool = { _ in false }
     /// 折りたたみの状態（アプリが 1 つだけ持つ）
@@ -42,7 +44,8 @@ struct NotificationListView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     ForEach(shown) { status in
                         AccountSectionView(
-                            status: status, feed: feeds[status.id], participatingOnly: participatingOnly(status.id),
+                            status: status, feed: feeds[status.id], repositories: repositories[status.id] ?? [],
+                            participatingOnly: participatingOnly(status.id),
                             expansion: expansion.state(for: status.id), actions: actions)
                     }
                 }
@@ -58,6 +61,8 @@ struct NotificationListView: View {
 struct AccountSectionView: View {
     let status: AccountStatus
     let feed: FeedState?
+    /// このアカウントのリポジトリのグループ（並べるだけで、ここではグループ分けをしない）
+    let repositories: [RepositoryGroup]
     var participatingOnly = false
     /// このアカウントの折りたたみの状態（ほかのアカウントの状態は読まない）
     let expansion: AccountExpansion
@@ -92,8 +97,8 @@ struct AccountSectionView: View {
                         ActionFailureView(failure: failure, host: account.host)
                     }
                     // 折りたたんでも、取得の状態と操作の失敗は出し続ける
-                    if disclosure.isCollapsible && !disclosure.isCollapsed {
-                        threads(feed)
+                    if disclosure.showsThreads && !disclosure.isCollapsed {
+                        threads()
                     }
                 }
             }
@@ -105,11 +110,11 @@ struct AccountSectionView: View {
             // 開閉のボタンと「すべて既読」は分ける（押し間違えて開閉しないように）
             DisclosureButton(
                 isCollapsed: disclosure.isCollapsed, name: "\(account.user) (\(account.host))",
-                isEnabled: disclosure.isCollapsible
+                isCollapsible: disclosure.isCollapsible, collapsedCount: disclosure.collapsedCount
             ) {
                 expansion.toggle()
             } label: {
-                title(collapsedCount: disclosure.collapsedCount)
+                title
             }
             Spacer(minLength: 0)
             if status.tokenState == .ready, let feed, !feed.phase.isStopped {
@@ -124,7 +129,7 @@ struct AccountSectionView: View {
     }
 
     /// 見出しのうち、開閉のボタンになる部分（山形は `DisclosureButton` が付ける）。
-    private func title(collapsedCount: Int?) -> some View {
+    private var title: some View {
         HStack(spacing: 6) {
             tokenIcon
                 .frame(width: 16)
@@ -147,9 +152,6 @@ struct AccountSectionView: View {
                     .foregroundStyle(.secondary)
                     .help("Showing only threads you are participating in")
                     .accessibilityLabel("Participating only")
-            }
-            if let collapsedCount {
-                CollapsedCount(count: collapsedCount)
             }
         }
     }
@@ -174,15 +176,15 @@ struct AccountSectionView: View {
         }
     }
 
-    @ViewBuilder private func threads(_ feed: FeedState) -> some View {
-        if feed.repositories.isEmpty {
+    @ViewBuilder private func threads() -> some View {
+        if repositories.isEmpty {
             Text("No unread notifications")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.leading, 22)
         } else {
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(feed.repositories) { group in
+                ForEach(repositories) { group in
                     RepositoryGroupView(
                         group: group, account: account.id, expansion: expansion, actions: actions)
                 }
@@ -252,7 +254,9 @@ struct FeedStatusView: View {
 /// アカウントの見出しの開閉の状態。畳めるか・畳まれているか・件数を出すかを 1 つの条件から決める
 /// （畳んだままトークンを取れなくなったときに、山形の無い見出しに件数だけが出ないように）。
 struct AccountDisclosure: Equatable {
-    /// 畳むもの（スレッドの一覧か、未読が無いことの表示）があるか
+    /// スレッドの一覧（か、未読が無いことの表示）を出すか。トークンが「取得中」か「使える」で、取得の状態が一覧を出すとき
+    let showsThreads: Bool
+    /// 畳めるか。畳むものはスレッドの一覧だけなので、一覧を出しているときだけ畳める
     let isCollapsible: Bool
     /// 畳んで表示しているか（畳めないときは、畳んだ状態を覚えていても false）
     let isCollapsed: Bool
@@ -260,11 +264,12 @@ struct AccountDisclosure: Equatable {
     let collapsedCount: Int?
 
     init(tokenState: TokenState, feed: FeedState?, isStoredCollapsed: Bool) {
-        isCollapsible =
+        showsThreads =
             switch tokenState {
             case .fetching, .ready: feed?.phase.showsThreads == true
             case .unavailable, .disabled: false
             }
+        isCollapsible = showsThreads
         isCollapsed = isCollapsible && isStoredCollapsed
         if isCollapsed, let count = feed?.threads.count, count > 0 {
             collapsedCount = count
@@ -288,9 +293,23 @@ struct AccountDisclosure: Equatable {
             NotificationThread(
                 id: id, reason: reason, updatedAt: now.addingTimeInterval(-minutesAgo * 60),
                 title: "Make the menu bar popover remember its scroll position across openings", kind: kind,
-                subjectURL: nil, repository: repository)
+                subjectURL: nil, repository: repository, subjectNumber: nil)
         }
     }
+    let feeds: [AccountID: FeedState] = [
+        alice.id: FeedState(
+            phase: .loaded(updatedAt: now.addingTimeInterval(-30)),
+            threads: [
+                thread("1", "octo/app", .pullRequest, "review_requested", minutesAgo: 5),
+                thread("2", "octo/app", .issue, "mention", minutesAgo: 90),
+                thread("3", "octo/lib", .release, "subscribed", minutesAgo: 30),
+            ].compactMap { $0 }),
+        bob.id: FeedState(phase: .scopeInsufficient, threads: []),
+        dave.id: FeedState(
+            phase: .retrying(nextAttempt: now.addingTimeInterval(240), rateLimited: false),
+            threads: [thread("4", "acme/web", .discussion, "team_mention", minutesAgo: 600)].compactMap { $0 }),
+        erin.id: FeedState(phase: .unauthorized, threads: []),
+    ]
     return NotificationListView(
         statuses: [
             AccountStatus(account: alice, tokenState: .ready),
@@ -299,20 +318,7 @@ struct AccountDisclosure: Equatable {
             AccountStatus(account: erin, tokenState: .ready),
             AccountStatus(account: frank, tokenState: .unavailable),
         ],
-        feeds: [
-            alice.id: FeedState(
-                phase: .loaded(updatedAt: now.addingTimeInterval(-30)),
-                threads: [
-                    thread("1", "octo/app", .pullRequest, "review_requested", minutesAgo: 5),
-                    thread("2", "octo/app", .issue, "mention", minutesAgo: 90),
-                    thread("3", "octo/lib", .release, "subscribed", minutesAgo: 30),
-                ].compactMap { $0 }),
-            bob.id: FeedState(phase: .scopeInsufficient, threads: []),
-            dave.id: FeedState(
-                phase: .retrying(nextAttempt: now.addingTimeInterval(240), rateLimited: false),
-                threads: [thread("4", "acme/web", .discussion, "team_mention", minutesAgo: 600)].compactMap { $0 }),
-            erin.id: FeedState(phase: .unauthorized, threads: []),
-        ],
+        feeds: feeds, repositories: feeds.mapValues { RepositoryGroup.groups(from: $0.threads) },
         expansion: ListExpansion(), actions: .none
     )
     .padding()
@@ -323,16 +329,17 @@ struct AccountDisclosure: Equatable {
     let alice = Account(id: AccountID(host: "github.com", user: "alice"), isActive: true)
     let bob = Account(id: AccountID(host: "github.com", user: "bob"), isActive: false)
     let carol = Account(id: AccountID(host: "github.com", user: "carol"), isActive: false)
+    let feeds: [AccountID: FeedState] = [
+        alice.id: FeedState(phase: .loaded(updatedAt: Date()), threads: []),
+        bob.id: .loading,
+    ]
     return NotificationListView(
         statuses: [
             AccountStatus(account: alice, tokenState: .ready),
             AccountStatus(account: bob, tokenState: .ready),
             AccountStatus(account: carol, tokenState: .fetching),
         ],
-        feeds: [
-            alice.id: FeedState(phase: .loaded(updatedAt: Date()), threads: []),
-            bob.id: .loading,
-        ],
+        feeds: feeds, repositories: feeds.mapValues { RepositoryGroup.groups(from: $0.threads) },
         expansion: ListExpansion(), actions: .none
     )
     .padding()
@@ -342,8 +349,8 @@ struct AccountDisclosure: Equatable {
 #Preview("All disabled") {
     let alice = Account(id: AccountID(host: "github.com", user: "alice"), isActive: true)
     return NotificationListView(
-        statuses: [AccountStatus(account: alice, tokenState: .disabled)], feeds: [:], expansion: ListExpansion(),
-        actions: .none
+        statuses: [AccountStatus(account: alice, tokenState: .disabled)], feeds: [:], repositories: [:],
+        expansion: ListExpansion(), actions: .none
     )
     .padding()
     .frame(width: 380)
@@ -356,12 +363,14 @@ struct AccountDisclosure: Equatable {
         RepositoryName(fullName: "octo/app").map { repository in
             NotificationThread(
                 id: "\(index)", reason: "subscribed", updatedAt: now.addingTimeInterval(-Double(index) * 60),
-                title: "Thread \(index)", kind: .issue, subjectURL: nil, repository: repository)
+                title: "Thread \(index)", kind: .issue, subjectURL: nil, repository: repository,
+                subjectNumber: nil)
         }
     }
+    let feeds = [alice.id: FeedState(phase: .loaded(updatedAt: now), threads: threads, isTruncated: true)]
     return NotificationListView(
-        statuses: [AccountStatus(account: alice, tokenState: .ready)],
-        feeds: [alice.id: FeedState(phase: .loaded(updatedAt: now), threads: threads, isTruncated: true)],
+        statuses: [AccountStatus(account: alice, tokenState: .ready)], feeds: feeds,
+        repositories: feeds.mapValues { RepositoryGroup.groups(from: $0.threads) },
         expansion: ListExpansion(), actions: .none
     )
     .padding()
