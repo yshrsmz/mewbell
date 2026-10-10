@@ -209,3 +209,19 @@ struct AccountStoreSettingsTests {
         #expect(events == ["reload", "reloadFinished", "discardAll", "reload(user)", "reloadFinished"])
     }
 }
+
+@MainActor
+struct AccountStoreDisableOrderTests {
+    private let bob = AccountID(host: "github.com", user: "bob")
+
+    @Test func reloadsAfterTheDisableWhenEnabledRightAway() async {
+        let discovery = BlockingDiscovery()
+        let settings = AppSettings(storage: InMemorySettingsStorage())
+        let store = AccountStore(discovery: discovery, settings: settings, state: .accounts([]))
+        discovery.finish()
+        store.setEnabled(false, for: bob)
+        store.setEnabled(true, for: bob)
+        await store.waitForReload()
+        #expect(discovery.events.prefix(2) == ["disable github.com/bob", "reload"])
+    }
+}

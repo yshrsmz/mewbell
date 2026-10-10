@@ -74,15 +74,17 @@ struct AccountDiscoverySettingsTests {
         let states = await reload(discovery, DiscoveryOptions(overrides: GhOverrides(configDirectory: work.path)))
         #expect(states.last == .accounts([status(alice, .ready)]))
         #expect(!fixture.runner.requests.isEmpty)
+        // 確かめた実体のパス（`/var` → `/private/var`）を渡す
+        let resolved = try #require(realPath(work.path))
         for request in fixture.runner.requests {
-            #expect(request.environment["GH_CONFIG_DIR"] == work.path)
+            #expect(request.environment["GH_CONFIG_DIR"] == resolved)
             #expect(GhEnvironment.removedKeys.allSatisfy { request.environment[$0] == nil })
         }
 
         // 401 の後の取り直しも同じ設定ディレクトリで実行する
         _ = await discovery.refreshToken(for: alice)
         #expect(fixture.runner.requests.last?.arguments.last == "alice")
-        #expect(fixture.runner.requests.last?.environment["GH_CONFIG_DIR"] == work.path)
+        #expect(fixture.runner.requests.last?.environment["GH_CONFIG_DIR"] == resolved)
     }
 
     @Test func doesNotFallBackFromAnUnusableConfigDirectory() async throws {
@@ -153,5 +155,106 @@ struct AccountDiscoverySettingsTests {
         await discovery.discardAllTokens()
         #expect(await fixture.credentials.token(for: alice) == nil)
         #expect(await fixture.credentials.token(for: dave) == nil)
+    }
+}
+
+/// 指定した引数の gh を、開くまで待たせる `ProcessRunning`。
+final class ArgumentGatedRunner: ProcessRunning {
+    private let base: FakeProcessRunner
+    private let firstArgument: String
+    private let gate = LockedValue<(isOpen: Bool, waiters: [CheckedContinuation<Void, Never>])>((false, []))
+
+    init(base: FakeProcessRunner, gating firstArgument: String) {
+        self.base = base
+        self.firstArgument = firstArgument
+    }
+
+    var waitingCount: Int { gate.value.waiters.count }
+
+    func open() {
+        let waiters = gate.withLock { gate in
+            gate.isOpen = true
+            defer { gate.waiters = [] }
+            return gate.waiters
+        }
+        for waiter in waiters {
+            waiter.resume()
+        }
+    }
+
+    func run(_ request: ProcessRequest) async throws -> ProcessOutput {
+        if request.arguments.first == firstArgument {
+            await withCheckedContinuation { continuation in
+                let passes = gate.withLock { gate in
+                    if gate.isOpen { return true }
+                    gate.waiters.append(continuation)
+                    return false
+                }
+                if passes { continuation.resume() }
+            }
+        }
+        return try await base.run(request)
+    }
+}
+
+/// 読み直しの途中の無効化と、設定ディレクトリの切り替え。
+struct AccountDiscoveryRaceTests {
+    private let fixture: DiscoveryFixture
+    private let alice = AccountID(host: "github.com", user: "alice")
+    private let dave = AccountID(host: "ghe.example.com", user: "dave")
+
+    init() throws {
+        fixture = try DiscoveryFixture()
+        try fixture.writeHosts(
+            """
+            github.com:
+                users:
+                    alice:
+                user: alice
+            ghe.example.com:
+                users:
+                    dave:
+                user: dave
+            """)
+    }
+
+    @Test func keepsAnAccountDisabledDuringAReloadThatStartedBefore() async throws {
+        let gated = ArgumentGatedRunner(base: fixture.runner, gating: "--version")
+        let discovery = fixture.discovery(runner: gated)
+        let states = LockedValue<[DiscoveryState]>([])
+        async let reloaded: Void = discovery.reload(userInitiated: false, options: DiscoveryOptions()) { state in
+            states.withLock { $0.append(state) }
+        }
+        await waitUntil { gated.waitingCount == 1 }
+        // 古い設定で始めた読み直しが `gh --version` を待っている間に無効にする
+        await discovery.disable(dave)
+        gated.open()
+        await reloaded
+        #expect(fixture.tokenRequests.allSatisfy { $0.last != "dave" })
+        #expect(await fixture.credentials.token(for: dave) == nil)
+        #expect(
+            states.value.last
+                == .accounts([
+                    AccountStatus(account: Account(id: alice, isActive: true), tokenState: .ready),
+                    AccountStatus(account: Account(id: dave, isActive: true), tokenState: .disabled),
+                ]))
+    }
+
+    @Test func doesNotReuseOrStoreATokenFetchStartedBeforeTheConfigDirectoryChanged() async throws {
+        let gated = GatedProcessRunner(base: fixture.runner)
+        let discovery = fixture.discovery(runner: gated)
+        await discovery.reload(userInitiated: false, options: DiscoveryOptions()) { _ in }
+        gated.close()
+        async let refreshed = discovery.refreshToken(for: alice)
+        await gated.waitUntilWaiting(1)
+        await discovery.discardAllTokens()
+        // 新しい読み直しは、走っている取得に合流せずに gh を実行し直す
+        async let reloaded: Void = discovery.reload(userInitiated: false, options: DiscoveryOptions()) { _ in }
+        await gated.waitUntilWaiting(3)
+        gated.open()
+        #expect(await refreshed == nil)
+        await reloaded
+        #expect(fixture.tokenRequests.filter { $0.last == "alice" }.count == 3)
+        #expect(await fixture.credentials.token(for: alice) != nil)
     }
 }

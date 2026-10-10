@@ -7,11 +7,11 @@ import os
 @MainActor
 @Observable
 final class NotificationStore {
-    /// ポーラーを作る。`participating` は「参加しているスレッドだけにする」の設定。
-    /// `onUpdate` はポーラーの状態が変わるたびに呼ばれる。
+    /// ポーラーを作る。`participating` は「参加しているスレッドだけにする」の設定。`stoppedAs` があれば、
+    /// その止まった状態で作る（始めない）。`onUpdate` はポーラーの状態が変わるたびに呼ばれる。
     typealias PollerFactory =
         @MainActor (
-            _ account: Account, _ endpoints: APIEndpoints, _ participating: Bool,
+            _ account: Account, _ endpoints: APIEndpoints, _ participating: Bool, _ stoppedAs: FeedPhase?,
             _ onUpdate: @escaping @Sendable (FeedState) async -> Void
         )
         -> AccountPoller
@@ -51,10 +51,10 @@ final class NotificationStore {
     {
         let client = GitHubAPIClient(transport: URLSessionTransport())
         return NotificationStore(
-            makePoller: { account, endpoints, participating, onUpdate in
+            makePoller: { account, endpoints, participating, stoppedAs, onUpdate in
                 AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
-                    participating: participating, onUpdate: onUpdate)
+                    participating: participating, stoppedAs: stoppedAs, onUpdate: onUpdate)
             }, notifier: notifier, openURL: { NSWorkspace.shared.open($0) },
             preferences: { settings.preferences(for: $0) })
     }
@@ -91,15 +91,17 @@ final class NotificationStore {
 
     /// 「参加しているスレッドだけにする」を切り替えたとき。ポーラーを止めて一覧を捨て、新しい設定で最初の取得から
     /// 始め直す（前の `Last-Modified` や隠しているスレッドは別の一覧のものなので持ち越さない）。トークンは捨てない。
+    /// 「スコープ不足」「認証エラー」で止まっているアカウントは、止まったまま作り直す（再開は再読み込みのときだけ）。
     func restart(_ id: AccountID) {
         guard let entry = pollers.removeValue(forKey: id) else { return }
         entry.poller.stop()
+        let stoppedPhase = feeds[id].flatMap { $0.phase.isStopped ? $0.phase : nil }
         feeds[id] = nil
         notifier?.resetBaseline(id)
-        startPolling(entry.account)
+        startPolling(entry.account, stoppedAs: stoppedPhase)
     }
 
-    private func startPolling(_ account: Account) {
+    private func startPolling(_ account: Account, stoppedAs stoppedPhase: FeedPhase? = nil) {
         guard let makePoller else { return }
         guard let endpoints = APIEndpoints(host: account.host) else {
             Self.logger.error("Could not derive the API endpoints of \(account.id)")
@@ -108,10 +110,15 @@ final class NotificationStore {
         let generation = nextGeneration
         nextGeneration += 1
         let id = account.id
-        let poller = makePoller(account, endpoints, preferences(id).participatingOnly) { [weak self] state in
+        let poller = makePoller(account, endpoints, preferences(id).participatingOnly, stoppedPhase) {
+            [weak self] state in
             await self?.apply(state, for: id, generation: generation)
         }
         pollers[id] = PollerEntry(poller: poller, generation: generation, account: account)
+        if let stoppedPhase {
+            feeds[id] = FeedState(phase: stoppedPhase, threads: [])
+            return
+        }
         feeds[id] = .loading
         Self.logger.info("Started polling \(id)")
         for threadID in pendingReads.removeValue(forKey: id) ?? [] {

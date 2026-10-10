@@ -64,7 +64,10 @@ struct AccountsSettingsView: View {
     let state: DiscoveryState
 
     var body: some View {
-        if case .accounts(let statuses) = state, !statuses.isEmpty {
+        if state == .checking {
+            ProgressView("Checking gh…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if case .accounts(let statuses) = state, !statuses.isEmpty {
             Form {
                 ForEach(statuses) { status in
                     AccountSettingsSection(settings: settings, account: status.account)
@@ -101,7 +104,7 @@ struct AccountSettingsSection: View {
                 ) {
                     Text("Only threads I'm participating in")
                     Text(
-                        "Mark all as read still marks every unread notification of this account, including the ones not shown."
+                        "Mark all as read also marks threads you are not participating in, up to the newest one shown."
                     )
                 }
                 Toggle(
@@ -144,7 +147,7 @@ struct GhSettingsView: View {
                     unusableMessage:
                         "Mewbell cannot use this directory. It must be your own directory that others cannot modify.",
                     path: settings.ghConfigDirectoryOverride, choosesDirectories: true,
-                    isUsable: ConfigDirectoryValidator.validate,
+                    isUsable: { ConfigDirectoryValidator.validate($0) != nil },
                     commit: { settings.setGhConfigDirectoryOverride($0) })
             } footer: {
                 Text(

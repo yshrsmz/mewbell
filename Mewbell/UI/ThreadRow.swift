@@ -168,7 +168,7 @@ struct MarkAllReadButton: View {
 
 extension MarkAllReadButton {
     private static let includesHidden =
-        "Also marks notifications you are not participating in as read, including ones not shown here."
+        "Also marks threads you are not participating in as read, up to the newest one shown here."
 
     private var help: String {
         let base = confirming ? "Click again to mark all as read" : "Mark all as read"

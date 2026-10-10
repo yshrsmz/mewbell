@@ -83,7 +83,7 @@ UserDefaults（`UserDefaults.standard`、ドメインは Bundle ID）に次の�
 ### D4. gh の上書き
 
 - `GhOverrides { executablePath: String?, configDirectory: String? }` を読み直しごとに受け取る。`GhLocator.locate(overridePath:retryLoginShell:)` は今のまま使う（上書きがあればそれだけを `ExecutableValidator` で確かめ、ログインシェルは使わない。spec「gh 実行ファイルの検出」）
-- 設定ディレクトリの決め方は `GhConfigDirectory.resolve(override:environment:homeDirectory:)` にし、上書きがあればそれを返す。上書きは `ConfigDirectoryValidator.validate(_:)` で、絶対パス・`realpath` で解決した先がディレクトリ・所有者が現在のユーザー・world-writable でない、を確かめる。通らなければ `.hostsFileUnreadable(path: <上書き>/hosts.yml)` を返し、ほかの候補に移らない
+- 上書きした設定ディレクトリは `ConfigDirectoryValidator.validate(_:)` で、絶対パス・`realpath` で解決した先がディレクトリ・所有者が現在のユーザー・world-writable でない、を確かめ、解決した実体のパスを返す。`hosts.yml` を読むのも `GH_CONFIG_DIR` に渡すのもこの実体のパスにする（確かめた後にシンボリックリンクを差し替えられても、確かめたディレクトリを使う）。通らなければ `.hostsFileUnreadable(path: <上書き>/hosts.yml)` を返し、ほかの候補に移らない
 - 子プロセスの環境は `GhEnvironment.make(from: base, configDirectory: URL?)`。取り除くキーを除いた後に、上書きがあれば `GH_CONFIG_DIR` を設定する（プロセスの環境にあった `GH_CONFIG_DIR` を置き換える）。`AccountDiscovery` は読み直しの中で作った環境を、確かめた gh のパス（`verifiedGhPath`）と一緒に持ち、401 の後の `refreshToken` でも同じ環境を使う。設定ディレクトリが前回と違えば `verifiedGhPath` を消して `gh --version` からやり直す
 - `GhLocator` のログインシェルの検索に渡す環境は今のまま（`GH_CONFIG_DIR` は `command -v gh` に関係しない）
 - 代替案: 上書きした設定ディレクトリが使えないとき、既定の候補に戻る → 別の gh のログインを黙って使うことになる。gh のパスと同じく、ユーザーが指定したものだけを使う
@@ -95,6 +95,9 @@ UserDefaults（`UserDefaults.standard`、ドメインは Bundle ID）に次の�
 - 有効にし直したときは `reload()` で、そのアカウントは `held` に無いので `.fetching` を経て取得される
 - `AccountStore.disable` が状態を先に書き換えるのは、`reload` を待たずにポップオーバーとバッジから外すため。その直後に走っていた読み直しが古い options で終わって `.ready` を返すことがあるので、`AccountStore.apply` で、今の `AppSettings` で無効なアカウントを `.disabled` に置き換えてから反映する
 - 通知のクリックで既読を取っておく `pendingReads` は、`.disabled` のアカウントの分も捨てる（spec notifications「通知のクリック」）
+- `AccountDiscovery` は無効なアカウントの集合（`disabledIDs`）を自分でも持つ。読み直しの始めに options から受け取り、`disable` でも足す。`knownAccountIDs` は `gh --version` などの await の後に `disabledIDs` から作るので、古い設定で始めた読み直しが、途中で無効にしたアカウントを戻してトークンを取り直すことはない
+- `AccountStore` は送った `disable` を `pendingDisable` に積み、後から始める読み直しはそれを待つ。無効にしてすぐ有効に戻したとき、遅れて届いた `disable` が、有効に戻した後の読み直しで取ったトークンを消さないようにするため
+- `discardAllTokens` は走っている `gh auth token`（`inFlightTokenFetches`）を外し、`tokenEpoch` を進める。それより前に始めた取得の結果は保存せず、後の読み直しも合流しない（前の設定ディレクトリの取得なので）
 
 ### D6. ポーラーの停止と作り直し
 
@@ -102,6 +105,7 @@ UserDefaults（`UserDefaults.standard`、ドメインは Bundle ID）に次の�
 - `PollerFactory` に `participating: Bool` を足し、ポーラーを作るときに `AppSettings` から読む。`AccountPoller` は `participating` を `let` で持ち、すべての取得で `fetchNotifications(..., participating:)` に渡す
 - `restart(id)` は、ポーラーを止めて取り除き、`feeds[id] = .loading`、`notifier.resetBaseline(id)` の後に、同じアカウントに新しい世代のポーラーを作って `start()` する。新しいポーラーは `Last-Modified` も `hidden` も持たないので、最初の取得は条件なしになる。トークンは `CredentialStore` にあるので gh は呼ばない
 - 作り直しで `hidden` と `readThroughs` が消えるので、直前に既読にしたスレッドが、GitHub の反映が遅れたときに一度だけ一覧に戻ることがある（Risks）
+- 「スコープ不足」「認証エラー」で止まっているアカウントは、`AccountPoller(stoppedAs:)` で止まった状態のまま作り直し、始めない。再読み込みの `refreshNow` が、止まっているポーラーと同じく `resume()` で再開する
 - 代替案: `AccountPoller` に `setParticipating(_:)` を足してループの中で切り替える → `Last-Modified`・隠しているスレッド・走っている取得の結果を、どちらの一覧のものか区別して捨てる処理が要る。作り直しなら、既存の世代の仕組みで遅れて届いた結果も捨てられる
 
 ### D7. 通知のオフと音

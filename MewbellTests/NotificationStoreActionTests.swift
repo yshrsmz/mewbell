@@ -25,7 +25,7 @@ struct NotificationStoreActionTests {
     private func makeStore(notifier: (any ThreadNotifying)?) -> NotificationStore {
         let client = GitHubAPIClient(transport: transport)
         return NotificationStore(
-            makePoller: { [tokens, sleeper] account, endpoints, _, onUpdate in
+            makePoller: { [tokens, sleeper] account, endpoints, _, _, onUpdate in
                 AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
                     sleep: sleeper.sleep, onUpdate: onUpdate)

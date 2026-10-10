@@ -16,6 +16,8 @@ final class AccountStore {
     @ObservationIgnored private var configGeneration = 0
     /// 次の読み直しの前に、すべてのトークンを捨てる（設定ディレクトリを変えたとき）
     @ObservationIgnored private var discardsTokensBeforeNextReload = false
+    /// 送った無効化。後から始める読み直しはこれを待つ（すぐ有効に戻したとき、遅れた無効化が取り直したトークンを消さないため）
+    @ObservationIgnored private var pendingDisable: Task<Void, Never>?
     private var reloadTask: Task<Void, Never>?
     /// 読み直している間に要求が来たか（終わった後にもう一度読み直す）
     @ObservationIgnored private var reloadRequested = false
@@ -58,7 +60,9 @@ final class AccountStore {
         let generation = configGeneration
         let discardsTokens = discardsTokensBeforeNextReload
         discardsTokensBeforeNextReload = false
+        let pendingDisable = pendingDisable
         reloadTask = Task {
+            await pendingDisable?.value
             if discardsTokens {
                 await discovery.discardAllTokens()
             }
@@ -120,7 +124,12 @@ final class AccountStore {
     private func disable(_ id: AccountID) {
         guard let discovery, !isTerminating else { return }
         apply(state, generation: configGeneration)
-        Task { await discovery.disable(id) }
+        // 走っている読み直しは待たない（すぐにトークンを捨てるため）。無効化どうしは送った順に行う
+        let previous = pendingDisable
+        pendingDisable = Task {
+            await previous?.value
+            await discovery.disable(id)
+        }
     }
 
     /// 今の設定で無効なアカウントを `.disabled` にする（無効にした直後に、前の設定で始めた読み直しが終わったときのため）。

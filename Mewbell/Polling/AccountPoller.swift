@@ -53,7 +53,8 @@ actor AccountPoller {
 
     init(
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,
-        participating: Bool = false, sleep: @escaping Sleep = { try await Task.sleep(for: $0) },
+        participating: Bool = false, stoppedAs stoppedPhase: FeedPhase? = nil,
+        sleep: @escaping Sleep = { try await Task.sleep(for: $0) },
         now: @escaping @Sendable () -> Date = { Date() },
         onUpdate: @escaping @Sendable (FeedState) async -> Void
     ) {
@@ -62,6 +63,10 @@ actor AccountPoller {
         self.client = client
         self.tokens = tokens
         self.participating = participating
+        if let stoppedPhase {
+            // 止まった状態で作り直したポーラー。始めずに、再読み込みでの再開（`refreshNow`）を待つ
+            state = FeedState(phase: stoppedPhase, threads: [])
+        }
         self.sleep = sleep
         self.now = now
         self.onUpdate = onUpdate

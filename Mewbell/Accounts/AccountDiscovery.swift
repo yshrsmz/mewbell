@@ -92,6 +92,11 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     /// 最後の読み直しで `hosts.yml` にあったアカウント。ここに無いアカウントのトークンは保存しない
     /// （取得の途中でアカウントが消えたときに、捨てたトークンを書き戻さないため）
     private var knownAccountIDs: Set<AccountID> = []
+    /// 無効なアカウント。読み直しの始めに設定から受け取り、読み直しの途中の `disable` でも足す
+    /// （読み直しの途中で無効にしたアカウントを、古い設定のまま `knownAccountIDs` に戻さないため）
+    private var disabledIDs: Set<AccountID> = []
+    /// `discardAllTokens` で進める。進む前に始めた `gh auth token` の結果は保存しない（前の設定ディレクトリのものなので）
+    private var tokenEpoch = 0
 
     init(
         locator: GhLocator,
@@ -125,6 +130,7 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     func reload(
         userInitiated: Bool, options: DiscoveryOptions, update: @escaping @Sendable (DiscoveryState) async -> Void
     ) async {
+        disabledIDs = options.disabled
         let state = await discover(userInitiated: userInitiated, options: options, update: update)
         // アカウントを使えない状態になったら、持っているトークンをすべて捨てる
         if !state.hasAccounts {
@@ -140,12 +146,16 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
 
     func disable(_ id: AccountID) async {
         // 走っている `gh auth token` の結果も、`knownAccountIDs` に無いので保存されない
+        disabledIDs.insert(id)
         knownAccountIDs.remove(id)
         await credentials.remove(id)
     }
 
     func discardAllTokens() async {
         knownAccountIDs = []
+        // 走っている取得は前の設定ディレクトリのものなので、合流させず、結果も保存しない
+        inFlightTokenFetches.removeAll()
+        tokenEpoch += 1
         await credentials.removeAll()
     }
 
@@ -173,6 +183,7 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     /// `gh auth token` を実行して、取れたトークンを保存する。同じアカウントの取得が走っていれば、その結果を待つ。
     /// 取得を始めた呼び出し元がキャンセルされたら gh も止める（合流しただけの呼び出し元のキャンセルでは止めない）。
     private func fetchToken(for id: AccountID, using client: GhClient) async -> AccessToken? {
+        let epoch = tokenEpoch
         let token: AccessToken?
         if let running = inFlightTokenFetches[id] {
             running.isShared.withLock { $0 = true }
@@ -188,10 +199,12 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
                     fetch.task.cancel()
                 }
             }
-            inFlightTokenFetches[id] = nil
+            if inFlightTokenFetches[id] === fetch {
+                inFlightTokenFetches[id] = nil
+            }
         }
         // 合流した呼び出し元も保存する（返したトークンが `CredentialStore` にあることを、誰が先に戻っても保証するため）
-        guard let token, knownAccountIDs.contains(id) else { return nil }
+        guard let token, knownAccountIDs.contains(id), epoch == tokenEpoch else { return nil }
         await credentials.set(token, for: id)
         return token
     }
@@ -207,13 +220,17 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
             return .ghNotFound
         }
         // 設定で上書きした設定ディレクトリが使えなければ、ほかの候補に移らない（別の gh のログインを黙って使わないため）
-        let override = options.overrides.configDirectory
-        let overrideURL = override.map { URL(filePath: $0, directoryHint: .isDirectory) }
-        let configDirectory = overrideURL ?? self.configDirectory
-        if let override, !ConfigDirectoryValidator.validate(override) {
-            Self.logger.error("The overridden gh config directory is not usable")
-            return .hostsFileUnreadable(path: configDirectory.appending(path: "hosts.yml").path)
+        // 読むのも gh に渡すのも、確かめた実体のパスにする
+        var overrideURL: URL?
+        if let override = options.overrides.configDirectory {
+            overrideURL = ConfigDirectoryValidator.validate(override)
+            guard overrideURL != nil else {
+                Self.logger.error("The overridden gh config directory is not usable")
+                let hostsFile = URL(filePath: override, directoryHint: .isDirectory).appending(path: "hosts.yml")
+                return .hostsFileUnreadable(path: hostsFile.path)
+            }
         }
+        let configDirectory = overrideURL ?? self.configDirectory
         let environment = GhEnvironment.make(from: environment, configDirectory: overrideURL)
         currentEnvironment = environment
         if verifiedConfigDirectory != configDirectory {
@@ -242,18 +259,17 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         let accounts = hostsFile.map(Account.accounts(from:)) ?? []
         guard !accounts.isEmpty else { return .notLoggedIn }
 
-        // 無効なアカウントは gh を呼ばず、持っているトークンも捨てる
-        let enabled = accounts.filter { !options.disabled.contains($0.id) }
+        // 無効なアカウントは gh を呼ばず、持っているトークンも捨てる（読み直しの途中で無効にしたものも含める）
+        let enabled = accounts.filter { !disabledIDs.contains($0.id) }
         knownAccountIDs = Set(enabled.map(\.id))
         let held = await credentials.retainOnly(knownAccountIDs)
         let pending = enabled.filter { !held.contains($0.id) }
         if !pending.isEmpty {
-            await update(
-                .accounts(accounts, disabled: options.disabled) { held.contains($0.id) ? .ready : .fetching })
+            await update(.accounts(accounts, disabled: disabledIDs) { held.contains($0.id) ? .ready : .fetching })
         }
 
         let failed = await fetchTokens(for: pending, using: client)
-        return .accounts(accounts, disabled: options.disabled) { failed.contains($0.id) ? .unavailable : .ready }
+        return .accounts(accounts, disabled: disabledIDs) { failed.contains($0.id) ? .unavailable : .ready }
     }
 
     /// アカウントごとの `gh auth token` を並べて実行し、取れたトークンを保存する。取れなかったアカウントを返す。

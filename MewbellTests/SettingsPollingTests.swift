@@ -112,11 +112,11 @@ struct NotificationStoreSettingsTests {
         tokens.set("test-token-bob", for: bob)
         let client = GitHubAPIClient(transport: transport)
         return NotificationStore(
-            makePoller: { [tokens, sleeper, made] account, endpoints, participating, onUpdate in
+            makePoller: { [tokens, sleeper, made] account, endpoints, participating, stoppedAs, onUpdate in
                 made.withLock { $0.append("\(account.id) \(participating)") }
                 return AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
-                    participating: participating, sleep: sleeper.sleep, onUpdate: onUpdate)
+                    participating: participating, stoppedAs: stoppedAs, sleep: sleeper.sleep, onUpdate: onUpdate)
             }, notifier: notifier, openURL: { [opened] url in opened.withLock { $0.append(url) } },
             preferences: { [settings] in settings.preferences(for: $0) })
     }
@@ -207,6 +207,32 @@ struct NotificationStoreSettingsTests {
         await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.threads.map(\.id) == ["4", "5"] } }
         try? await Task.sleep(for: .milliseconds(50))
         #expect(notifier.feeds[alice]?.allSatisfy { $0 == ["4", "5"] } == true)
+        #expect(store.feeds[alice]?.threads.map(\.id) == ["4", "5"])
+        store.stopAll()
+    }
+
+    @Test func keepsAStoppedAccountStoppedWhenRestarting() async {
+        // スコープの足りないトークン
+        transport.setHandler { _ in PollerFixture.ok(1...3, scopes: "gist") }
+        tokens.set("test-token-alice", for: alice)
+        let store = makeStore()
+        store.sync(with: .accounts([status(alice, .ready)]))
+        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.phase == .scopeInsufficient } }
+        let count = transport.requests.count
+        settings.setParticipatingOnly(true, for: alice)
+        store.restart(alice)
+        #expect(store.feeds[alice]?.phase == .scopeInsufficient)
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(transport.requests.count == count)
+        #expect(made.value.last == "github.com/alice true")
+
+        // 再読み込みで、新しい設定のポーラーが再開する
+        transport.setHandler { request in
+            PollerFixture.ok(request.url?.query?.contains("participating=true") == true ? 4...5 : 1...3)
+        }
+        tokens.refreshedValue.value = "test-token-alice"
+        store.refresh()
+        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.threads.map(\.id) == ["4", "5"] } }
         #expect(store.feeds[alice]?.threads.map(\.id) == ["4", "5"])
         store.stopAll()
     }
