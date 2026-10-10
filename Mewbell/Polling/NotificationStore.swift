@@ -152,7 +152,9 @@ final class NotificationStore {
     func refresh() {
         guard !isRefreshing else { return }
         for (id, _) in pollers where feeds[id]?.phase.isStopped == true {
-            feeds[id] = .loading
+            // Diagnostics の値（最後の失敗など）は、再開したポーラーが出し直すまで残す
+            feeds[id] = FeedState(
+                phase: .loading, threads: [], diagnostics: feeds[id]?.diagnostics ?? FeedDiagnostics())
         }
         let targets = pollers.values.map(\.poller)
         isRefreshing = true

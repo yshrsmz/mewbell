@@ -40,4 +40,9 @@ struct ActionFailureMessageTests {
             #expect(ActionFailureMessage.command(for: failure, host: "github.com") == nil)
         }
     }
+
+    @Test func doesNotPromiseThreadsBackWhenMarkAllReadWasNotSent() {
+        let text = ActionFailureMessage.text(for: failure(.markAllRead, .noToken))
+        #expect(text == "Could not mark all as read.")
+    }
 }

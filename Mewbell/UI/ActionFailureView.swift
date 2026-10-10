@@ -15,11 +15,13 @@ enum ActionFailureMessage {
             case .rateLimited: " because of the rate limit"
             default: ""
             }
-        let followUp =
-            failure.kind == .unauthorized
-            ? "Log in again with the command below. Unread threads come back after the next fetch."
-            : "Unread threads come back after the next fetch."
-        return "\(action)\(reason). \(followUp)"
+        // トークンが無くてすべて既読を送らなかったときは、一覧から何も外していない
+        let comesBack =
+            failure.action == .markAllRead && failure.kind == .noToken
+            ? nil : "Unread threads come back after the next fetch."
+        let followUp = [failure.kind == .unauthorized ? "Log in again with the command below." : nil, comesBack]
+            .compactMap { $0 }
+        return (["\(action)\(reason)."] + followUp).joined(separator: " ")
     }
 
     /// 文に添えるコマンド（認証エラーのときだけ）。

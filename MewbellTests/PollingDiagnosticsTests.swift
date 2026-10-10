@@ -74,6 +74,14 @@ struct PollingDiagnosticsTests {
         #expect(fixture.last?.diagnostics.lastFetchFailure?.kind == .unauthorized)
     }
 
+    @Test func recordsTheScopesOfAScopeInsufficient403() async {
+        fixture.respond([HTTPResponse(statusCode: 403, headers: ["X-OAuth-Scopes": "read:org"])])
+        fixture.poller.start()
+        await waitUntil { self.fixture.last?.phase == .scopeInsufficient }
+        #expect(fixture.last?.diagnostics.scopes == OAuthScopes(header: "read:org"))
+        #expect(fixture.last?.diagnostics.lastFetchFailure?.kind == .httpStatus(403))
+    }
+
     @Test func keepsTheLastFetchFailureAfterASuccess() async {
         fixture.respond([HTTPResponse(statusCode: 502), PollerFixture.ok(1...2)])
         fixture.poller.start()

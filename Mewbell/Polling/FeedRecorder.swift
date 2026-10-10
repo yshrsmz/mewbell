@@ -11,6 +11,10 @@ struct FeedRecorder {
     mutating func recordFetch(
         _ result: NotificationsFetchResult, number: Int, at date: Date, in state: inout FeedState
     ) {
+        // スコープ不足の 403 でも、受け取ったスコープを出す（何が足りないかを見られるように）
+        if case .forbidden(let scopes) = result, scopes.scopes != nil {
+            state.diagnostics.scopes = scopes
+        }
         if let kind = FailureKind(result) {
             state.diagnostics.lastFetchFailure = TimedFailure(kind: kind, occurredAt: date)
             return
