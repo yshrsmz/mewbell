@@ -15,7 +15,7 @@ struct RepositoryGroupView: View {
             HStack(spacing: 6) {
                 DisclosureButton(
                     isCollapsed: isCollapsed, name: group.repository.description,
-                    collapsedCount: isCollapsed ? group.threads.count : nil
+                    count: group.threads.count
                 ) {
                     expansion.toggleRepository(group.repository)
                 } label: {

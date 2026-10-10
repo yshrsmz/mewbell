@@ -2,7 +2,7 @@
 
 ## 1. スレッドの番号（GitHubAPI / UI）
 
-- [x] 1.1 `ThreadWebURL.subjectNumber(for:endpoints:)` を足し、`target(for:endpoints:)` が返す型が Pull request か Issue のときだけ、その `id` を返す（D4）。確認: テストを足して通す: (a) `https://api.github.com/repos/octo/app/pulls/42` で `42`、(b) GHES の `https://ghe.example.com/api/v3/repos/team/svc/issues/7` で `7`、GHE Cloud の `https://api.acme.ghe.com/repos/acme/web/pulls/3` で `3`、(c) `https://evil.example.com/repos/octo/app/pulls/42` で `nil`、(d) リポジトリが一致しない `subject.url` で `nil`、(e) Commit・Release・Discussion・`subject.url` が無いスレッドで `nil`、(f) 番号が数字でない（`pulls/abc`）と `nil`。既存の `ThreadWebURL` のテストが通る。結果: (e) の Commit は `commits/<SHA>` の `subject.url` で確かめた（Release と Discussion 以外は、`target` は種類でなく URL の形で分けるので、番号は URL の形で決まる）。review-loop の修正（6.1・6.2）で今の形に変えた
+- [x] 1.1 `ThreadWebURL.subjectNumber(for:endpoints:)` を足し、`target(for:endpoints:)` が返す型が Pull request か Issue のときだけ、その `id` を返す（D4）。確認: テストを足して通す: (a) `https://api.github.com/repos/octo/app/pulls/42` で `42`、(b) GHES の `https://ghe.example.com/api/v3/repos/team/svc/issues/7` で `7`、GHE Cloud の `https://api.acme.ghe.com/repos/acme/web/pulls/3` で `3`、(c) `https://evil.example.com/repos/octo/app/pulls/42` で `nil`、(d) リポジトリが一致しない `subject.url` で `nil`、(e) Commit・Release・Discussion・`subject.url` が無いスレッドで `nil`、(f) 番号が数字でない（`pulls/abc`）と `nil`。既存の `ThreadWebURL` のテストが通る。結果: (e) の Commit は `commits/<SHA>` の `subject.url` で確かめた（Release と Discussion 以外は、`target` は種類でなく URL の形で分けるので、番号は URL の形で決まる）。review-loop の修正（6.1・6.2）で今の形に変えた。今の名前は `subjectNumber(kind:subjectURL:repository:endpoints:)`
 - [x] 1.2 `ThreadRow` の 2 行目を `#<番号> · <理由> · <更新日時>` にし、番号は `NotificationThread.subjectNumber` を読んで出す。`ThreadRow` には番号の引数を持たせない（D4）。確認: プレビューに番号のある行と無い行を足して見る（件名が 2 行の行でも 2 行目の並びが崩れない）。ビルドが通る。結果: Xcode のプレビューは使えない（RenderPreview は未承認）ので、プレビューの追加にとどめ、見た目は 4.3 の手元での起動で確かめる。review-loop の修正（6.1・6.2）で今の形に変えた
 
 ## 2. 折りたたみの状態（UI / App）
@@ -13,7 +13,7 @@
 
 ## 3. 見出しの開閉（UI）
 
-- [x] 3.1 `AccountSectionView` の見出しに開閉のボタンを足す。折りたたんだときはリポジトリのグループと「No unread notifications」を隠し、取得の状態・操作の失敗・トークンを取れないときの案内は出し続ける。折りたたんでいて未読があるときは件数を出す。「すべて既読」は別のボタンのまま（D5）。確認: プレビューに「開いたアカウント」「折りたたんだアカウント（件数あり）」「折りたたんだアカウントの取得の失敗」を足して見る。山形のツールチップと、ボタンのアクセシビリティの値（`Collapsed` / `Expanded`）と説明が変わることをプレビューで見る（D5）。結果: 見出しは `山形・トークンの状態・ユーザー名…` の順にし、山形の幅をスレッドの行のアイコン（16）に揃えた。字下げ 22 は変えていない。プレビューは描けないので、手元で起動して未読 0 件のアカウントで、開閉、折りたたむと「No unread notifications」だけが隠れて取得の状態は残ること、ポップオーバーを閉じて開き直しても折りたたんだままであることを画面で見た
+- [x] 3.1 `AccountSectionView` の見出しに開閉のボタンを足す。折りたたんだときはリポジトリのグループと「No unread notifications」を隠し、取得の状態・操作の失敗・トークンを取れないときの案内は出し続ける。折りたたんでいて未読があるときは件数を出す。「すべて既読」は別のボタンのまま（D5）。確認: プレビューに「開いたアカウント」「折りたたんだアカウント（件数あり）」「折りたたんだアカウントの取得の失敗」を足して見る。山形のツールチップと、ボタンのアクセシビリティの値（`Collapsed` / `Expanded`）と説明が変わることをプレビューで見る（D5）。結果: 見出しは `山形・トークンの状態・ユーザー名…` の順にし、山形の幅をスレッドの行のアイコン（16）に揃えた。字下げ 22 は変えていない。プレビューは描けないので、手元で起動して未読 0 件のアカウントで、開閉、折りたたむと「No unread notifications」だけが隠れて取得の状態は残ること、ポップオーバーを閉じて開き直しても折りたたんだままであることを画面で見た。`AccountDisclosure` は `showsThreads` だけを持ち、件数の規則は `DisclosureButton` に移した（6.5）
 - [x] 3.2 リポジトリの見出しを開閉のボタンにし、折りたたんだときはスレッドの行を隠して件数を出す。開閉のアニメーションは「視差効果を減らす」がオンなら付けない（D5）。確認: プレビューに「折りたたんだリポジトリと開いたリポジトリが並ぶアカウント」を足して見る。ビルドが通る。結果: `RepositoryGroupView` は `UI/RepositoryGroupView.swift` に分け、「Collapsed」のプレビューもそこに置いた。見出しの共有の部品（`DisclosureButton`・`DisclosureChevron`・`CollapsedCount` など）は `UI/DisclosureButton.swift` に置いた。リポジトリの開閉は未読が要るので 4.3 で確かめる。review-loop の修正（6.1・6.2）で今の形に変えた
 
 ## 4. 最終確認
@@ -26,7 +26,7 @@
 ## 5. 別コンテキストでのレビュー
 
 - [x] 5.1 新しいコンテキストの opus サブエージェントで `simplify` スキルを実行し、作業ツリーに入った変更を確かめる。確認: `bash scripts/lint.sh` と `xcodebuild test` が引き続き通る。結果: 直したもの 4 件（無効でないアカウントの取り出しを `DiscoveryState.enabledStatuses` にまとめた、見出しの開閉のボタンを `DisclosureButton` にまとめた、`RepositoryGroupView` に key でなくアカウントを渡す、`ListExpansion` で変わらないときは書き込まない）。直さなかった候補 6 件は PR 本文に理由を書く
-- [ ] 5.2 別の新しいコンテキストの opus サブエージェントで `code-review` スキルを effort `medium` で実行し、指摘ごとに「直した / 直さない（理由）」を決めて対応する。ロジックに手を入れたら 5.2 をやり直す。確認: 指摘の件数と対応結果、セキュリティ上の確認を PR 本文に書いた
+- [x] 5.2 別の新しいコンテキストの opus サブエージェントで `code-review` スキルを effort `medium` で実行し、指摘ごとに「直した / 直さない（理由）」を決めて対応する。ロジックに手を入れたら 5.2 をやり直す。確認: 指摘の件数と対応結果、セキュリティ上の確認を PR 本文に書いた。結果: 新しいコンテキストの opus で code-review（medium）を 1 回実行し、9 件の指摘のうち 5 件を直した（7afffee）。続けて review-loop（正しさ・整合性・品質の 3 本）を 4 周回した。周ごとの高・中の指摘は、正しさ 1→0→1→1、品質 4→5→4→4、整合性 5 前後→10→1→2。4 周目は品質の中 3 件が前の周の修正（ユーザーが決めた形を含む）を戻す向きの指摘になったので、ユーザーの判断で小さな束（6.5）を直して止めた。見送った指摘と理由は PR 本文に書く
 
 ## 6. review-loop の修正
 
@@ -34,3 +34,4 @@
 - [x] 6.2 review-loop の 2 周目の指摘を直す（tracker と通知の操作を `ThreadChangeDispatcher` にまとめる、`NotificationTracker` を `Polling/` に移す、番号を読み取るときに `let` で決める、通知の取り下げのメソッドを `retractAll(for:)` にまとめる、見出しの書き方を揃える、spec の言葉を既存の仕様に揃える）。確認: `xcodebuild test`・`bash scripts/lint.sh`・`npx openspec validate --all --strict` が通る
 - [x] 6.3 描き直しの範囲と重さを直す: 折りたたみの状態をアカウントごとの `AccountExpansion` に分け、グループ分けを `FeedState.repositories` に持たせる（ユーザーの判断）。確認: `ListExpansionTests` の観測の粒度のテスト（ほかのアカウントの開閉で onChange が呼ばれない）と `FeedState.repositories` のテストが通る。`xcodebuild test`・`bash scripts/lint.sh`・`npx openspec validate --all --strict` が通る。結果: 6.4 でグループ分けを `NotificationStore` に移した
 - [x] 6.4 review-loop の 3 周目の指摘を直す（`subjectNumber` を 1 回で組み立てて既定値をやめる、状態を捨てる判断を `NotificationStore.sync` から `onAccountsRetained` で知らせる、新着からリポジトリを取り出すのを `ListExpansion` に移す、`AccountDisclosure.showsThreads` を分ける、`DisclosureButton` に件数を持たせる、名前を揃える、グループ分けを `NotificationStore` に置く（ユーザーの判断）、design D3 の確認中の誤りを直す）。確認: `xcodebuild test`・`bash scripts/lint.sh`・`npx openspec validate --all --strict` が通る
+- [x] 6.5 review-loop の 4 周目の指摘を直す（`AccountDisclosure` を `showsThreads` だけにする、件数の規則を `DisclosureButton` に置く、字下げを `ListLayout` にまとめる、すべて既読が失敗して戻ったスレッドで開かないことのテストを足す、テストのスイート名を直す、spec の『取得中』の取り違えと文の重複を直す）。確認: `xcodebuild test`・`bash scripts/lint.sh`・`npx openspec validate --all --strict` が通る

@@ -47,7 +47,7 @@ struct ActionFailureView: View {
             }
         }
         .font(.caption)
-        .padding(.leading, 22)
+        .padding(.leading, ListLayout.contentIndent)
         .fixedSize(horizontal: false, vertical: true)
     }
 }

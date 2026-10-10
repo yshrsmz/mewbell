@@ -151,6 +151,18 @@ struct NotificationStoreNewThreadsTests {
         store.stopAll()
     }
 
+    @Test func ignoresThreadsThatComeBackUnchangedAfterMarkingAllReadFails() async throws {
+        let store = makeStore()
+        let first = feed([try thread("1"), try thread("2")])
+        await send(first)
+        // すべて既読にしてポーラーが一覧から外した
+        await send(feed([]))
+        // すべて既読が失敗して、同じ updated_at のまま一覧に戻っても知らせない
+        await send(first)
+        #expect(received.value.isEmpty)
+        store.stopAll()
+    }
+
     @Test func reportsOnlyTheAccountMarkedAllRead() async throws {
         let store = makeStore()
         let aliceThreads = feed([try thread("1"), try thread("2")])

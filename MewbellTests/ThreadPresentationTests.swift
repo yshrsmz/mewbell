@@ -14,7 +14,7 @@ private func thread(
     )
 }
 
-struct NotificationGroupingTests {
+struct RepositoryGroupTests {
     @Test func ordersRepositoriesAndThreadsByTheNewestUpdate() throws {
         let groups = RepositoryGroup.groups(from: [
             try thread(id: "1", repository: "octo/app", updatedAt: 100),
@@ -29,7 +29,9 @@ struct NotificationGroupingTests {
     @Test func returnsNoGroupsForNoThreads() {
         #expect(RepositoryGroup.groups(from: []).isEmpty)
     }
+}
 
+struct ThreadReasonTests {
     @Test(arguments: [
         ("review_requested", "Review requested"),
         ("mention", "Mentioned"),

@@ -9,20 +9,20 @@ struct DisclosureButton<Label: View>: View {
     let name: String
     /// 畳むものが無いとき（トークンを取れない、取得の前など）は false。山形を出さず、押せなくする
     var isCollapsible = true
-    /// 畳んだ見出しに出す件数。nil なら出さない
-    var collapsedCount: Int?
+    /// 見出しの件数。畳んでいて 1 件以上のときだけ出す
+    var count = 0
     let toggle: () -> Void
     @ViewBuilder let label: Label
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let hint = isCollapsed ? "Expand \(name)" : "Collapse \(name)"
         if isCollapsible {
+            let hint = isCollapsed ? "Expand \(name)" : "Collapse \(name)"
             Button {
                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.2), toggle)
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: ListLayout.spacing) {
                     DisclosureChevron(isCollapsed: isCollapsed)
                         .help(hint)
                     labelWithCount
@@ -33,7 +33,7 @@ struct DisclosureButton<Label: View>: View {
             .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
             .accessibilityHint(hint)
         } else {
-            HStack(spacing: 6) {
+            HStack(spacing: ListLayout.spacing) {
                 // 山形の分の幅を空けて、ほかの見出しと字下げを揃える
                 DisclosureChevron(isCollapsed: isCollapsed).hidden()
                 labelWithCount
@@ -44,10 +44,25 @@ struct DisclosureButton<Label: View>: View {
     /// 見出しの中身と、畳んだときの件数。
     @ViewBuilder private var labelWithCount: some View {
         label
-        if let collapsedCount {
-            CollapsedCount(count: collapsedCount)
+        if let shown = Self.shownCount(isCollapsed: isCollapsed, count: count) {
+            CollapsedCount(count: shown)
         }
     }
+
+    /// 見出しに出す件数。畳んでいて 1 件以上のときだけ出し、それ以外は nil
+    static func shownCount(isCollapsed: Bool, count: Int) -> Int? {
+        isCollapsed && count > 0 ? count : nil
+    }
+}
+
+/// 一覧の字下げ。見出しの山形の幅と、山形と中身の間隔から決まる。
+enum ListLayout {
+    /// 見出しの山形の幅
+    static let chevronWidth: CGFloat = 16
+    /// 山形と見出しの中身の間隔
+    static let spacing: CGFloat = 6
+    /// 見出しの下に置く中身の字下げ（山形の幅と間隔の分）
+    static let contentIndent = chevronWidth + spacing
 }
 
 /// 開閉を示す山形。開いているときは下を向く。幅はスレッドの行の種類のアイコンと揃える。
@@ -59,13 +74,13 @@ private struct DisclosureChevron: View {
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
             .rotationEffect(.degrees(isCollapsed ? 0 : 90))
-            .frame(width: 16)
+            .frame(width: ListLayout.chevronWidth)
             .accessibilityHidden(true)
     }
 }
 
 /// 折りたたんだ見出しに出す件数。
-struct CollapsedCount: View {
+private struct CollapsedCount: View {
     let count: Int
 
     var body: some View {

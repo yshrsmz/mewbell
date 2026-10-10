@@ -80,7 +80,7 @@ struct AccountSectionView: View {
                 Text("Checking gh…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 22)
+                    .padding(.leading, ListLayout.contentIndent)
             case .unavailable:
                 Text("Could not get a token from gh. Log in again with:")
                     .font(.caption)
@@ -110,7 +110,7 @@ struct AccountSectionView: View {
             // 開閉のボタンと「すべて既読」は分ける（押し間違えて開閉しないように）
             DisclosureButton(
                 isCollapsed: disclosure.isCollapsed, name: "\(account.user) (\(account.host))",
-                isCollapsible: disclosure.isCollapsible, collapsedCount: disclosure.collapsedCount
+                isCollapsible: disclosure.showsThreads, count: feed?.threads.count ?? 0
             ) {
                 expansion.toggle()
             } label: {
@@ -181,7 +181,7 @@ struct AccountSectionView: View {
             Text("No unread notifications")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                .padding(.leading, 22)
+                .padding(.leading, ListLayout.contentIndent)
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(repositories) { group in
@@ -189,7 +189,7 @@ struct AccountSectionView: View {
                         group: group, account: account.id, expansion: expansion, actions: actions)
                 }
             }
-            .padding(.leading, 22)
+            .padding(.leading, ListLayout.contentIndent)
         }
     }
 }
@@ -246,22 +246,19 @@ struct FeedStatusView: View {
             }
         }
         .font(.caption)
-        .padding(.leading, 22)
+        .padding(.leading, ListLayout.contentIndent)
         .fixedSize(horizontal: false, vertical: true)
     }
 }
 
-/// アカウントの見出しの開閉の状態。畳めるか・畳まれているか・件数を出すかを 1 つの条件から決める
+/// アカウントの見出しの開閉の状態。畳めるか・畳まれているかを 1 つの条件から決める
 /// （畳んだままトークンを取れなくなったときに、山形の無い見出しに件数だけが出ないように）。
 struct AccountDisclosure: Equatable {
-    /// スレッドの一覧（か、未読が無いことの表示）を出すか。トークンが「取得中」か「使える」で、取得の状態が一覧を出すとき
+    /// スレッドの一覧（か、未読の通知が無いことを示す表示）を出すか。畳むものはこの一覧だけなので、畳めるのもこのときだけ。
+    /// トークンが「取得中」か「使える」で、取得の状態が一覧を出すとき
     let showsThreads: Bool
-    /// 畳めるか。畳むものはスレッドの一覧だけなので、一覧を出しているときだけ畳める
-    let isCollapsible: Bool
     /// 畳んで表示しているか（畳めないときは、畳んだ状態を覚えていても false）
     let isCollapsed: Bool
-    /// 畳んだ見出しに出す件数（畳んでいない、またはスレッドが無いときは nil）
-    let collapsedCount: Int?
 
     init(tokenState: TokenState, feed: FeedState?, isStoredCollapsed: Bool) {
         showsThreads =
@@ -269,13 +266,7 @@ struct AccountDisclosure: Equatable {
             case .fetching, .ready: feed?.phase.showsThreads == true
             case .unavailable, .disabled: false
             }
-        isCollapsible = showsThreads
-        isCollapsed = isCollapsible && isStoredCollapsed
-        if isCollapsed, let count = feed?.threads.count, count > 0 {
-            collapsedCount = count
-        } else {
-            collapsedCount = nil
-        }
+        isCollapsed = showsThreads && isStoredCollapsed
     }
 }
 
