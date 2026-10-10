@@ -73,7 +73,7 @@
 
 `AccountDiscovering` に `func ghDiagnostics() async -> GhDiagnostics` を足す。`AccountDiscovery` は `discover` の中で、`locate` の結果（`GhLocation?`）、確かめたバージョン、使う設定ディレクトリ（`GhConfigDirectory.Resolved?`）を `lastGhDiagnostics` に書く。途中で返る（gh が見つからない、上書きの設定ディレクトリが使えない）ときは、その先の値を `nil` にして書く（前の読み直しの値を残さない）。`AccountStore.reload` は `discovery.reload` が終わった後に `ghDiagnostics()` を読み、`@Observable` な `gh: GhDiagnostics` に入れる。Diagnostics タブはこの値を読むだけなので、タブを開いても gh は実行されない。
 
-バージョンを毎回取り直さないために、`verifiedGhPath` と一緒に `verifiedVersion` を持つ。`verifyVersion` が `gh --version` を実行しないで返る（同じパスで確かめ済み）ときは `verifiedVersion` を使う。古いバージョンのときは `verifiedGhPath` を `nil` にする今の動きを変えず、読んだバージョンは `lastGhDiagnostics` に入れる。
+バージョンを毎回取り直さないために、確かめた gh のパスとバージョンを `verifiedGh: (path, version)?` にまとめて持つ。`verifyVersion` が `gh --version` を実行しないで返る（同じパスで確かめ済み）ときは、そのバージョンを使う。`hosts.yml` を読めないときなど、バージョンを確かめる前に終わる読み直しでも、同じパスなら確かめ済みのバージョンを記録する。古いバージョンのときは確かめた gh を持たない今の動きを変えず、読んだバージョンは `lastGhDiagnostics` に入れる。
 
 `GhLocator.locate` の戻り値を `GhLocation?` にし、見つけ方を `override` / `standardLocation` / `loginShell` で返す。`GhConfigDirectory.resolve` は `Resolved`（`url` と `source`）を返すようにし、`AccountDiscovery` は既定の設定ディレクトリを `Resolved` で持つ。上書きのときの `source` は `override`。
 
