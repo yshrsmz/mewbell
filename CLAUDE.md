@@ -5,7 +5,7 @@ macOS のメニューバーに常駐し、複数の GitHub アカウント（git
 - 言語: Swift 6 / SwiftUI（必要箇所のみ AppKit）
 - 対応 OS: macOS 26 以上
 - App Sandbox: 無効（gh をサブプロセス実行するため）
-- 配布: public リポジトリ・MIT。v1 は自分用のローカルビルド。署名・notarize は M5 まで扱わない
+- 配布: public リポジトリ・MIT。GitHub Releases の zip と自分の Homebrew tap（`yshrsmz/homebrew-tap`）の Cask。署名は ad-hoc のままで notarize はせず、自動更新（Sparkle など）も入れない。リリースは release-please と `.github/workflows/release.yml` で自動化している（`openspec/specs/distribution/`）
 - Bundle ID: `com.codingfeline.mewbell`
 
 ## 開発の進め方（OpenSpec）
@@ -47,13 +47,15 @@ Mewbell/
 bash scripts/build.sh            # build/Debug/Mewbell.app を作る（Release は引数に Release）
 xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test
 bash scripts/run.sh              # ビルドして起動する（起動中の Mewbell は終了させる）
+bash scripts/package-release.sh 0.1.0   # 配布物（zip と SHA-256）を build/dist/0.1.0/ に作る。リリースの CI と同じ処理
+bash scripts/tests/verify-app-test.sh    # 配布物の署名・entitlement の検査（scripts/lib/verify-app.sh）のテスト
 
 # push 前の確認: 警告をエラー扱いにして Debug と Release をビルドする
 xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug MEWBELL_WARNINGS_AS_ERRORS=YES build
 xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEWBELL_WARNINGS_AS_ERRORS=YES build
 ```
 
-- 確認は `bash scripts/lint.sh`（`swift-format lint` と `swiftlint`）。整形は `bash scripts/format.sh`。CI（GitHub Actions）は macOS ランナーが高価なので ubuntu だけを使い、lint と `openspec validate` だけを回す。`xcodebuild` のビルドとテストは CI で回らないので、push 前に手元で必ず通す（テスト、lint、警告をエラー扱いにした Debug と Release のビルド）
+- 確認は `bash scripts/lint.sh`（`swift-format lint` と `swiftlint`）。整形は `bash scripts/format.sh`。CI（GitHub Actions）は macOS ランナーが高価なので ubuntu だけを使い、lint と `openspec validate` だけを回す。macOS ランナーを使うのはリリースのワークフロー（`release.yml` と homebrew-tap のワークフロー）だけ。`xcodebuild` のビルドとテストは PR の CI で回らないので、push 前に手元で必ず通す（テスト、lint、警告をエラー扱いにした Debug と Release のビルド）
 - プロジェクトは Xcode 27.2 以降の JSON 形式（`project.xcproj`）。`project.pbxproj` には戻さない。ターゲット追加・ビルド設定の変更は `project.xcproj` を直接編集してよいが、編集後は必ず `xcodebuild` で開けることを確認する
 - `DerivedData`・`build/`・`xcuserdata/` はコミットしない
 - `SWIFT_APPROACHABLE_CONCURRENCY` が有効なので、nonisolated の async 関数は呼び出し元の actor の上で動く。テストの fake で `Thread.sleep` などの同期的な待ちを入れると、その actor（`AccountPoller` など）が塞がり、テストが止まる。応答を待たせたいときは async で中断させる（`FakeHTTPTransport` の `pausedMethod` を参照）

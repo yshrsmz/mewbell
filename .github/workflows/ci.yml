@@ -2,6 +2,7 @@ name: CI
 
 # macOS ランナーは高価なので、CI は ubuntu で動く範囲（lint と OpenSpec の検証）だけにする。
 # xcodebuild のビルドとテストは手元で実行する（README・tasks.md の最終確認を参照）。
+# macOS ランナーを使うのはリリースのワークフロー（release.yml）だけ。
 
 on:
   pull_request:

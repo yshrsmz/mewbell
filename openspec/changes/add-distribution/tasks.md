@@ -21,14 +21,14 @@
 
 - [x] 4.1 `release-please-config.json` と `.release-please-manifest.json` を置く（D1）。確認: release-please の CLI（`npx` で一時的に固定版を実行するか、Action の dry-run）で、`project.xcproj` の印の中の 2 つの値と `version.txt`・`CHANGELOG.md` が更新対象になることを確かめる。最初の Release PR を `0.1.0` にする方法を決めて design の Open Question を閉じる。結果: マニフェスト `0.0.0` だけでは `1.0.0` になったので `initial-version: "0.1.0"` を足し、dry-run で `release 0.1.0` になることを確かめた
 - [x] 4.2 `.github/workflows/release.yml` を作る（D3）。Action は公開から 7 日以上経った版のコミット SHA で固定し、`gh api repos/<owner>/<repo>/releases` で公開日を確かめる。`${{ }}` の値は `env:` を通して使う。確認: `actionlint`（mise で固定して入れる場合はバージョンを固定する。入れない場合は差分を読む）で問題が無く、ワークフローの既定が `contents: read`、`build` ジョブだけが `contents: write`、App のトークンの範囲が D3 のとおりであることを差分で確かめる 結果: 手元の mise に入っていた actionlint 1.7.12 を `mise exec` で実行して通した（mise.toml には足していない）。プレビューのラベル `xcode-27` は `.github/actionlint.yaml` に登録した
-- [ ] 4.3 `xcode-27` のラベルと `/Applications/Xcode_27.2_beta_2.app` のビルド番号を、本番の前に確かめる。`workflow_dispatch` だけで動く一時的なワークフローを作業ブランチに置き、`xcodebuild -version` と `bash scripts/tests/verify-app-test.sh` と `bash scripts/package-release.sh 0.1.0` を実行する（添付・公開はしない）。確認: ジョブが 60 分以内に走り切り、ビルド番号が `27B5028f`、検査のテストと配布物の作成が通る。確かめたら一時的なワークフローを消す
+- [x] 4.3 `xcode-27` のラベルと `/Applications/Xcode_27.2_beta_2.app` のビルド番号を、本番の前に確かめる。`workflow_dispatch` だけで動く一時的なワークフローを作業ブランチに置き、`xcodebuild -version` と `bash scripts/tests/verify-app-test.sh` と `bash scripts/package-release.sh 0.1.0` を実行する（添付・公開はしない）。確認: ジョブが 60 分以内に走り切り、ビルド番号が `27B5028f`、検査のテストと配布物の作成が通る。確かめたら一時的なワークフローを消す。結果: `workflow_dispatch` は既定のブランチにあるワークフローしか動かせないので、一時的なブランチへの push で動かした。イメージは `xcode-27-arm64/20261006.0244`（macOS 27.0.1、arm64）で、Xcode のビルド番号 `27B5028f`、373 件のテスト、検査のテスト、配布物の作成が通った（約 4 分）。最初の実行では、ランナーの `/bin/bash`（3.2）で全角文字の直前の `$version` などが変数名の一部と読まれて落ちたので、`${version}` の形に直した
 - [ ] 4.4 homebrew-tap に `.github/templates/mewbell.rb.template`（2.2 のコピー）、`.github/workflows/update-mewbell.yml`、`.github/workflows/ci.yml` を作る（D5）。Action は SHA で固定し、既定の `permissions: contents: read`。確認: (a) `gh workflow run` が使えないので、`gh api repos/yshrsmz/homebrew-tap/dispatches` で `version: 0.0.0-bad` を送ると形式のエラーで失敗し PR ができない、(b) 存在しないバージョン `9.9.9` を送るとダウンロードで失敗する、(c) 手で作った Cask の PR で `ci` が走って通る。(a)(b) の dispatch は自分の gh の認証で送る（ユーザーに確かめてから）
 
 ## 5. ドキュメントと規則
 
-- [ ] 5.1 README に「インストール」の節を足す: Homebrew（`brew tap yshrsmz/tap`、`brew trust`、`brew install --cask yshrsmz/tap/mewbell`）、Releases の zip から `/Applications` に入れる方法、初回起動で Gatekeeper に止められたときの「このまま開く」、更新（更新のたびに同じ操作が要ること）、アンインストール（`--zap` を含む）。冒頭の「開発中」の注記を M5 に合わせる。確認: 差分を読み、`spctl --master-disable` や quarantine を消す手順を勧めていない
-- [ ] 5.2 README の「開発」に「リリース」の節を足す: release-please の流れ、Release PR のマージ、失敗したときの `gh run rerun --failed` と、コードを直すときの draft とタグの消し方、Xcode のイメージが変わったときに `XCODE_BUILD` とパスを上げること、App の鍵が漏れたときの失効と作り直し、手元での `package-release.sh` の使い方。確認: 差分を読み、design の D3 と D6 と食い違いが無い
-- [ ] 5.3 CLAUDE.md と `.claude/rules/security.md` を D7 のとおりに改め、SETUP.md の M5 の行から Sparkle を外す。確認: 差分を読み、`openspec/config.yaml` の context と、`.github/workflows/ci.yml` の冒頭のコメント（macOS ランナーを使わない理由）と食い違いが無い（必要ならコメントも直す）
+- [x] 5.1 README に「インストール」の節を足す: Homebrew（`brew tap yshrsmz/tap`、`brew trust`、`brew install --cask yshrsmz/tap/mewbell`）、Releases の zip から `/Applications` に入れる方法、初回起動で Gatekeeper に止められたときの「このまま開く」、更新（更新のたびに同じ操作が要ること）、アンインストール（`--zap` を含む）。冒頭の「開発中」の注記を M5 に合わせる。確認: 差分を読み、`spctl --master-disable` や quarantine を消す手順を勧めていない 結果: `brew trust --cask yshrsmz/tap/mewbell` が Cask の公開前に通るかは確かめられないので、6.3 で確かめて直す
+- [x] 5.2 README の「開発」に「リリース」の節を足す: release-please の流れ、Release PR のマージ、失敗したときの `gh run rerun --failed` と、コードを直すときの draft とタグの消し方、Xcode のイメージが変わったときに `XCODE_BUILD` とパスを上げること、App の鍵が漏れたときの失効と作り直し、手元での `package-release.sh` の使い方。確認: 差分を読み、design の D3 と D6 と食い違いが無い
+- [x] 5.3 CLAUDE.md と `.claude/rules/security.md` を D7 のとおりに改め、SETUP.md の M5 の行から Sparkle を外す。確認: 差分を読み、`openspec/config.yaml` の context と、`.github/workflows/ci.yml` の冒頭のコメント（macOS ランナーを使わない理由）と食い違いが無い（必要ならコメントも直す） 結果: security.md の「依存とサプライチェーン」を 3 項目に分け、`repository_dispatch` などで受け取った値を検証して `env:` で渡す約束も足した。`ci.yml` の冒頭のコメントに、macOS ランナーを使うのは `release.yml` だけであることを足した
 
 ## 6. 最初のリリースと実機での確認
 
@@ -38,8 +38,8 @@
 
 ## 7. 最終確認
 
-- [ ] 7.1 ビルドが通る: `MEWBELL_WARNINGS_AS_ERRORS=YES` を付けた Debug と Release の `xcodebuild build` が成功する
-- [ ] 7.2 テストが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test`、`bash scripts/lint.sh`、`bash scripts/tests/verify-app-test.sh`、`npx openspec validate --all --strict` が成功する
+- [x] 7.1 ビルドが通る: `MEWBELL_WARNINGS_AS_ERRORS=YES` を付けた Debug と Release の `xcodebuild build` が成功する
+- [x] 7.2 テストが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test`、`bash scripts/lint.sh`、`bash scripts/tests/verify-app-test.sh`、`npx openspec validate --all --strict` が成功する
 - [ ] 7.3 手元で起動して確認した: `bash scripts/package-release.sh 0.1.0` の zip を展開した `Mewbell.app` を起動し、メニューバーの猫、通知の取得、Diagnostics のバージョン `0.1.0` を確かめる
 
 ## 8. 別コンテキストでのレビュー

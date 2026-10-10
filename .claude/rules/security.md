@@ -37,7 +37,9 @@ Mewbell はユーザーの gh 認証情報（GitHub / GHE アカウントのト�
 ## 依存とサプライチェーン
 
 - 外部依存は CLAUDE.md の方針どおり最小限にする。追加するときはバージョンを完全に固定し、`Package.resolved` をコミットする
-- GitHub Actions はタグではなくコミット SHA で固定し、ワークフローには `permissions: contents: read` を明示する。CI にシークレットを渡さない。`pull_request_target` を使わない
+- GitHub Actions はタグではなくコミット SHA で固定し、ワークフローの既定には `permissions: contents: read` を明示する。書き込みは要るジョブにだけ、要る権限を与える。`pull_request_target` を使わない
+- CI にシークレットを渡さない。例外はリリースのワークフロー（mewbell の `release.yml` と homebrew-tap の Cask の更新）で使う GitHub App の秘密鍵だけで、`main` からの実行に限定した Environment `release` に置く。PAT は使わない。App のトークンは `actions/create-github-app-token` でジョブごとに発行し、対象のリポジトリと権限をそのジョブに要るものに絞る
+- `repository_dispatch` などで外から受け取った値は信用しない。形式を検証してから使い、`${{ }}` でシェルに直接埋め込まずに `env:` を通して渡す
 
 ## レビュー
 
