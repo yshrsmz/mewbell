@@ -7,12 +7,13 @@ import os
 @MainActor
 @Observable
 final class NotificationStore {
-    /// ポーラーを作る。`participating` は「参加しているスレッドだけにする」の設定。`initialPhase` があれば、
+    /// ポーラーを作る。`participating` は「参加しているスレッドだけにする」の設定。`initialPhase` は作り直す前の止まった状態、
+    /// `carriedWait` は作り直す前の取得の待ち。
     /// 作り直す前の止まった状態かレート制限の待ちを持ち越す。`onUpdate` はポーラーの状態が変わるたびに呼ばれる。
     typealias PollerFactory =
         @MainActor (
             _ account: Account, _ endpoints: APIEndpoints, _ participating: Bool, _ initialPhase: FeedPhase?,
-            _ firstFetchNotBefore: Date?,
+            _ carriedWait: CarriedWait?,
             _ onUpdate: @escaping @Sendable (FeedState) async -> Void
         )
         -> AccountPoller
@@ -32,7 +33,7 @@ final class NotificationStore {
     /// ポーラーがまだ無いアカウントで、既読にするスレッド（起動の直後に通知をクリックされたとき）
     @ObservationIgnored private var pendingReads: [AccountID: Set<String>] = [:]
     /// 止めたポーラーの、次の取得を早めてよい時刻（無効にしてすぐ有効に戻したときに間隔やレート制限の待ちを抜けないように）
-    @ObservationIgnored private var notBefore: [AccountID: Date] = [:]
+    @ObservationIgnored private var carriedWaits: [AccountID: CarriedWait] = [:]
 
     /// `makePoller` が nil のときはポーリングしない（テストのホストや SwiftUI プレビュー用）。
     /// `openURL` は既定値を持たせない（テストで本物のブラウザを開かないように、呼び出し元に必ず渡させる）。
@@ -54,10 +55,10 @@ final class NotificationStore {
     {
         let client = GitHubAPIClient(transport: URLSessionTransport())
         return NotificationStore(
-            makePoller: { account, endpoints, participating, initialPhase, firstFetchNotBefore, onUpdate in
+            makePoller: { account, endpoints, participating, initialPhase, carriedWait, onUpdate in
                 AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
-                    participating: participating, initialPhase: initialPhase, firstFetchNotBefore: firstFetchNotBefore,
+                    participating: participating, initialPhase: initialPhase, carriedWait: carriedWait,
                     onUpdate: onUpdate)
             }, notifier: notifier, openURL: { NSWorkspace.shared.open($0) },
             preferences: { settings.preferences(for: $0) })
@@ -78,8 +79,9 @@ final class NotificationStore {
         let active = statuses.filter { $0.tokenState != .disabled }
         let keptIDs = Set(active.map(\.id))
         for id in pollers.keys where !keptIDs.contains(id) {
-            pollers.removeValue(forKey: id)?.poller.stop()
-            notBefore[id] = feeds[id].flatMap(Self.nextFetchNotBefore)
+            let entry = pollers.removeValue(forKey: id)
+            entry?.poller.stop()
+            carriedWaits[id] = carriedWait(of: id, startedWith: entry?.carriedWait)
             feeds[id] = nil
             notifier?.accountRemoved(id)
         }
@@ -97,12 +99,12 @@ final class NotificationStore {
     /// 「参加しているスレッドだけにする」を切り替えたとき。ポーラーを止めて一覧を捨て、新しい設定で最初の取得から
     /// 始め直す（前の `Last-Modified` や隠しているスレッドは別の一覧のものなので持ち越さない）。トークンは捨てない。
     /// 「スコープ不足」「認証エラー」で止まっているアカウントは、止まったまま作り直す（再開は再読み込みのときだけ）。
-    /// レート制限で待っているアカウントは、前の再試行の時刻まで最初の取得を待つ（制限を早めない）。
+    /// それ以外は、取得の待ちを持ち越す（`CarriedWait`）。
     func restart(_ id: AccountID) {
         guard let entry = pollers.removeValue(forKey: id) else { return }
         entry.poller.stop()
-        let initialPhase = feeds[id].flatMap { $0.phase.isStopped || $0.phase.isRateLimited ? $0.phase : nil }
-        notBefore[id] = feeds[id].flatMap(Self.nextFetchNotBefore)
+        let initialPhase = feeds[id].flatMap { $0.phase.isStopped ? $0.phase : nil }
+        carriedWaits[id] = carriedWait(of: id, startedWith: entry.carriedWait)
         feeds[id] = nil
         notifier?.resetBaseline(id)
         startPolling(entry.account, initialPhase: initialPhase)
@@ -117,19 +119,17 @@ final class NotificationStore {
         let generation = nextGeneration
         nextGeneration += 1
         let id = account.id
-        let firstFetchNotBefore = notBefore.removeValue(forKey: id).flatMap { $0 > Date() ? $0 : nil }
-        let poller = makePoller(
-            account, endpoints, preferences(id).participatingOnly, initialPhase, firstFetchNotBefore
-        ) { [weak self] state in
+        let carriedWait = carriedWaits.removeValue(forKey: id).flatMap { $0.until > Date() ? $0 : nil }
+        let poller = makePoller(account, endpoints, preferences(id).participatingOnly, initialPhase, carriedWait) {
+            [weak self] state in
             await self?.apply(state, for: id, generation: generation)
         }
-        pollers[id] = PollerEntry(poller: poller, generation: generation, account: account)
+        pollers[id] = PollerEntry(poller: poller, generation: generation, account: account, carriedWait: carriedWait)
         if let initialPhase {
             feeds[id] = FeedState(phase: initialPhase, threads: [])
-            guard initialPhase.isRateLimited else { return }
-        } else {
-            feeds[id] = .loading
+            return
         }
+        feeds[id] = carriedWait?.initialPhase.map { FeedState(phase: $0, threads: []) } ?? .loading
         Self.logger.info("Started polling \(id)")
         for threadID in pendingReads.removeValue(forKey: id) ?? [] {
             Task { await poller.perform(.read(threadID: threadID)) }
@@ -137,15 +137,14 @@ final class NotificationStore {
         poller.start()
     }
 
-    /// 止めたポーラーの代わりに作るポーラーの最初の取得を、早めてよい時刻。失敗やレート制限で待っていればその再試行の時刻、
-    /// 取得できていれば最後の取得から、取得中なら今から、再読み込みと同じ下限（`RefreshWaiters.minimumInterval`）がたった時刻。
-    private static func nextFetchNotBefore(_ feed: FeedState) -> Date? {
-        switch feed.phase {
-        case .retrying(let nextAttempt, _): nextAttempt
-        case .loaded(let updatedAt): updatedAt.addingTimeInterval(RefreshWaiters.minimumInterval)
-        case .loading: Date().addingTimeInterval(RefreshWaiters.minimumInterval)
-        case .scopeInsufficient, .unauthorized: nil
-        }
+    /// 止めるポーラーの代わりに作るポーラーに持ち越す待ち。止めるポーラー自身が持ち越した待ちをまだ待っている
+    /// （最初の取得をしていない）なら、その待ちも残す（作り直しを重ねて待ちが縮まないように）。
+    private func carriedWait(of id: AccountID, startedWith previous: CarriedWait?) -> CarriedWait? {
+        let current = feeds[id].flatMap { CarriedWait(from: $0, now: Date()) }
+        guard let previous, previous.until > Date(), feeds[id]?.threads.isEmpty != false,
+            feeds[id]?.phase == .loading || feeds[id]?.phase.isRateLimited == true
+        else { return current }
+        return previous.merged(with: current)
     }
 
     /// 再読み込み: 全アカウントを次の予定を待たずに `If-Modified-Since` なしで取得し、「スコープ不足」「認証エラー」で
@@ -239,4 +238,6 @@ private struct PollerEntry {
     let poller: AccountPoller
     let generation: Int
     let account: Account
+    /// 作ったときに持ち越した待ち
+    let carriedWait: CarriedWait?
 }

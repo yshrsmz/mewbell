@@ -11,6 +11,11 @@ struct RefreshWaiters {
     /// `attempt` 回目の試みが終わったら起こす
     private var waiters: [(attempt: Int, continuation: CheckedContinuation<Void, Never>)] = []
 
+    /// `lastAttemptStartedAt` は、作り直す前のポーラーが取得を始めた時刻（試みの数には数えない）。
+    init(lastAttemptStartedAt: Date? = nil) {
+        self.lastAttemptStartedAt = lastAttemptStartedAt
+    }
+
     var isEmpty: Bool { waiters.isEmpty }
     var count: Int { waiters.count }
 

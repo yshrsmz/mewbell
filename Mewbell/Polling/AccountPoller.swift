@@ -16,7 +16,7 @@ actor AccountPoller {
     private let client: GitHubAPIClient
     private let tokens: any TokenProviding
     private let participating: Bool  // `participating=true` で取得する（切り替えたらポーラーを作り直す）
-    private let firstFetchNotBefore: Date?  // 最初の取得をこの時刻まで待つ（作り直す前の間隔や待ちを持ち越す）
+    private let firstFetchNotBefore: Date?  // 最初の取得をこの時刻まで待つ（`CarriedWait.until`）
     private let sleep: Sleep
     private let now: @Sendable () -> Date
     private let onUpdate: @Sendable (FeedState) async -> Void
@@ -53,7 +53,7 @@ actor AccountPoller {
 
     init(
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,
-        participating: Bool = false, initialPhase: FeedPhase? = nil, firstFetchNotBefore: Date? = nil,
+        participating: Bool = false, initialPhase: FeedPhase? = nil, carriedWait: CarriedWait? = nil,
         sleep: @escaping Sleep = { try await Task.sleep(for: $0) }, now: @escaping @Sendable () -> Date = { Date() },
         onUpdate: @escaping @Sendable (FeedState) async -> Void
     ) {
@@ -62,9 +62,10 @@ actor AccountPoller {
         self.client = client
         self.tokens = tokens
         self.participating = participating
-        // 作り直す前の止まった状態（再読み込みでの再開を待つ）かレート制限の待ちの表示を持ち越す
-        state = initialPhase.map { FeedState(phase: $0, threads: []) } ?? .loading
-        self.firstFetchNotBefore = firstFetchNotBefore
+        // 作り直す前の止まった状態（再読み込みでの再開を待つ）か、取得の待ち（`CarriedWait`）を持ち越す
+        state = (initialPhase ?? carriedWait?.initialPhase).map { FeedState(phase: $0, threads: []) } ?? .loading
+        firstFetchNotBefore = carriedWait?.until
+        refreshWaiters = RefreshWaiters(lastAttemptStartedAt: carriedWait?.lastAttemptStartedAt)
         self.sleep = sleep
         self.now = now
         self.onUpdate = onUpdate

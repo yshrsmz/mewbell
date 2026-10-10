@@ -144,7 +144,8 @@ struct GhSettingsView: View {
             }
             Section {
                 PathOverrideField(
-                    title: "gh config directory", placeholder: "GH_CONFIG_DIR, XDG_CONFIG_HOME/gh, or ~/.config/gh",
+                    title: "gh config directory",
+                    placeholder: "Uses GH_CONFIG_DIR, XDG_CONFIG_HOME/gh, or ~/.config/gh",
                     unusableMessage:
                         "Mewbell cannot use this directory. It must be your own directory that others cannot modify.",
                     path: settings.ghConfigDirectoryOverride, choosesDirectories: true,
@@ -152,7 +153,7 @@ struct GhSettingsView: View {
                     commit: { settings.setGhConfigDirectoryOverride($0) })
             } footer: {
                 Text(
-                    "Set this when gh uses a different GH_CONFIG_DIR in your shell. Mewbell also passes it to gh. Changing it reloads every account."
+                    "Enter an absolute path (not ~/…). Set this when gh uses a different GH_CONFIG_DIR in your shell. Mewbell also passes it to gh. Changing it reloads every account."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -224,8 +225,9 @@ struct PathOverrideField: View {
         panel.allowsMultipleSelection = false
         panel.showsHiddenFiles = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        text = url.path
         commit(url.path)
+        // 同じパスを選び直したときも確かめ直す（`path` が変わらなければ `onChange` が呼ばれないので）
+        update(url.path)
     }
 }
 

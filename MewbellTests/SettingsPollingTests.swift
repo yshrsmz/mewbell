@@ -113,13 +113,13 @@ struct NotificationStoreSettingsTests {
         let client = GitHubAPIClient(transport: transport)
         return NotificationStore(
             makePoller: {
-                [tokens, sleeper, made] account, endpoints, participating, initialPhase, firstFetchNotBefore, onUpdate
+                [tokens, sleeper, made] account, endpoints, participating, initialPhase, carriedWait, onUpdate
                 in
                 made.withLock { $0.append("\(account.id) \(participating)") }
                 return AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
                     participating: participating, initialPhase: initialPhase,
-                    firstFetchNotBefore: firstFetchNotBefore, sleep: sleeper.sleep, onUpdate: onUpdate)
+                    carriedWait: carriedWait, sleep: sleeper.sleep, onUpdate: onUpdate)
             }, notifier: notifier, openURL: { [opened] url in opened.withLock { $0.append(url) } },
             preferences: { [settings] in settings.preferences(for: $0) })
     }
@@ -284,11 +284,23 @@ struct NotificationStoreSettingsTests {
         store.sync(with: .accounts([status(alice, .disabled)]))
         let sleeps = sleeper.durations.count
         store.sync(with: .accounts([status(alice, .ready)]))
-        // 有効に戻しても、無効にする前の再試行の時刻まで取得しない
+        // 有効に戻しても、無効にする前の再試行の時刻まで取得せず、レート制限の待ちとして表示する
         await sleeper.waitForSleeps(sleeps + 1)
         #expect(transport.requests.count == count)
         let carried = sleeper.durations.last ?? .zero
         #expect(carried > .seconds(100) && carried <= .seconds(120))
+        #expect(store.feeds[alice]?.phase.isRateLimited == true)
+        // 再読み込みでも早めない
+        store.refresh()
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(transport.requests.count == count)
+        // 待ちの途中で作り直しても、待ちは縮まない
+        settings.setParticipatingOnly(true, for: alice)
+        store.restart(alice)
+        await sleeper.waitForSleeps(sleeps + 2)
+        #expect(transport.requests.count == count)
+        let again = sleeper.durations.last ?? .zero
+        #expect(again > .seconds(100) && again <= .seconds(120))
         store.stopAll()
     }
 
@@ -299,10 +311,39 @@ struct NotificationStoreSettingsTests {
         store.restart(alice)
         await sleeper.waitForSleeps(3)
         #expect(gets("alice").count == aliceGets)
-        // 作り直したポーラーが最初の取得を待っている間でも、再読み込みで取得する
+        // 作り直したポーラーが最初の取得を待っている間でも、再読み込みで取得する。ただし前の取得の開始から 10 秒は空ける
         store.refresh()
-        await waitUntil { self.gets("alice").count > aliceGets }
+        await sleeper.waitForSleeps(4)
+        #expect(gets("alice").count == aliceGets)
+        let floor = sleeper.durations.last ?? .zero
+        #expect(floor > .zero && floor <= .seconds(10))
+        await advance(until: { self.gets("alice").count > aliceGets })
         #expect(gets("alice").count > aliceGets)
         store.stopAll()
+    }
+}
+
+struct CarriedWaitTests {
+    private let now = Date(timeIntervalSince1970: 1_000_000)
+
+    @Test func carriesTheRetryOrTheReloadFloor() {
+        let rateLimited = FeedState(phase: .retrying(nextAttempt: now + 120, rateLimited: true), threads: [])
+        #expect(
+            CarriedWait(from: rateLimited, now: now)
+                == CarriedWait(until: now + 120, rateLimited: true, lastAttemptStartedAt: nil))
+        let loaded = FeedState(phase: .loaded(updatedAt: now - 2), threads: [])
+        #expect(
+            CarriedWait(from: loaded, now: now)
+                == CarriedWait(until: now + 8, rateLimited: false, lastAttemptStartedAt: now - 2))
+        #expect(CarriedWait(from: FeedState(phase: .scopeInsufficient, threads: []), now: now) == nil)
+    }
+
+    @Test func mergesToTheLaterWait() {
+        let rateLimited = CarriedWait(until: now + 120, rateLimited: true, lastAttemptStartedAt: nil)
+        let floor = CarriedWait(until: now + 10, rateLimited: false, lastAttemptStartedAt: now)
+        #expect(
+            rateLimited.merged(with: floor)
+                == CarriedWait(until: now + 120, rateLimited: true, lastAttemptStartedAt: now))
+        #expect(floor.merged(with: nil) == floor)
     }
 }
