@@ -68,6 +68,9 @@ struct NotificationThread: Hashable, Sendable, Identifiable {
     /// `subject.url`（API の URL。Web で開くときは `ThreadWebURL` で組み立て直す）
     let subjectURL: URL?
     let repository: RepositoryName
+    /// 一覧に出す Issue・Pull request の番号。取得したときに `ThreadWebURL.subjectNumber` で求める。
+    /// 開く URL と同じ検証を通らなければ nil
+    var subjectNumber: String?
 }
 
 extension NotificationThread {

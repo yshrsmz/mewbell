@@ -3,8 +3,6 @@ import SwiftUI
 /// スレッドの行。クリックでブラウザで開いて既読にする。マウスを載せると、開かずに既読・Done にするボタンが出る。
 struct ThreadRow: View {
     let thread: NotificationThread
-    /// Issue・Pull request の番号（`ThreadWebURL.subjectNumber`）。無ければ出さない
-    let number: String?
     let open: () -> Void
     let markRead: () -> Void
     let markDone: () -> Void
@@ -13,11 +11,10 @@ struct ThreadRow: View {
 
     /// `isHovering` はプレビューでボタンを出しておくため。
     init(
-        thread: NotificationThread, number: String?, isHovering: Bool = false, open: @escaping () -> Void,
+        thread: NotificationThread, isHovering: Bool = false, open: @escaping () -> Void,
         markRead: @escaping () -> Void, markDone: @escaping () -> Void
     ) {
         self.thread = thread
-        self.number = number
         self.open = open
         self.markRead = markRead
         self.markDone = markDone
@@ -36,7 +33,7 @@ struct ThreadRow: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     HStack(spacing: 4) {
-                        if let number {
+                        if let number = thread.subjectNumber {
                             Text("#\(number)")
                                 .monospacedDigit()
                             Text("·")
@@ -237,17 +234,19 @@ struct RelativeTimeText: View {
 }
 
 #Preview("Thread row hovered") {
-    let thread = RepositoryName(owner: "octo", name: "app").map { repository in
-        NotificationThread(
-            id: "1", reason: "review_requested", updatedAt: Date().addingTimeInterval(-300),
-            title: "Make the menu bar popover remember its scroll position across openings and restarts",
-            kind: .pullRequest, subjectURL: nil, repository: repository)
+    func thread(number: String?) -> NotificationThread? {
+        RepositoryName(owner: "octo", name: "app").map { repository in
+            NotificationThread(
+                id: "1", reason: "review_requested", updatedAt: Date().addingTimeInterval(-300),
+                title: "Make the menu bar popover remember its scroll position across openings and restarts",
+                kind: .pullRequest, subjectURL: nil, repository: repository, subjectNumber: number)
+        }
     }
     return VStack(alignment: .leading) {
-        if let thread {
-            ThreadRow(thread: thread, number: nil, open: {}, markRead: {}, markDone: {})
-            ThreadRow(thread: thread, number: "1234", open: {}, markRead: {}, markDone: {})
-            ThreadRow(thread: thread, number: "1234", isHovering: true, open: {}, markRead: {}, markDone: {})
+        if let plain = thread(number: nil), let numbered = thread(number: "1234") {
+            ThreadRow(thread: plain, open: {}, markRead: {}, markDone: {})
+            ThreadRow(thread: numbered, open: {}, markRead: {}, markDone: {})
+            ThreadRow(thread: numbered, isHovering: true, open: {}, markRead: {}, markDone: {})
         }
     }
     .padding()

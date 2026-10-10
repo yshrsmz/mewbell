@@ -45,6 +45,12 @@ enum DiscoveryState: Sendable, Equatable {
         return statuses.enabled
     }
 
+    /// 状態を残すアカウント（無効にしていないアカウント。「アカウントあり」以外は空）。読み直しの途中は nil。
+    /// 消えたアカウントの状態（出ている通知、送っていない既読化、一覧の折りたたみ）はこれで捨てる。
+    var retainedAccountIDs: Set<AccountID>? {
+        self == .checking ? nil : Set(enabledStatuses.map(\.id))
+    }
+
     /// `accounts` を `tokenState` にし、`disabled` に入るものを `.disabled` にした「アカウントあり」。
     static func accounts(
         _ accounts: [Account], disabled: Set<AccountID>, tokenState: (Account) -> TokenState

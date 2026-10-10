@@ -116,7 +116,11 @@ struct GitHubAPIClient: Sendable {
                 return .failed(.malformedBody)
             }
             // ページの取得の間に新着があると、ページの境目がずれて同じスレッドが 2 回返ることがある
-            threads += pageThreads.filter { seenIDs.insert($0.id).inserted }
+            for var thread in pageThreads where seenIDs.insert(thread.id).inserted {
+                // 一覧の番号は取得したときに 1 回だけ求める（描画のたびに `subject.url` を解析しない）
+                thread.subjectNumber = ThreadWebURL.subjectNumber(for: thread, endpoints: endpoints)
+                threads.append(thread)
+            }
             let first = firstResponse ?? response
             firstResponse = first
             let next = LinkHeader.nextURL(in: response.header("Link"))

@@ -4,7 +4,6 @@ import SwiftUI
 struct RepositoryGroupView: View {
     let group: RepositoryGroup
     let account: AccountID
-    let endpoints: APIEndpoints?
     let expansion: ListExpansion
     let actions: ThreadListActions
 
@@ -30,7 +29,6 @@ struct RepositoryGroupView: View {
                 ForEach(group.threads) { thread in
                     ThreadRow(
                         thread: thread,
-                        number: endpoints.flatMap { ThreadWebURL.subjectNumber(for: thread, endpoints: $0) },
                         open: { actions.open(thread, account) },
                         markRead: { actions.markRead(thread, account) },
                         markDone: { actions.markDone(thread, account) })
@@ -52,7 +50,7 @@ struct RepositoryGroupView: View {
                 title: "Make the menu bar popover remember its scroll position across openings and restarts",
                 kind: number == nil ? .release : .pullRequest,
                 subjectURL: number.flatMap { URL(string: "https://api.github.com/repos/\(repo)/pulls/\($0)") },
-                repository: repository)
+                repository: repository, subjectNumber: number.map(String.init))
         }
     }
     let expansion = ListExpansion()

@@ -152,137 +152,65 @@ struct ThreadOpenRequestTests {
     }
 }
 
+/// `SystemNotifier` の、通知センターへの操作（新着の判定は `NotificationStoreNewThreadsTests`）。
 @MainActor
 struct SystemNotifierTests {
     private let center = FakeUserNotificationCenter()
     private let notifier: SystemNotifier
-    private let loaded = FeedPhase.loaded(updatedAt: Date(timeIntervalSince1970: 0))
 
     init() {
         notifier = SystemNotifier(center: center)
     }
 
-    private func feed(_ threads: [NotificationThread]) -> FeedState {
-        FeedState(phase: loaded, threads: threads)
-    }
-
-    @Test func postsNothingForTheFirstFetchAndClearsStaleNotifications() async throws {
+    @Test func postsNothingForTheBaselineAndClearsStaleNotifications() async {
         center.delivered.value = ["github.com/alice/1", "github.com/alice/9", "github.com/bob/9"]
-        notifier.feedChanged(for: alice, from: .loading, to: feed([try thread("1"), try thread("2")]))
+        notifier.baselineSet(for: alice, keeping: ["1", "2"])
         await notifier.waitForPendingWork()
         #expect(center.added.value.isEmpty)
         #expect(center.delivered.value == ["github.com/alice/1", "github.com/bob/9"])
     }
 
     @Test func postsNewThreadsAndRetractsGoneOnes() async throws {
-        let first = feed([try thread("1"), try thread("2")])
-        notifier.feedChanged(for: alice, from: .loading, to: first)
-        await notifier.waitForPendingWork()
         center.delivered.value = ["github.com/alice/1"]
-        let second = feed([try thread("2"), try thread("3")])
-        notifier.feedChanged(for: alice, from: first, to: second)
+        notifier.threadsChanged(for: alice, posted: [try thread("3")], retracted: ["1"])
         await notifier.waitForPendingWork()
         #expect(center.added.value.map(\.identifier) == ["github.com/alice/3"])
         #expect(center.delivered.value == ["github.com/alice/3"])
-        // 304 の後（スレッドが同じ）は何もしない
-        notifier.feedChanged(
-            for: alice, from: second, to: FeedState(phase: .loaded(updatedAt: .now), threads: second.threads))
-        await notifier.waitForPendingWork()
-        #expect(center.added.value.count == 1)
     }
 
-    @Test func ignoresChangesOfOnlyTheDiagnostics() async throws {
-        let first = feed([try thread("1")])
-        notifier.feedChanged(for: alice, from: .loading, to: first)
-        await notifier.waitForPendingWork()
-        center.delivered.value = ["github.com/alice/1"]
-        var second = first
-        second.isTruncated = true
-        second.actionFailure = ActionFailure(action: .done, kind: .httpStatus(500), occurredAt: .now)
-        second.diagnostics.nextFetchAt = .now
-        notifier.feedChanged(for: alice, from: first, to: second)
-        await notifier.waitForPendingWork()
-        #expect(center.added.value.isEmpty)
-        #expect(center.removed.value.isEmpty)
-        #expect(center.delivered.value == ["github.com/alice/1"])
-    }
-
-    @Test func makesTheBaselineAfterAFailedFirstFetch() async throws {
-        center.delivered.value = ["github.com/alice/9"]
-        let retrying = FeedState(phase: .retrying(nextAttempt: .now, rateLimited: false), threads: [])
-        notifier.feedChanged(for: alice, from: .loading, to: retrying)
-        let first = feed([])
-        notifier.feedChanged(for: alice, from: retrying, to: first)
-        await notifier.waitForPendingWork()
+    @Test func clearsTheAccountForAnEmptyBaseline() async {
         // 前回の実行の通知を掃除する
-        #expect(center.delivered.value.isEmpty)
-        notifier.feedChanged(for: alice, from: first, to: feed([try thread("1")]))
+        center.delivered.value = ["github.com/alice/9", "github.com/bob/9"]
+        notifier.baselineSet(for: alice, keeping: [])
         await notifier.waitForPendingWork()
-        #expect(center.added.value.map(\.identifier) == ["github.com/alice/1"])
+        #expect(center.delivered.value == ["github.com/bob/9"])
     }
 
-    @Test func retractsAThreadMarkedRead() async throws {
-        notifier.feedChanged(for: alice, from: .loading, to: feed([try thread("1"), try thread("2")]))
-        await notifier.waitForPendingWork()
+    @Test func retractsAThreadMarkedRead() async {
         center.delivered.value = ["github.com/alice/1", "github.com/alice/2"]
         notifier.threadRemoved("1", for: alice)
         await notifier.waitForPendingWork()
         #expect(center.delivered.value == ["github.com/alice/2"])
     }
 
-    @Test func doesNotRepostARemovedThreadThatComesBackUnchanged() async throws {
-        let first = feed([try thread("1"), try thread("2")])
-        notifier.feedChanged(for: alice, from: .loading, to: first)
-        notifier.threadRemoved("2", for: alice)
-        let afterRemoval = feed([try thread("1")])
-        // 次の取得で、同じ updated_at のまま一覧に戻っても出し直さない
-        notifier.feedChanged(for: alice, from: afterRemoval, to: first)
-        await notifier.waitForPendingWork()
-        #expect(center.added.value.isEmpty)
-    }
-
-    @Test func retractsOnlyTheAccountMarkedAllRead() async throws {
-        let aliceThreads = feed([try thread("1"), try thread("2")])
-        notifier.feedChanged(for: alice, from: .loading, to: aliceThreads)
-        notifier.feedChanged(for: bob, from: .loading, to: feed([try thread("3")]))
-        await notifier.waitForPendingWork()
+    @Test func retractsOnlyTheAccountMarkedAllRead() async {
         center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/bob/3"]
-        notifier.feedChanged(for: alice, from: aliceThreads, to: feed([]))
+        notifier.threadsChanged(for: alice, posted: [], retracted: ["1", "2"])
         await notifier.waitForPendingWork()
         #expect(center.delivered.value == ["github.com/bob/3"])
-    }
-
-    @Test func doesNothingWhileRetrying() async throws {
-        let first = feed([try thread("1")])
-        notifier.feedChanged(for: alice, from: .loading, to: first)
-        center.delivered.value = ["github.com/alice/1"]
-        notifier.feedChanged(
-            for: alice, from: first,
-            to: FeedState(phase: .retrying(nextAttempt: .now, rateLimited: false), threads: first.threads))
-        await notifier.waitForPendingWork()
-        #expect(center.delivered.value == ["github.com/alice/1"])
         #expect(center.added.value.isEmpty)
     }
 
-    @Test func retractsTheAccountWhenItStopsOrIsRemoved() async throws {
+    @Test func retractsTheAccountWhenItStopsOrIsRemoved() async {
         center.delivered.value = [
             "github.com/alice/1", "github.com/alice/2", "github.com/bob/1", "github.com/alice2/1",
         ]
-        notifier.feedChanged(for: alice, from: feed([]), to: FeedState(phase: .unauthorized, threads: []))
+        notifier.accountRemoved(alice)
         await notifier.waitForPendingWork()
         #expect(center.delivered.value == ["github.com/bob/1", "github.com/alice2/1"])
         notifier.accountRemoved(bob)
         await notifier.waitForPendingWork()
         #expect(center.delivered.value == ["github.com/alice2/1"])
-    }
-
-    @Test func startsOverAfterStopping() async throws {
-        notifier.feedChanged(for: alice, from: .loading, to: feed([try thread("1")]))
-        notifier.feedChanged(for: alice, from: feed([]), to: FeedState(phase: .unauthorized, threads: []))
-        // 再開の後の最初の取得は基準
-        notifier.feedChanged(for: alice, from: .loading, to: feed([try thread("1"), try thread("2")]))
-        await notifier.waitForPendingWork()
-        #expect(center.added.value.isEmpty)
     }
 
     @Test func retainsOnlyListedAccounts() async {

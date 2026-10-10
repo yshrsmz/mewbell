@@ -176,7 +176,6 @@ struct AccountSectionView: View {
     @ViewBuilder private func threads(_ feed: FeedState) -> some View {
         if feed.phase.showsThreads {
             let groups = NotificationGrouping.groups(from: feed.threads)
-            let endpoints = APIEndpoints(host: account.host)
             if groups.isEmpty {
                 Text("No unread notifications")
                     .font(.callout)
@@ -186,8 +185,7 @@ struct AccountSectionView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(groups) { group in
                         RepositoryGroupView(
-                            group: group, account: account.id,
-                            endpoints: endpoints, expansion: expansion, actions: actions)
+                            group: group, account: account.id, expansion: expansion, actions: actions)
                     }
                 }
                 .padding(.leading, 22)

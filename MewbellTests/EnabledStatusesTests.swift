@@ -20,4 +20,21 @@ struct EnabledStatusesTests {
     func isEmptyWithoutAccounts(_ state: DiscoveryState) {
         #expect(state.enabledStatuses.isEmpty)
     }
+
+    @Test func defersRetainingWhileChecking() {
+        #expect(DiscoveryState.checking.retainedAccountIDs == nil)
+    }
+
+    @Test(arguments: [DiscoveryState.notLoggedIn, .ghNotFound, .hostsFileUnreadable(path: "/tmp/hosts.yml")])
+    func retainsNothingWithoutAccounts(_ state: DiscoveryState) {
+        #expect(state.retainedAccountIDs == [])
+    }
+
+    @Test func retainsAccountsOtherThanDisabled() {
+        let state = DiscoveryState.accounts([
+            status("alice", .ready), status("bob", .disabled), status("carol", .unavailable),
+            status("dave", .fetching),
+        ])
+        #expect(state.retainedAccountIDs?.map(\.user).sorted() == ["alice", "carol", "dave"])
+    }
 }

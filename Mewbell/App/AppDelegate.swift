@@ -31,10 +31,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let notifier = SystemNotifier(
                 center: center, notifies: { settings.preferences(for: $0).notifies },
                 playsSound: { settings.notificationSound })
-            let notificationStore = NotificationStore.live(tokens: discovery, notifier: notifier, settings: settings)
-            notifier.onNewThreads = { [listExpansion] account, threads in
-                listExpansion.expand(account: account, repositories: Set(threads.map(\.repository)))
-            }
+            let notificationStore = NotificationStore.live(
+                tokens: discovery, notifier: notifier, settings: settings,
+                onNewThreads: { [listExpansion] account, threads in
+                    listExpansion.expand(account: account, repositories: Set(threads.map(\.repository)))
+                })
             settings.onNotificationsChange = { id, notifies in
                 if !notifies {
                     notifier.notificationsDisabled(id)
@@ -51,9 +52,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
         accountStore.onStateChange = { [notificationStore, listExpansion] state in
             notificationStore.sync(with: state)
-            // gh の読み直しの途中など、一時的に「アカウントあり」でない間は捨てない（同じアカウントが戻ってくるため）
-            if state.hasAccounts {
-                listExpansion.retain(Set(state.enabledStatuses.map(\.id)))
+            if let retained = state.retainedAccountIDs {
+                listExpansion.retain(retained)
             }
         }
         connectSettings()
