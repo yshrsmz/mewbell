@@ -80,19 +80,20 @@
    - `actions/create-github-app-token` で mewbell 用 App のトークンを発行する（`repositories: mewbell`、`permission-contents: write`、`permission-pull-requests: write`）
    - `googleapis/release-please-action` をそのトークンで実行し、`release_created`、`tag_name`、`version` を出力する
 2. ジョブ `build`（`runs-on: xcode-27`、`needs: release-please`、`if: needs.release-please.outputs.release_created == 'true'`、`environment: release`、`timeout-minutes: 60`、`permissions: contents: write`）
+   - 最初に `gh release view --json isDraft` で Release の状態を確かめる。読めなければ失敗にし、公開済み（公開の後の手順だけ失敗してやり直したとき）なら、ビルド・attestation・添付・公開を飛ばして tap への知らせだけを送る
    - タグを checkout する（`persist-credentials: false`）
    - `DEVELOPER_DIR=/Applications/Xcode_27.2_beta_2.app/Contents/Developer` にし、`xcodebuild -version` のビルド番号が `27B5028f` でなければ失敗する。ビルド番号はワークフローの先頭に `XCODE_BUILD` として置き、Xcode を上げるときに一緒に変える
    - `bash scripts/tests/verify-app-test.sh`（数秒で終わるので先に）、`xcodebuild test`、`MEWBELL_WARNINGS_AS_ERRORS=YES` の Debug のビルド（Release の同じビルドは次の `package-release.sh` が兼ねる）
    - `bash scripts/package-release.sh "$VERSION"`（D4）
    - Cask の雛形（`packaging/homebrew/mewbell.rb.template`）を、作った zip の SHA-256 で埋め、一時的な tap に置いて `brew style` と `brew audit --cask --strict` を通す（tap はこのタグの雛形を使うので、公開の前に確かめる）
    - `actions/attest-build-provenance` で zip の build provenance attestation を作る（このジョブだけに `id-token: write` と `attestations: write` を与える）
-   - `gh release upload "$TAG" … --clobber` で zip と `.sha256` を draft に添付し、`gh release edit "$TAG" --draft=false` で公開する。Release がすでに公開済みのとき（公開の後の手順だけ失敗してやり直したとき）は、利用者が取った zip と Cask の SHA-256 を変えないよう、添付も公開もしない`GH_TOKEN` はジョブの `GITHUB_TOKEN`
+   - `gh release upload "$TAG" … --clobber` で zip と `.sha256` を draft に添付し、`gh release edit "$TAG" --draft=false` で公開する。公開済みのときは最初の確認で飛ばすので、利用者が取った zip と Cask の SHA-256 は変わらない`GH_TOKEN` はジョブの `GITHUB_TOKEN`
    - mewbell 用 App のトークンを `owner: yshrsmz`、`repositories: homebrew-tap`、`permission-contents: write` だけで発行し、`gh api repos/yshrsmz/homebrew-tap/dispatches -f event_type=mewbell-released -F 'client_payload[version]=…'` を送る
 3. lint は今の `ci.yml` のまま（Release PR にも走る）
 
 `actions/checkout`、`actions/create-github-app-token`、`googleapis/release-please-action` はコミット SHA で固定し、公開から 7 日以上経った版を選ぶ。`${{ }}` の値はシェルに直接埋め込まず、`env:` を通して渡す。
 
-失敗したとき: タグと draft の Release が残る。原因を直せる場合（ランナーの一時的な失敗など）は `gh run rerun --failed` でやり直す。コードを直す必要がある場合は、draft の Release とタグを消してから、修正の PR をマージし直す（release-please は次の Release PR を作る）。この手順を README に書く。
+失敗したとき: タグと draft の Release が残る。原因を直せる場合（ランナーの一時的な失敗など）は `gh run rerun --failed` でやり直す。コードを直す必要がある場合は、draft とタグを残したまま修正の PR をマージする。release-please はマニフェストとタグを前の版として扱って次の版の Release PR を作るので、その版は公開されない版になる（タグを消すと、release-please が前の版を見つけられなくなる）。この手順を README に書く。
 
 代替案: ビルドを手元で行う（最初の計画）。ユーザーがリリースに限って macOS ランナーを認めたため採らない。macOS のジョブだけで release-please も動かす。macOS ランナーは高く preview でもあるので、Release を作るときだけ動かす。
 

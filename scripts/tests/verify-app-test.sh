@@ -15,16 +15,19 @@ printf 'int main(void) { return 0; }\n' >"$work/main.c"
 clang -arch arm64 -arch x86_64 -o "$work/universal" "$work/main.c"
 clang -arch arm64 -o "$work/arm64-only" "$work/main.c"
 
-cat >"$work/get-task-allow.entitlements" <<'EOF'
+# write_entitlements <key> → $work/<key>.entitlements（その entitlement だけを true にする）
+write_entitlements() {
+  cat >"$work/$1.entitlements" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>com.apple.security.get-task-allow</key>
+  <key>$1</key>
   <true/>
 </dict>
 </plist>
 EOF
+}
 
 # make_app <name> [binary] [bundle-id] [version] → $work/<name>/Mewbell.app を作る（署名はしない）
 make_app() {
@@ -77,9 +80,12 @@ app="$(make_app valid)"
 sign -o runtime "$app"
 expect pass "正常な .app は通る" "$app"
 
-app="$(make_app get-task-allow)"
-sign -o runtime --entitlements "$work/get-task-allow.entitlements" "$app"
-expect fail "get-task-allow 付きは落ちる" "$app" 1.2.3 "com.apple.security.get-task-allow"
+for key in "${VERIFY_APP_FORBIDDEN_ENTITLEMENTS[@]}"; do
+  write_entitlements "$key"
+  app="$(make_app "$key")"
+  sign -o runtime --entitlements "$work/$key.entitlements" "$app"
+  expect fail "${key} 付きは落ちる" "$app" 1.2.3 "$key"
+done
 
 app="$(make_app no-runtime)"
 sign "$app"
@@ -101,6 +107,11 @@ expect fail "CFBundleIdentifier が違うと落ちる" "$app" 1.2.3 "CFBundleIde
 app="$(make_app version)"
 sign -o runtime "$app"
 expect fail "バージョンが違うと落ちる" "$app" 1.2.4 "CFBundleShortVersionString"
+
+app="$(make_app build-number)"
+plutil -replace CFBundleVersion -string 1 "$app/Contents/Info.plist"
+sign -o runtime "$app"
+expect fail "CFBundleVersion だけが違っても落ちる" "$app" 1.2.3 "CFBundleVersion"
 
 app="$(make_app tampered)"
 sign -o runtime "$app"

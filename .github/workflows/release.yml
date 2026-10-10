@@ -66,12 +66,34 @@ jobs:
       TAG: ${{ needs.release-please.outputs.tag_name }}
       VERSION: ${{ needs.release-please.outputs.version }}
     steps:
+      # 公開済みのとき（公開の後の手順だけが失敗してやり直したとき）は、ビルドも attestation も添付もせず、
+      # tap への知らせだけを送り直す。利用者が取った zip と Cask の SHA-256 を変えないため
+      - id: state
+        name: Check the release state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+          case "$draft" in
+            true) ;;
+            false)
+              echo "$TAG は公開済みなので、tap への知らせだけを送ります"
+              echo "published=true" >>"$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "$TAG の状態を読めませんでした: $draft" >&2
+              exit 1
+              ;;
+          esac
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.state.outputs.published != 'true'
         with:
           ref: ${{ env.TAG }}
           persist-credentials: false
 
       - name: Check Xcode
+        if: steps.state.outputs.published != 'true'
         run: |
           if [[ ! -d "$XCODE_APP" ]]; then
             echo "$XCODE_APP がありません。ランナーのイメージを確かめて XCODE_APP と XCODE_BUILD を上げてください" >&2
@@ -92,17 +114,21 @@ jobs:
 
       # 数秒で終わるので、時間のかかるビルドより先に検査そのものを確かめる
       - name: Test verify_app
+        if: steps.state.outputs.published != 'true'
         run: bash scripts/tests/verify-app-test.sh
 
       # Debug の警告をエラー扱いにしたビルドを兼ねる。Release の分は package-release.sh が行う
       - name: Test with warnings as errors
+        if: steps.state.outputs.published != 'true'
         run: xcodebuild -project Mewbell.xcodeproj -scheme Mewbell MEWBELL_WARNINGS_AS_ERRORS=YES test
 
       - name: Package
+        if: steps.state.outputs.published != 'true'
         run: bash scripts/package-release.sh "$VERSION"
 
       # homebrew-tap はこのタグの雛形から Cask を作るので、公開する前に同じ形で確かめる
       - name: Check the cask template
+        if: steps.state.outputs.published != 'true'
         run: |
           tap="$RUNNER_TEMP/homebrew-check"
           mkdir -p "$tap/Casks"
@@ -119,20 +145,16 @@ jobs:
           brew audit --cask --strict yshrsmz/check/mewbell
 
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: steps.state.outputs.published != 'true'
         with:
           subject-path: build/dist/${{ env.VERSION }}/Mewbell-${{ env.VERSION }}.zip
 
-      # 添付してから公開する。ここまでのどこかで失敗したら Release は draft のまま残る。
-      # 公開済みのとき（公開の後の手順だけを実行し直したとき）は、利用者が取った zip と Cask の SHA-256 を
-      # 変えないよう、添付を差し替えない
+      # 添付してから公開する。ここまでのどこかで失敗したら Release は draft のまま残る
       - name: Upload and publish
+        if: steps.state.outputs.published != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" != "true" ]]; then
-            echo "$TAG は公開済みなので、添付を差し替えません"
-            exit 0
-          fi
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
             "build/dist/$VERSION/Mewbell-$VERSION.zip" \
             "build/dist/$VERSION/Mewbell-$VERSION.zip.sha256"

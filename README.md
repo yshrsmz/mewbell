@@ -123,7 +123,7 @@ CI（GitHub Actions）は ubuntu で lint と OpenSpec の検証だけを回し�
 うまくいかなかったとき:
 
 - ビルドや検査で失敗すると、Release は draft のまま残り、公開も tap の更新もされません。ランナーの一時的な失敗なら `gh run rerun <run-id> --failed` でやり直します
-- コードを直す必要があるときは、draft の Release とタグを消してから（`gh release delete vX.Y.Z --cleanup-tag`）、修正の PR をマージします。release-please が次の Release PR を作ります
+- コードを直す必要があるときは、draft の Release とタグをそのまま残して、修正の PR をマージします。release-please は `.release-please-manifest.json` とタグ `vX.Y.Z` を前の版として扱い、次の版の Release PR を作ります（X.Y.Z は公開されない版になります）。次の版を公開した後で、古い draft の Release は消してかまいません（`gh release delete vX.Y.Z`。タグは残します）
 - ランナーのイメージが変わって Xcode が見つからないと、`Check Xcode` で止まります。手元の Xcode とそろえて、`release.yml` の `XCODE_APP` と `XCODE_BUILD` を上げます
 - `.claude/rules/security.md` の「アプリとビルドの設定」を変えたときは、`scripts/lib/verify-app.sh` の検査も見直します
 
