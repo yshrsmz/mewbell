@@ -12,6 +12,7 @@ final class NotificationStore {
     typealias PollerFactory =
         @MainActor (
             _ account: Account, _ endpoints: APIEndpoints, _ participating: Bool, _ initialPhase: FeedPhase?,
+            _ firstFetchNotBefore: Date?,
             _ onUpdate: @escaping @Sendable (FeedState) async -> Void
         )
         -> AccountPoller
@@ -30,6 +31,8 @@ final class NotificationStore {
     @ObservationIgnored private let preferences: @MainActor (AccountID) -> AccountPreferences
     /// ポーラーがまだ無いアカウントで、既読にするスレッド（起動の直後に通知をクリックされたとき）
     @ObservationIgnored private var pendingReads: [AccountID: Set<String>] = [:]
+    /// 止めたポーラーの、次の取得を早めてよい時刻（無効にしてすぐ有効に戻したときに間隔やレート制限の待ちを抜けないように）
+    @ObservationIgnored private var notBefore: [AccountID: Date] = [:]
 
     /// `makePoller` が nil のときはポーリングしない（テストのホストや SwiftUI プレビュー用）。
     /// `openURL` は既定値を持たせない（テストで本物のブラウザを開かないように、呼び出し元に必ず渡させる）。
@@ -51,10 +54,11 @@ final class NotificationStore {
     {
         let client = GitHubAPIClient(transport: URLSessionTransport())
         return NotificationStore(
-            makePoller: { account, endpoints, participating, initialPhase, onUpdate in
+            makePoller: { account, endpoints, participating, initialPhase, firstFetchNotBefore, onUpdate in
                 AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
-                    participating: participating, initialPhase: initialPhase, onUpdate: onUpdate)
+                    participating: participating, initialPhase: initialPhase, firstFetchNotBefore: firstFetchNotBefore,
+                    onUpdate: onUpdate)
             }, notifier: notifier, openURL: { NSWorkspace.shared.open($0) },
             preferences: { settings.preferences(for: $0) })
     }
@@ -75,6 +79,7 @@ final class NotificationStore {
         let keptIDs = Set(active.map(\.id))
         for id in pollers.keys where !keptIDs.contains(id) {
             pollers.removeValue(forKey: id)?.poller.stop()
+            notBefore[id] = feeds[id].flatMap(Self.nextFetchNotBefore)
             feeds[id] = nil
             notifier?.accountRemoved(id)
         }
@@ -97,6 +102,7 @@ final class NotificationStore {
         guard let entry = pollers.removeValue(forKey: id) else { return }
         entry.poller.stop()
         let initialPhase = feeds[id].flatMap { $0.phase.isStopped || $0.phase.isRateLimited ? $0.phase : nil }
+        notBefore[id] = feeds[id].flatMap(Self.nextFetchNotBefore)
         feeds[id] = nil
         notifier?.resetBaseline(id)
         startPolling(entry.account, initialPhase: initialPhase)
@@ -111,8 +117,10 @@ final class NotificationStore {
         let generation = nextGeneration
         nextGeneration += 1
         let id = account.id
-        let poller = makePoller(account, endpoints, preferences(id).participatingOnly, initialPhase) {
-            [weak self] state in
+        let firstFetchNotBefore = notBefore.removeValue(forKey: id).flatMap { $0 > Date() ? $0 : nil }
+        let poller = makePoller(
+            account, endpoints, preferences(id).participatingOnly, initialPhase, firstFetchNotBefore
+        ) { [weak self] state in
             await self?.apply(state, for: id, generation: generation)
         }
         pollers[id] = PollerEntry(poller: poller, generation: generation, account: account)
@@ -127,6 +135,16 @@ final class NotificationStore {
             Task { await poller.perform(.read(threadID: threadID)) }
         }
         poller.start()
+    }
+
+    /// 止めたポーラーの代わりに作るポーラーの最初の取得を、早めてよい時刻。レート制限で待っていればその再試行の時刻、
+    /// 取得できていれば最後の取得から再読み込みと同じ下限（`RefreshWaiters.minimumInterval`）がたった時刻。
+    private static func nextFetchNotBefore(_ feed: FeedState) -> Date? {
+        switch feed.phase {
+        case .retrying(let nextAttempt, rateLimited: true): nextAttempt
+        case .loaded(let updatedAt): updatedAt.addingTimeInterval(RefreshWaiters.minimumInterval)
+        case .loading, .retrying, .scopeInsufficient, .unauthorized: nil
+        }
     }
 
     /// 再読み込み: 全アカウントを次の予定を待たずに `If-Modified-Since` なしで取得し、「スコープ不足」「認証エラー」で

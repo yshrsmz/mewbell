@@ -254,7 +254,8 @@ struct AccountDiscoveryRaceTests {
         gated.open()
         #expect(await refreshed == nil)
         await reloaded
-        #expect(fixture.tokenRequests.filter { $0.last == "alice" }.count == 3)
+        // 止めた古い取得の gh は実行されず、新しい読み直しの取得だけが走る
+        #expect(fixture.tokenRequests.filter { $0.last == "alice" }.count == 2)
         #expect(await fixture.credentials.token(for: alice) != nil)
     }
 }

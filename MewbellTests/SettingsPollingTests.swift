@@ -112,11 +112,14 @@ struct NotificationStoreSettingsTests {
         tokens.set("test-token-bob", for: bob)
         let client = GitHubAPIClient(transport: transport)
         return NotificationStore(
-            makePoller: { [tokens, sleeper, made] account, endpoints, participating, initialPhase, onUpdate in
+            makePoller: {
+                [tokens, sleeper, made] account, endpoints, participating, initialPhase, firstFetchNotBefore, onUpdate
+                in
                 made.withLock { $0.append("\(account.id) \(participating)") }
                 return AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
-                    participating: participating, initialPhase: initialPhase, sleep: sleeper.sleep, onUpdate: onUpdate)
+                    participating: participating, initialPhase: initialPhase,
+                    firstFetchNotBefore: firstFetchNotBefore, sleep: sleeper.sleep, onUpdate: onUpdate)
             }, notifier: notifier, openURL: { [opened] url in opened.withLock { $0.append(url) } },
             preferences: { [settings] in settings.preferences(for: $0) })
     }
@@ -128,6 +131,14 @@ struct NotificationStoreSettingsTests {
     private nonisolated func gets(_ user: String) -> [URLRequest] {
         transport.requests.filter {
             $0.httpMethod == "GET" && $0.value(forHTTPHeaderField: "Authorization")?.hasSuffix(user) == true
+        }
+    }
+
+    /// 待っているポーラーを古い順に進めながら、`condition` が満たされるまで待つ（作り直したポーラーの最初の取得の待ちを含む）。
+    private func advance(until condition: @MainActor () -> Bool) async {
+        for _ in 0..<6 where !condition() {
+            sleeper.advance()
+            try? await Task.sleep(for: .milliseconds(30))
         }
     }
 
@@ -182,7 +193,12 @@ struct NotificationStoreSettingsTests {
         #expect(store.feeds[alice] == .loading)
         #expect(notifier.events.last == "resetBaseline github.com/alice")
         #expect(made.value.last == "github.com/alice true")
-        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.threads.map(\.id) == ["4", "5"] } }
+        // 前の取得から再読み込みと同じ下限（10 秒）がたつまで、最初の取得を待つ
+        await sleeper.waitForSleeps(3)
+        #expect(gets("alice").count == aliceGets)
+        let wait = sleeper.durations.last ?? .zero
+        #expect(wait > .seconds(5) && wait <= .seconds(10))
+        await advance(until: { store.feeds[alice]?.threads.map(\.id) == ["4", "5"] })
         #expect(store.feeds[alice]?.threads.map(\.id) == ["4", "5"])
         // 作り直したポーラーの最初の取得は条件なしで、gh は呼ばない
         let first = gets("alice")[aliceGets]
@@ -201,10 +217,9 @@ struct NotificationStoreSettingsTests {
         await waitUntil { self.gets("alice").count == 2 }
         settings.setParticipatingOnly(true, for: alice)
         store.restart(alice)
-        await waitUntil { self.gets("alice").count == 3 }
         notifier.feeds[alice] = []
         transport.pausedMethod.value = nil
-        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.threads.map(\.id) == ["4", "5"] } }
+        await advance(until: { store.feeds[alice]?.threads.map(\.id) == ["4", "5"] })
         try? await Task.sleep(for: .milliseconds(50))
         #expect(notifier.feeds[alice]?.allSatisfy { $0 == ["4", "5"] } == true)
         #expect(store.feeds[alice]?.threads.map(\.id) == ["4", "5"])
@@ -254,8 +269,26 @@ struct NotificationStoreSettingsTests {
         // 新しいポーラーは、前の再試行の時刻まで待ってから取得する
         await sleeper.waitForSleeps(sleeps + 1)
         #expect(transport.requests.count == count)
-        let wait = sleeper.durations.last ?? .zero
-        #expect(wait > .seconds(100) && wait <= .seconds(120))
+        let carried = sleeper.durations.last ?? .zero
+        #expect(carried > .seconds(100) && carried <= .seconds(120))
+        store.stopAll()
+    }
+
+    @Test func keepsTheRateLimitWaitWhenEnabledAgain() async {
+        transport.setHandler { _ in HTTPResponse(statusCode: 429, headers: ["Retry-After": "120"]) }
+        tokens.set("test-token-alice", for: alice)
+        let store = makeStore()
+        store.sync(with: .accounts([status(alice, .ready)]))
+        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.phase.isRateLimited == true } }
+        let count = transport.requests.count
+        store.sync(with: .accounts([status(alice, .disabled)]))
+        let sleeps = sleeper.durations.count
+        store.sync(with: .accounts([status(alice, .ready)]))
+        // 有効に戻しても、無効にする前の再試行の時刻まで取得しない
+        await sleeper.waitForSleeps(sleeps + 1)
+        #expect(transport.requests.count == count)
+        let carried = sleeper.durations.last ?? .zero
+        #expect(carried > .seconds(100) && carried <= .seconds(120))
         store.stopAll()
     }
 }

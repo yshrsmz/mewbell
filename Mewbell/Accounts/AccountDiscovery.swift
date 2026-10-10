@@ -153,7 +153,11 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
 
     func discardAllTokens() async {
         knownAccountIDs = []
-        // 走っている取得は前の設定ディレクトリのものなので、合流させず、結果も保存しない
+        // 走っている取得は前の設定ディレクトリのものなので、止めて、合流させず、結果も保存しない
+        // （取り直しを待っているポーラーは、設定ディレクトリを変えたときにすべて止めている）
+        for fetch in inFlightTokenFetches.values {
+            fetch.task.cancel()
+        }
         inFlightTokenFetches.removeAll()
         tokenEpoch += 1
         await credentials.removeAll()

@@ -15,8 +15,8 @@ actor AccountPoller {
     private let endpoints: APIEndpoints
     private let client: GitHubAPIClient
     private let tokens: any TokenProviding
-    /// `participating=true` で取得する（切り替えたらポーラーを作り直す）
-    private let participating: Bool
+    private let participating: Bool  // `participating=true` で取得する（切り替えたらポーラーを作り直す）
+    private let firstFetchNotBefore: Date?  // 最初の取得をこの時刻まで待つ（作り直す前の間隔や待ちを持ち越す）
     private let sleep: Sleep
     private let now: @Sendable () -> Date
     private let onUpdate: @Sendable (FeedState) async -> Void
@@ -53,7 +53,7 @@ actor AccountPoller {
 
     init(
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,
-        participating: Bool = false, initialPhase: FeedPhase? = nil,
+        participating: Bool = false, initialPhase: FeedPhase? = nil, firstFetchNotBefore: Date? = nil,
         sleep: @escaping Sleep = { try await Task.sleep(for: $0) }, now: @escaping @Sendable () -> Date = { Date() },
         onUpdate: @escaping @Sendable (FeedState) async -> Void
     ) {
@@ -62,8 +62,9 @@ actor AccountPoller {
         self.client = client
         self.tokens = tokens
         self.participating = participating
-        // 作り直す前の止まった状態（再読み込みでの再開を待つ）かレート制限の待ち（その時刻まで最初の取得を待つ）を持ち越す
+        // 作り直す前の止まった状態（再読み込みでの再開を待つ）かレート制限の待ちの表示を持ち越す
         state = initialPhase.map { FeedState(phase: $0, threads: []) } ?? .loading
+        self.firstFetchNotBefore = firstFetchNotBefore
         self.sleep = sleep
         self.now = now
         self.onUpdate = onUpdate
@@ -74,7 +75,7 @@ actor AccountPoller {
         loop.withLock { loop in
             guard loop.task == nil, !loop.discarded else { return }
             loop.task = Task {
-                guard await self.waitOutCarriedRateLimit() else { return }
+                guard await self.waitForFirstFetch() else { return }
                 await self.run(refreshingTokenFirst: false)
             }
         }
@@ -316,12 +317,12 @@ actor AccountPoller {
     }
 }
 
-// 持ち越したレート制限の待ち、一覧のスレッドへの操作と、操作したスレッドを取得の結果から隠す処理
+// 最初の取得の待ち、一覧のスレッドへの操作と、操作したスレッドを取得の結果から隠す処理
 extension AccountPoller {
-    /// レート制限の待ちを持ち越して作り直したときは、その再試行の時刻まで待つ。止められたら false。
-    fileprivate func waitOutCarriedRateLimit() async -> Bool {
-        guard case .retrying(let nextAttempt, rateLimited: true) = state.phase else { return true }
-        return await pause(for: .seconds(max(0, nextAttempt.timeIntervalSince(now()))))
+    /// `firstFetchNotBefore` まで待つ。止められたら false。
+    fileprivate func waitForFirstFetch() async -> Bool {
+        guard let firstFetchNotBefore, firstFetchNotBefore > now() else { return true }
+        return await pause(for: .seconds(firstFetchNotBefore.timeIntervalSince(now())))
     }
 
     /// スレッドを既読か Done にする。一覧からすぐに外し、リクエストを送り、次の取得を条件なしにする。

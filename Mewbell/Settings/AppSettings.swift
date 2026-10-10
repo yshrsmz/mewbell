@@ -65,19 +65,23 @@ final class AppSettings {
         storage.set(enabled, forKey: SettingsKey.notificationSound)
     }
 
+    /// 同じパスで確定し直したときも読み直す（権限を直した後に、同じパスを確かめ直せるように）。
     func setGhExecutableOverride(_ path: String?) {
         let path = SettingsKey.normalizedPath(path)
-        guard ghExecutableOverride != path else { return }
-        ghExecutableOverride = path
-        storage.set(path, forKey: SettingsKey.ghExecutableOverride)
+        if ghExecutableOverride != path {
+            ghExecutableOverride = path
+            storage.set(path, forKey: SettingsKey.ghExecutableOverride)
+        }
         onGhExecutableChange?()
     }
 
+    /// 同じパスで確定し直したときも読み直す（権限を直した後に、同じパスを確かめ直せるように）。
     func setGhConfigDirectoryOverride(_ path: String?) {
         let path = SettingsKey.normalizedPath(path)
-        guard ghConfigDirectoryOverride != path else { return }
-        ghConfigDirectoryOverride = path
-        storage.set(path, forKey: SettingsKey.ghConfigDirectoryOverride)
+        if ghConfigDirectoryOverride != path {
+            ghConfigDirectoryOverride = path
+            storage.set(path, forKey: SettingsKey.ghConfigDirectoryOverride)
+        }
         onGhConfigDirectoryChange?()
     }
 

@@ -118,7 +118,8 @@ struct AppSettingsTests {
         #expect(
             events == [
                 "enabled github.com/alice false", "participating github.com/alice", "notifies github.com/alice false",
-                "gh", "config", "config",
+                // 同じパスで確定し直しても読み直す
+                "gh", "gh", "config", "config",
             ])
     }
 

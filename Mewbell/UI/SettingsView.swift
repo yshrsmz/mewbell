@@ -182,7 +182,11 @@ struct PathOverrideField: View {
             HStack {
                 TextField(title, text: $text, prompt: Text(placeholder))
                     .labelsHidden()
-                    .onSubmit { commit(text) }
+                    .onSubmit {
+                        commit(text)
+                        // 同じパスでも確かめ直す（`path` が変わらなければ `onChange` が呼ばれないので）
+                        update(SettingsKey.normalizedPath(text))
+                    }
                 Button("Choose…", action: choose)
                 Button("Reset") {
                     text = ""
@@ -190,7 +194,11 @@ struct PathOverrideField: View {
                 }
                 .disabled(path == nil && text.isEmpty)
             }
-            if path != nil, !isPathUsable {
+            if SettingsKey.normalizedPath(text) != path {
+                Text("Press Return to apply.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if path != nil, !isPathUsable {
                 Label(unusableMessage, systemImage: "exclamationmark.triangle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
