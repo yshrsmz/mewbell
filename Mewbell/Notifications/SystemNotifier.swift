@@ -26,6 +26,8 @@ final class SystemNotifier: ThreadNotifying {
     /// 通知に音を付けるか（設定）
     private let playsSound: @MainActor () -> Bool
     private var tracker = NotificationTracker()
+    /// 新着（通知の対象と同じ判定）が届いた。アカウントの通知の設定にかかわらず呼ぶ（一覧の折りたたみを開くため）
+    var onNewThreads: (@MainActor (AccountID, [NotificationThread]) -> Void)?
     /// 通知センターへの操作を、呼んだ順に 1 つずつ流す（同じスレッドの追加と取り下げが入れ替わらないように）
     private var queue: Task<Void, Never>?
 
@@ -48,6 +50,9 @@ final class SystemNotifier: ThreadNotifying {
             guard old?.threads != new.threads else { return }
             // 通知がオフでも見たスレッドは覚え続ける（オンに戻したときに、オフの間の分をまとめて通知しないため）
             let changes = tracker.update(new.threads, for: account)
+            if !changes.post.isEmpty {
+                onNewThreads?(account, changes.post)
+            }
             let sound = playsSound()
             let posted = notifies(account) ? changes.post : []
             let contents = posted.map { ThreadNotificationContent(thread: $0, account: account, playsSound: sound) }

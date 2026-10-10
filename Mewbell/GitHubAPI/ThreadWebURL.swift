@@ -11,6 +11,14 @@ enum ThreadWebURL {
         return isOpenable(url, host: endpoints.host) ? url : nil
     }
 
+    /// 一覧に出す Issue・Pull request の番号。開く URL と同じ検証を通ったときだけ返す（表示と開くページの番号を揃えるため）。
+    static func subjectNumber(for thread: NotificationThread, endpoints: APIEndpoints) -> String? {
+        guard let suffix = suffix(for: thread, endpoints: endpoints), suffix.count == 2,
+            suffix[0] == "pull" || suffix[0] == "issues"
+        else { return nil }
+        return suffix[1]
+    }
+
     /// リポジトリのページの URL。`https` でホストがアカウントのホストと一致しなければ nil（開かない）。
     static func repositoryPage(_ repository: RepositoryName, endpoints: APIEndpoints) -> URL? {
         let url = repositoryBase(repository, endpoints: endpoints)

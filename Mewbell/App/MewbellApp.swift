@@ -13,7 +13,8 @@ struct MewbellApp: App {
         MenuBarExtra {
             MenuBarContentView(
                 store: appDelegate.accountStore, notifications: appDelegate.notificationStore,
-                permission: appDelegate.notificationPermission, settings: appDelegate.settings)
+                permission: appDelegate.notificationPermission, settings: appDelegate.settings,
+                expansion: appDelegate.listExpansion)
         } label: {
             MenuBarLabel(notifications: appDelegate.notificationStore)
         }

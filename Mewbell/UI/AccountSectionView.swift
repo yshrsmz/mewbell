@@ -23,6 +23,8 @@ struct NotificationListView: View {
     let feeds: [AccountID: FeedState]
     /// 「参加しているスレッドだけにする」の設定
     var participatingOnly: (AccountID) -> Bool = { _ in false }
+    /// 折りたたみの状態（アプリが 1 つだけ持つ）
+    let expansion: ListExpansion
     let actions: ThreadListActions
 
     var body: some View {
@@ -41,7 +43,7 @@ struct NotificationListView: View {
                     ForEach(shown) { status in
                         AccountSectionView(
                             status: status, feed: feeds[status.id], participatingOnly: participatingOnly(status.id),
-                            actions: actions)
+                            expansion: expansion, actions: actions)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -57,9 +59,13 @@ struct AccountSectionView: View {
     let status: AccountStatus
     let feed: FeedState?
     var participatingOnly = false
+    let expansion: ListExpansion
     let actions: ThreadListActions
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private var account: Account { status.account }
+    private var isCollapsed: Bool { expansion.isCollapsed(account.id) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -85,7 +91,10 @@ struct AccountSectionView: View {
                     if let failure = feed.actionFailure {
                         ActionFailureView(failure: failure, host: account.host)
                     }
-                    threads(feed)
+                    // 折りたたんでも、取得の状態と操作の失敗は出し続ける
+                    if !isCollapsed {
+                        threads(feed)
+                    }
                 }
             }
         }
@@ -93,6 +102,31 @@ struct AccountSectionView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
+            // 開閉のボタンと「すべて既読」は分ける（押し間違えて開閉しないように）
+            Button {
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { expansion.toggle(account.id) }
+            } label: {
+                title
+            }
+            .buttonStyle(.plain)
+            .help(isCollapsed ? "Expand \(account.user)" : "Collapse \(account.user)")
+            .accessibilityLabel(isCollapsed ? "Expand \(account.user)" : "Collapse \(account.user)")
+            Spacer(minLength: 0)
+            if status.tokenState == .ready, let feed, !feed.phase.isStopped {
+                MarkAllReadButton(
+                    count: feed.threads.count, newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead,
+                    participatingOnly: participatingOnly, isTruncated: feed.isTruncated
+                ) {
+                    actions.markAllRead(account.id)
+                }
+            }
+        }
+    }
+
+    /// 見出しのうち、開閉のボタンになる部分。
+    private var title: some View {
+        HStack(spacing: 6) {
+            DisclosureChevron(isCollapsed: isCollapsed)
             tokenIcon
                 .frame(width: 16)
             Text(account.user)
@@ -117,16 +151,11 @@ struct AccountSectionView: View {
                     .help("Showing only threads you are participating in")
                     .accessibilityLabel("Participating only")
             }
-            Spacer(minLength: 0)
-            if status.tokenState == .ready, let feed, !feed.phase.isStopped {
-                MarkAllReadButton(
-                    count: feed.threads.count, newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead,
-                    participatingOnly: participatingOnly, isTruncated: feed.isTruncated
-                ) {
-                    actions.markAllRead(account.id)
-                }
+            if isCollapsed, let feed, feed.phase.showsThreads, !feed.threads.isEmpty {
+                CollapsedCount(count: feed.threads.count)
             }
         }
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder private var tokenIcon: some View {
@@ -152,6 +181,7 @@ struct AccountSectionView: View {
     @ViewBuilder private func threads(_ feed: FeedState) -> some View {
         if feed.phase.showsThreads {
             let groups = NotificationGrouping.groups(from: feed.threads)
+            let endpoints = APIEndpoints(host: account.host)
             if groups.isEmpty {
                 Text("No unread notifications")
                     .font(.callout)
@@ -160,17 +190,9 @@ struct AccountSectionView: View {
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(groups) { group in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(group.repository.description)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            ForEach(group.threads) { thread in
-                                ThreadRow(
-                                    thread: thread, open: { actions.open(thread, account.id) },
-                                    markRead: { actions.markRead(thread, account.id) },
-                                    markDone: { actions.markDone(thread, account.id) })
-                            }
-                        }
+                        RepositoryGroupView(
+                            group: group, key: RepositoryKey(account: account.id, repository: group.repository),
+                            endpoints: endpoints, expansion: expansion, actions: actions)
                     }
                 }
                 .padding(.leading, 22)
@@ -275,7 +297,7 @@ struct FeedStatusView: View {
                 threads: [thread("4", "acme/web", .discussion, "team_mention", minutesAgo: 600)].compactMap { $0 }),
             erin.id: FeedState(phase: .unauthorized, threads: []),
         ],
-        actions: .none
+        expansion: ListExpansion(), actions: .none
     )
     .padding()
     .frame(width: 380)
@@ -295,7 +317,7 @@ struct FeedStatusView: View {
             alice.id: FeedState(phase: .loaded(updatedAt: Date()), threads: []),
             bob.id: .loading,
         ],
-        actions: .none
+        expansion: ListExpansion(), actions: .none
     )
     .padding()
     .frame(width: 380)
@@ -304,7 +326,8 @@ struct FeedStatusView: View {
 #Preview("All disabled") {
     let alice = Account(id: AccountID(host: "github.com", user: "alice"), isActive: true)
     return NotificationListView(
-        statuses: [AccountStatus(account: alice, tokenState: .disabled)], feeds: [:], actions: .none
+        statuses: [AccountStatus(account: alice, tokenState: .disabled)], feeds: [:], expansion: ListExpansion(),
+        actions: .none
     )
     .padding()
     .frame(width: 380)
@@ -323,7 +346,7 @@ struct FeedStatusView: View {
     return NotificationListView(
         statuses: [AccountStatus(account: alice, tokenState: .ready)],
         feeds: [alice.id: FeedState(phase: .loaded(updatedAt: now), threads: threads, isTruncated: true)],
-        actions: .none
+        expansion: ListExpansion(), actions: .none
     )
     .padding()
     .frame(width: 380)

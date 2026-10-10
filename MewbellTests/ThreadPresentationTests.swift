@@ -112,3 +112,49 @@ struct ThreadWebURLTests {
         }
     }
 }
+
+struct ThreadSubjectNumberTests {
+    private let github: APIEndpoints
+    private let gheCloud: APIEndpoints
+    private let ghes: APIEndpoints
+
+    init() throws {
+        github = try #require(APIEndpoints(host: "github.com"))
+        gheCloud = try #require(APIEndpoints(host: "acme.ghe.com"))
+        ghes = try #require(APIEndpoints(host: "ghe.example.com"))
+    }
+
+    @Test func readsPullRequestAndIssueNumbers() throws {
+        #expect(
+            ThreadWebURL.subjectNumber(
+                for: try thread(subjectURL: "https://api.github.com/repos/octo/app/pulls/42"), endpoints: github)
+                == "42")
+        #expect(
+            ThreadWebURL.subjectNumber(
+                for: try thread(
+                    repository: "team/svc", kind: .issue,
+                    subjectURL: "https://ghe.example.com/api/v3/repos/team/svc/issues/7"),
+                endpoints: ghes) == "7")
+        #expect(
+            ThreadWebURL.subjectNumber(
+                for: try thread(repository: "acme/web", subjectURL: "https://api.acme.ghe.com/repos/acme/web/pulls/3"),
+                endpoints: gheCloud) == "3")
+    }
+
+    @Test(arguments: [
+        nil,
+        "https://evil.example.com/repos/octo/app/pulls/42",
+        "https://api.github.com/repos/other/app/pulls/42",
+        "https://api.github.com/repos/octo/app/pulls/abc",
+        "https://api.github.com/repos/octo/app/commits/0123abcdef",
+    ])
+    func readsNoNumberFromOtherSubjects(_ subjectURL: String?) throws {
+        #expect(ThreadWebURL.subjectNumber(for: try thread(subjectURL: subjectURL), endpoints: github) == nil)
+    }
+
+    @Test(arguments: [SubjectKind.release, .discussion])
+    func readsNoNumberForOtherKinds(_ kind: SubjectKind) throws {
+        let subject = "https://api.github.com/repos/octo/app/pulls/42"
+        #expect(ThreadWebURL.subjectNumber(for: try thread(kind: kind, subjectURL: subject), endpoints: github) == nil)
+    }
+}

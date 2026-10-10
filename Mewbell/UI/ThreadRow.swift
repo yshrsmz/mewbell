@@ -3,6 +3,8 @@ import SwiftUI
 /// スレッドの行。クリックでブラウザで開いて既読にする。マウスを載せると、開かずに既読・Done にするボタンが出る。
 struct ThreadRow: View {
     let thread: NotificationThread
+    /// Issue・Pull request の番号（`ThreadWebURL.subjectNumber`）。無ければ出さない
+    let number: String?
     let open: () -> Void
     let markRead: () -> Void
     let markDone: () -> Void
@@ -11,10 +13,11 @@ struct ThreadRow: View {
 
     /// `isHovering` はプレビューでボタンを出しておくため。
     init(
-        thread: NotificationThread, isHovering: Bool = false, open: @escaping () -> Void,
+        thread: NotificationThread, number: String? = nil, isHovering: Bool = false, open: @escaping () -> Void,
         markRead: @escaping () -> Void, markDone: @escaping () -> Void
     ) {
         self.thread = thread
+        self.number = number
         self.open = open
         self.markRead = markRead
         self.markDone = markDone
@@ -33,6 +36,11 @@ struct ThreadRow: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     HStack(spacing: 4) {
+                        if let number {
+                            Text("#\(number)")
+                                .monospacedDigit()
+                            Text("·")
+                        }
                         Text(NotificationGrouping.reasonText(thread.reason))
                         Text("·")
                         RelativeTimeText(date: thread.updatedAt)
@@ -238,7 +246,8 @@ struct RelativeTimeText: View {
     return VStack(alignment: .leading) {
         if let thread {
             ThreadRow(thread: thread, open: {}, markRead: {}, markDone: {})
-            ThreadRow(thread: thread, isHovering: true, open: {}, markRead: {}, markDone: {})
+            ThreadRow(thread: thread, number: "1234", open: {}, markRead: {}, markDone: {})
+            ThreadRow(thread: thread, number: "1234", isHovering: true, open: {}, markRead: {}, markDone: {})
         }
     }
     .padding()
