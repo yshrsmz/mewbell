@@ -34,6 +34,12 @@ enum DiscoveryState: Sendable, Equatable {
         if case .accounts = self { true } else { false }
     }
 
+    /// 無効にしていないアカウント（「アカウントあり」以外は空）。ポーラーや一覧の状態を残すアカウントはこれで決める。
+    var enabledStatuses: [AccountStatus] {
+        guard case .accounts(let statuses) = self else { return [] }
+        return statuses.filter { $0.tokenState != .disabled }
+    }
+
     /// `accounts` を `tokenState` にし、`disabled` に入るものを `.disabled` にした「アカウントあり」。
     static func accounts(
         _ accounts: [Account], disabled: Set<AccountID>, tokenState: (Account) -> TokenState

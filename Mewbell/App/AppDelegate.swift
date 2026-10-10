@@ -51,8 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
         accountStore.onStateChange = { [notificationStore, listExpansion] state in
             notificationStore.sync(with: state)
-            let statuses: [AccountStatus] = if case .accounts(let statuses) = state { statuses } else { [] }
-            listExpansion.retain(Set(statuses.filter { $0.tokenState != .disabled }.map(\.id)))
+            listExpansion.retain(Set(state.enabledStatuses.map(\.id)))
         }
         connectSettings()
         // 終了中の通知のクリックで起動されたときに取りこぼさないよう、起動が終わる前に設定する

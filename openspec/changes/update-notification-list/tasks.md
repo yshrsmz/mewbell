@@ -25,5 +25,5 @@
 
 ## 5. 別コンテキストでのレビュー
 
-- [ ] 5.1 新しいコンテキストの opus サブエージェントで `simplify` スキルを実行し、作業ツリーに入った変更を確かめる。確認: `bash scripts/lint.sh` と `xcodebuild test` が引き続き通る
+- [x] 5.1 新しいコンテキストの opus サブエージェントで `simplify` スキルを実行し、作業ツリーに入った変更を確かめる。確認: `bash scripts/lint.sh` と `xcodebuild test` が引き続き通る。結果: 直したもの 4 件（無効でないアカウントの取り出しを `DiscoveryState.enabledStatuses` にまとめた、見出しの開閉のボタンを `DisclosureButton` にまとめた、`RepositoryGroupView` に key でなくアカウントを渡す、`ListExpansion` で変わらないときは書き込まない）。直さなかった候補 6 件は PR 本文に理由を書く
 - [ ] 5.2 別の新しいコンテキストの opus サブエージェントで `code-review` スキルを effort `medium` で実行し、指摘ごとに「直した / 直さない（理由）」を決めて対応する。ロジックに手を入れたら 5.2 をやり直す。確認: 指摘の件数と対応結果、セキュリティ上の確認を PR 本文に書いた

@@ -62,8 +62,6 @@ struct AccountSectionView: View {
     let expansion: ListExpansion
     let actions: ThreadListActions
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     private var account: Account { status.account }
     private var isCollapsed: Bool { expansion.isCollapsed(account.id) }
 
@@ -103,14 +101,11 @@ struct AccountSectionView: View {
     private var header: some View {
         HStack(spacing: 6) {
             // 開閉のボタンと「すべて既読」は分ける（押し間違えて開閉しないように）
-            Button {
-                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { expansion.toggle(account.id) }
+            DisclosureButton(isCollapsed: isCollapsed, name: account.user) {
+                expansion.toggle(account.id)
             } label: {
                 title
             }
-            .buttonStyle(.plain)
-            .help(isCollapsed ? "Expand \(account.user)" : "Collapse \(account.user)")
-            .accessibilityLabel(isCollapsed ? "Expand \(account.user)" : "Collapse \(account.user)")
             Spacer(minLength: 0)
             if status.tokenState == .ready, let feed, !feed.phase.isStopped {
                 MarkAllReadButton(
@@ -123,10 +118,9 @@ struct AccountSectionView: View {
         }
     }
 
-    /// 見出しのうち、開閉のボタンになる部分。
+    /// 見出しのうち、開閉のボタンになる部分（山形は `DisclosureButton` が付ける）。
     private var title: some View {
         HStack(spacing: 6) {
-            DisclosureChevron(isCollapsed: isCollapsed)
             tokenIcon
                 .frame(width: 16)
             Text(account.user)
@@ -155,7 +149,6 @@ struct AccountSectionView: View {
                 CollapsedCount(count: feed.threads.count)
             }
         }
-        .contentShape(Rectangle())
     }
 
     @ViewBuilder private var tokenIcon: some View {
@@ -191,7 +184,7 @@ struct AccountSectionView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(groups) { group in
                         RepositoryGroupView(
-                            group: group, key: RepositoryKey(account: account.id, repository: group.repository),
+                            group: group, account: account.id,
                             endpoints: endpoints, expansion: expansion, actions: actions)
                     }
                 }

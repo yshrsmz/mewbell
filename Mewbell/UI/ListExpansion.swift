@@ -11,8 +11,9 @@ struct RepositoryKey: Hashable, Sendable {
 @MainActor
 @Observable
 final class ListExpansion {
-    private(set) var collapsedAccounts: Set<AccountID> = []
-    private(set) var collapsedRepositories: Set<RepositoryKey> = []
+    // 変わらないときは書き込まない（書き込むだけで、読んでいる View がすべて描き直される）
+    private var collapsedAccounts: Set<AccountID> = []
+    private var collapsedRepositories: Set<RepositoryKey> = []
 
     func isCollapsed(_ account: AccountID) -> Bool {
         collapsedAccounts.contains(account)
@@ -23,28 +24,40 @@ final class ListExpansion {
     }
 
     func toggle(_ account: AccountID) {
-        if collapsedAccounts.remove(account) == nil {
-            collapsedAccounts.insert(account)
-        }
+        collapsedAccounts.toggle(account)
     }
 
     func toggle(_ repository: RepositoryKey) {
-        if collapsedRepositories.remove(repository) == nil {
-            collapsedRepositories.insert(repository)
-        }
+        collapsedRepositories.toggle(repository)
     }
 
     /// 新着が届いたアカウントと、新着を含むリポジトリを開く。ほかのリポジトリは変えない。
     func expand(account: AccountID, repositories: Set<RepositoryName>) {
-        collapsedAccounts.remove(account)
-        for repository in repositories {
-            collapsedRepositories.remove(RepositoryKey(account: account, repository: repository))
+        if collapsedAccounts.contains(account) {
+            collapsedAccounts.remove(account)
+        }
+        let keys = repositories.map { RepositoryKey(account: account, repository: $0) }
+        if !collapsedRepositories.isDisjoint(with: keys) {
+            collapsedRepositories.subtract(keys)
         }
     }
 
     /// `accounts` 以外のアカウントの状態を捨てる（一覧から消えた、無効にした）。
     func retain(_ accounts: Set<AccountID>) {
-        collapsedAccounts.formIntersection(accounts)
-        collapsedRepositories = collapsedRepositories.filter { accounts.contains($0.account) }
+        if !collapsedAccounts.isSubset(of: accounts) {
+            collapsedAccounts.formIntersection(accounts)
+        }
+        if collapsedRepositories.contains(where: { !accounts.contains($0.account) }) {
+            collapsedRepositories = collapsedRepositories.filter { accounts.contains($0.account) }
+        }
+    }
+}
+
+extension Set {
+    /// 入っていれば外し、無ければ入れる。
+    fileprivate mutating func toggle(_ member: Element) {
+        if remove(member) == nil {
+            insert(member)
+        }
     }
 }

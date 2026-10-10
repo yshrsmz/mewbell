@@ -75,8 +75,7 @@ final class NotificationStore {
     /// （作り直すと、止めたポーリングが勝手に再開したり、取り直しと重なったりするため）。
     func sync(with state: DiscoveryState) {
         guard makePoller != nil else { return }
-        let statuses: [AccountStatus] = if case .accounts(let statuses) = state { statuses } else { [] }
-        let active = statuses.filter { $0.tokenState != .disabled }
+        let active = state.enabledStatuses
         let keptIDs = Set(active.map(\.id))
         for id in pollers.keys where !keptIDs.contains(id) {
             let entry = pollers.removeValue(forKey: id)
@@ -91,7 +90,7 @@ final class NotificationStore {
             let waitingIDs = Set(active.filter { $0.tokenState != .unavailable }.map(\.id))
             pendingReads = pendingReads.filter { waitingIDs.contains($0.key) }
         }
-        for account in statuses.filter({ $0.tokenState == .ready }).map(\.account) where pollers[account.id] == nil {
+        for account in active.filter({ $0.tokenState == .ready }).map(\.account) where pollers[account.id] == nil {
             startPolling(account)
         }
     }

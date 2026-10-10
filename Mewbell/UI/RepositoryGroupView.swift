@@ -3,47 +3,66 @@ import SwiftUI
 /// 1 つのリポジトリの見出しとスレッド。見出しで折りたたむ。
 struct RepositoryGroupView: View {
     let group: RepositoryGroup
-    let key: RepositoryKey
+    let account: AccountID
     let endpoints: APIEndpoints?
     let expansion: ListExpansion
     let actions: ThreadListActions
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
+    private var key: RepositoryKey { RepositoryKey(account: account, repository: group.repository) }
     private var isCollapsed: Bool { expansion.isCollapsed(key) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Button {
-                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { expansion.toggle(key) }
+            DisclosureButton(isCollapsed: isCollapsed, name: group.repository.description) {
+                expansion.toggle(key)
             } label: {
-                HStack(spacing: 6) {
-                    DisclosureChevron(isCollapsed: isCollapsed)
-                    Text(group.repository.description)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    if isCollapsed {
-                        CollapsedCount(count: group.threads.count)
-                    }
-                    Spacer(minLength: 0)
+                Text(group.repository.description)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                if isCollapsed {
+                    CollapsedCount(count: group.threads.count)
                 }
-                .contentShape(Rectangle())
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.plain)
-            .help(isCollapsed ? "Expand \(group.repository.description)" : "Collapse \(group.repository.description)")
-            .accessibilityLabel(
-                isCollapsed ? "Expand \(group.repository.description)" : "Collapse \(group.repository.description)")
             if !isCollapsed {
                 ForEach(group.threads) { thread in
                     ThreadRow(
                         thread: thread,
                         number: endpoints.flatMap { ThreadWebURL.subjectNumber(for: thread, endpoints: $0) },
-                        open: { actions.open(thread, key.account) },
-                        markRead: { actions.markRead(thread, key.account) },
-                        markDone: { actions.markDone(thread, key.account) })
+                        open: { actions.open(thread, account) },
+                        markRead: { actions.markRead(thread, account) },
+                        markDone: { actions.markDone(thread, account) })
                 }
             }
         }
+    }
+}
+
+/// 見出しの開閉のボタン。先頭に山形を置き、ツールチップとアクセシビリティのラベルを `Expand` / `Collapse` で切り替える。
+/// 開閉には短いアニメーションを付けるが、「視差効果を減らす」がオンのときは付けない。
+struct DisclosureButton<Label: View>: View {
+    let isCollapsed: Bool
+    /// ツールチップとラベルに出す名前（ユーザー名、`owner/name`）
+    let name: String
+    let toggle: () -> Void
+    @ViewBuilder let label: Label
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let hint = isCollapsed ? "Expand \(name)" : "Collapse \(name)"
+        Button {
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.2), toggle)
+        } label: {
+            HStack(spacing: 6) {
+                DisclosureChevron(isCollapsed: isCollapsed)
+                label
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(hint)
+        .accessibilityLabel(hint)
     }
 }
 
