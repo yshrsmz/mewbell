@@ -13,7 +13,8 @@
           "type": "generic",
           "path": "Mewbell.xcodeproj/project.xcproj"
         }
-      ]
+      ],
+      "initial-version": "0.1.0"
     }
   }
 }
