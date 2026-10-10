@@ -18,6 +18,14 @@ enum FeedPhase: Sendable, Equatable {
         if case .retrying(_, rateLimited: true) = self { true } else { false }
     }
 
+    /// 一覧を出す状態か（取得できた、失敗して待っている）。
+    var showsThreads: Bool {
+        switch self {
+        case .loaded, .retrying: true
+        case .loading, .scopeInsufficient, .unauthorized: false
+        }
+    }
+
     /// 再読み込みを押すまで取得しない状態か。
     var isStopped: Bool {
         switch self {
@@ -30,6 +38,12 @@ enum FeedPhase: Sendable, Equatable {
 struct FeedState: Sendable, Equatable {
     var phase: FeedPhase
     var threads: [NotificationThread]
+    /// 最後に取得し終えた一覧が、10 ページで打ち切ったものか
+    var isTruncated = false
+    /// ポップオーバーで知らせる操作の失敗（その後に送った取得が成功したら消す）
+    var actionFailure: ActionFailure?
+    /// Diagnostics に出す値
+    var diagnostics = FeedDiagnostics()
 
     static let loading = FeedState(phase: .loading, threads: [])
 

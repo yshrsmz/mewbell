@@ -43,6 +43,8 @@ actor AccountPoller {
     private var readThroughs: [Int: ReadThrough] = [:]
     /// 次のすべて既読に振る番号
     private var readThroughCount = 0
+    /// 打ち切り・Diagnostics の値・知らせる操作の失敗の記録
+    private var recorder = FeedRecorder()
     /// 走っているループの番号（止めたループが後から終わったときに、新しいループの状態を消さないため）
     private var runningLoop: Int?
     private var loopCount = 0
@@ -131,16 +133,16 @@ actor AccountPoller {
         while !Task.isCancelled {
             refreshWaiters.startAttempt(at: now())
             // トークンが無いのは、読み直しが一時的にトークンを捨てたときなど。失敗として待ってから確かめ直す
-            let result: NotificationsFetchResult
+            let (result, number): (NotificationsFetchResult, Int)
             if let token = await tokens.currentToken(for: accountID) {
-                result = await fetch(with: token)
+                (result, number) = await fetch(with: token)
             } else {
                 Self.logger.error("No token for \(self.accountID)")
-                result = .failed(.noToken)
+                (result, number) = (.failed(.noToken), fetchCount)
             }
             guard !Task.isCancelled else { return }
 
-            switch await handle(result, refreshedToken: refreshedToken) {
+            switch await handle(result, fetchNumber: number, refreshedToken: refreshedToken) {
             case .stop:
                 return
             case .retryNow:
@@ -150,6 +152,7 @@ actor AccountPoller {
                 if result != .failed(.noToken) {
                     refreshedToken = false
                 }
+                state.diagnostics.nextFetchAt = now().addingTimeInterval(Double(delay.components.seconds))
                 await publish(state)
                 refreshWaiters.finish()
                 guard await pause(for: delay) else { return }
@@ -184,8 +187,9 @@ actor AccountPoller {
         refreshWaiters.finish(all: true)
     }
 
-    /// 1 回の取得をする。再読み込みの後と、最後に 200 で一覧を取り直してから間隔がたった後は `If-Modified-Since` を付けない。
-    private func fetch(with token: AccessToken) async -> NotificationsFetchResult {
+    /// 1 回の取得をして、結果と取得の番号を返す。再読み込みの後と、最後に 200 で一覧を取り直してから間隔がたった後は
+    /// `If-Modified-Since` を付けない。
+    private func fetch(with token: AccessToken) async -> (NotificationsFetchResult, Int) {
         // 印は送る前に下ろす（取得中に押された再読み込みを、その前に始めた取得で消さないため）
         let requested = unconditionalRequested.exchange(false, ordering: .relaxed)
         let isDue = requested || periodicUnconditionalFetchIsDue
@@ -199,13 +203,13 @@ actor AccountPoller {
         var result = await client.fetchNotifications(
             endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince, participating: participating)
         // 止められた（再開で新しいループに替わった）後に返った結果では、状態を書き換えない
-        guard !Task.isCancelled else { return result }
-        if case .updated(let threads, let lastModified, let pollInterval, let scopes) = result {
+        guard !Task.isCancelled else { return (result, number) }
+        if case .updated(let threads, let lastModified, let pollInterval, let scopes, let truncated) = result {
             result = .updated(
                 threads: HiddenThreads.revealOrHide(
                     threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt),
                 lastModified: lastModified,
-                pollInterval: pollInterval, scopes: scopes)
+                pollInterval: pollInterval, scopes: scopes, truncated: truncated)
         }
         if case .updated = result {
             // 条件付きでも 200 なら全ページを取り直しているので、条件なしと同じく一覧は最新になる
@@ -214,7 +218,7 @@ actor AccountPoller {
             // 取り終えられなかったので、次の取得もまた条件なしにする
             unconditionalRequested.store(true, ordering: .relaxed)
         }
-        return result
+        return (result, number)
     }
 
     /// 最後に 200 で一覧を取り直してから間隔がたったか。時計が戻ったとき（差が負）も、たったものとして扱う
@@ -226,10 +230,11 @@ actor AccountPoller {
         return elapsed >= Self.unconditionalFetchInterval || elapsed < 0
     }
 
-    /// 取得の結果を状態に反映し、次にすることを決める。`refreshedToken` は直前にトークンを取り直したか。
-    private func handle(_ result: NotificationsFetchResult, refreshedToken: Bool) async -> PollStep {
+    /// 取得の結果を状態に反映し、次にすることを決める。`fetchNumber` は取得の番号、`refreshedToken` は直前にトークンを取り直したか。
+    private func handle(_ result: NotificationsFetchResult, fetchNumber: Int, refreshedToken: Bool) async -> PollStep {
+        recorder.recordFetch(result, number: fetchNumber, at: now(), in: &state)
         switch result {
-        case .updated(let threads, let lastModified, let pollInterval, let scopes):
+        case .updated(let threads, let lastModified, let pollInterval, let scopes, _):
             if !scopesVerified {
                 guard scopes.allowsNotifications else {
                     Self.logger.error("The token of \(self.accountID) lacks the repo and notifications scopes")
@@ -274,6 +279,8 @@ actor AccountPoller {
 
     /// トークンを取り直し、条件付きリクエストとスコープの確認をやり直す。取れなければ「認証エラー」で止める。
     private func refreshToken() async -> Bool {
+        // 前のトークンのスコープは、取り直せたかどうかにかかわらず捨てる
+        state.diagnostics.scopes = nil
         guard await tokens.refreshToken(for: accountID) != nil else {
             Self.logger.error("Could not refresh the token of \(self.accountID)")
             await stop(as: .unauthorized)
@@ -287,6 +294,7 @@ actor AccountPoller {
     private func succeeded(pollInterval: Int?) -> Duration {
         consecutiveFailures = 0
         state.phase = .loaded(updatedAt: now())
+        recorder.recordSuccess(pollInterval: pollInterval, at: now(), in: &state)
         return PollSchedule.afterSuccess(pollInterval: pollInterval)
     }
 
@@ -294,9 +302,9 @@ actor AccountPoller {
         .retrying(nextAttempt: now().addingTimeInterval(Double(delay.components.seconds)), rateLimited: rateLimited)
     }
 
-    /// 止まった状態にする。スレッドは捨てる。
+    /// 止まった状態にする。スレッドは捨てる（Diagnostics の値は `FeedRecorder.stopped` で持ち越す）。
     private func stop(as phase: FeedPhase) async {
-        state = FeedState(phase: phase, threads: [])
+        state = recorder.stopped(as: phase, from: state)
         readThroughs.removeAll()
         lastModified = nil
         scopesVerified = false
@@ -316,47 +324,44 @@ extension AccountPoller {
     /// レート制限の待ちでなければ再読み込みで早められる）。止めるなら nil、続けるならトークンを取り直したか。
     fileprivate func beginLoop(refreshingTokenFirst: Bool) async -> Bool? {
         if refreshingTokenFirst {
-            await publish(.loading)
+            await publish(recorder.stopped(as: .loading, from: state))
             return await refreshToken() ? true : nil
         }
         guard let firstFetchNotBefore, firstFetchNotBefore > now() else { return false }
         return await pause(for: .seconds(firstFetchNotBefore.timeIntervalSince(now()))) ? false : nil
     }
 
+    /// 操作の失敗をログに書き、記録して UI に知らせる。
+    fileprivate func recordActionFailure(_ action: ThreadActionKind, _ kind: FailureKind) async {
+        Self.logger.error(
+            "Could not apply \(String(describing: action)) to \(self.accountID): \(String(describing: kind))")
+        recorder.recordActionFailure(action, kind, at: now(), fetchCount: fetchCount, in: &state)
+        await publish(state)
+    }
+
     /// スレッドを既読か Done にする。一覧からすぐに外し、リクエストを送り、次の取得を条件なしにする。
     /// 止まっているときとトークンが無いときは送らない（次の条件なしの取得で、未読のままなら一覧に戻る）。
     func perform(_ action: ThreadAction) async {
         let threadID = action.threadID
-        if case .requestsInFlight(let count) = hidden[threadID] {
-            hidden[threadID] = .requestsInFlight(count + 1)
-        } else {
-            hidden[threadID] = .requestsInFlight(1)
-        }
+        HiddenThreads.beginRequest(for: threadID, in: &hidden)
         if state.threads.contains(where: { $0.id == threadID }) {
             state.threads.removeAll { $0.id == threadID }
             await publish(state)
         }
         // 止まっているかは、トークンを待っている間に止められることがあるので待った後に見る
-        if let token = await tokens.currentToken(for: accountID), !state.phase.isStopped {
+        // 止まっているときは送らず、失敗も記録しない（止まっていることは取得の状態で伝わる）
+        let token = await tokens.currentToken(for: accountID)
+        if !state.phase.isStopped {
             let result =
-                switch action {
-                case .read:
-                    await client.markThreadRead(endpoints: endpoints, token: token, threadID: threadID)
-                case .done:
-                    await client.markThreadDone(endpoints: endpoints, token: token, threadID: threadID)
+                if let token { await client.perform(action, endpoints: endpoints, token: token) } else {
+                    ThreadActionResult.failed(.noToken)
                 }
-            if result != .succeeded {
-                Self.logger.error(
-                    "Could not apply \(String(describing: action)) to a thread of \(self.accountID): \(String(describing: result))"
-                )
+            if let kind = FailureKind(result) {
+                await recordActionFailure(ThreadActionKind(action), kind)
             }
         }
         // 結果が 304 に隠れないように、また失敗したスレッドが一覧に戻るように、次は条件なしで取り直す
-        if case .requestsInFlight(let count) = hidden[threadID], count > 1 {
-            hidden[threadID] = .requestsInFlight(count - 1)
-        } else {
-            hidden[threadID] = .fetch(fetchCount)
-        }
+        HiddenThreads.endRequest(for: threadID, fetchCount: fetchCount, in: &hidden)
         unconditionalRequested.store(true, ordering: .relaxed)
     }
 
@@ -365,10 +370,13 @@ extension AccountPoller {
     /// トークンが無いとき、一覧が空のときは何もしない。押した後に届いたスレッドは、`newest` より新しいので外さない。
     func markAllRead(through newest: Date) async {
         // 取得の状態は、トークンを待っている間に変わることがあるので待った後に見る
-        guard let token = await tokens.currentToken(for: accountID), case .loaded = state.phase,
-            !state.threads.isEmpty
-        else {
-            Self.logger.info("Skipped marking all threads of \(self.accountID) as read: no token or no loaded list")
+        let token = await tokens.currentToken(for: accountID)
+        guard case .loaded = state.phase, !state.threads.isEmpty else {
+            Self.logger.info("Skipped marking all threads of \(self.accountID) as read: no loaded list")
+            return
+        }
+        guard let token else {
+            await recordActionFailure(.markAllRead, .noToken)
             return
         }
         // `last_read_at` は秒までしか送らないので、隠す範囲も秒に揃える
@@ -380,18 +388,12 @@ extension AccountPoller {
         await publish(state)
 
         let result = await client.markAllRead(endpoints: endpoints, token: token, lastReadAt: cutoff)
-        if result != .succeeded {
-            Self.logger.error("Could not mark all threads of \(self.accountID) as read: \(String(describing: result))")
-        }
         // 止まって消されていたら、戻さない
-        if readThroughs[serial] != nil {
-            let completedAt = now()
-            readThroughs[serial]?.until =
-                result == .succeeded
-                ? .succeeded(
-                    fetchesBefore: fetchCount, completedAt: completedAt,
-                    deadline: completedAt.addingTimeInterval(Self.unconditionalFetchInterval))
-                : .failed(fetchesBefore: fetchCount)
+        readThroughs[serial]?.finish(
+            succeeded: result == .succeeded, fetchCount: fetchCount, at: now(), holdFor: Self.unconditionalFetchInterval
+        )
+        if let failure = FailureKind(result) {
+            await recordActionFailure(.markAllRead, failure)
         }
         unconditionalRequested.store(true, ordering: .relaxed)
     }

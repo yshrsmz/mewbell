@@ -4,15 +4,36 @@ import os
 
 /// gh の設定ディレクトリ。
 enum GhConfigDirectory {
+    /// 設定ディレクトリを決めた方法。
+    enum Source: Sendable, Equatable {
+        /// 設定で上書きしたディレクトリ
+        case override
+        /// 環境変数 `GH_CONFIG_DIR`
+        case ghConfigDir
+        /// 環境変数 `XDG_CONFIG_HOME`
+        case xdgConfigHome
+        /// 既定の `~/.config/gh`
+        case defaultLocation
+    }
+
+    /// 決めた設定ディレクトリと、その方法。
+    struct Resolved: Sendable, Equatable {
+        let url: URL
+        let source: Source
+    }
+
     /// `GH_CONFIG_DIR` → `XDG_CONFIG_HOME/gh` → `~/.config/gh` の順に決める（gh と同じ順）。
-    static func resolve(environment: [String: String], homeDirectory: URL) -> URL {
+    static func resolve(environment: [String: String], homeDirectory: URL) -> Resolved {
         if let directory = environment["GH_CONFIG_DIR"], !directory.isEmpty {
-            return URL(filePath: directory, directoryHint: .isDirectory)
+            return Resolved(url: URL(filePath: directory, directoryHint: .isDirectory), source: .ghConfigDir)
         }
         if let xdg = environment["XDG_CONFIG_HOME"], !xdg.isEmpty {
-            return URL(filePath: xdg, directoryHint: .isDirectory).appending(path: "gh", directoryHint: .isDirectory)
+            return Resolved(
+                url: URL(filePath: xdg, directoryHint: .isDirectory).appending(path: "gh", directoryHint: .isDirectory),
+                source: .xdgConfigHome)
         }
-        return homeDirectory.appending(path: ".config/gh", directoryHint: .isDirectory)
+        return Resolved(
+            url: homeDirectory.appending(path: ".config/gh", directoryHint: .isDirectory), source: .defaultLocation)
     }
 }
 

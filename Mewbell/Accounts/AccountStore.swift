@@ -7,6 +7,8 @@ import os
 @Observable
 final class AccountStore {
     private(set) var state: DiscoveryState
+    /// 最後の読み直しでの gh の検出の結果（Diagnostics 用。読み直しが終わるたびに入れ直す）
+    private(set) var ghDetection = GhDiagnostics()
 
     @ObservationIgnored private static let logger = Logger(category: "Accounts")
     @ObservationIgnored private let discovery: (any AccountDiscovering)?
@@ -70,6 +72,11 @@ final class AccountStore {
                 overrides: settings?.ghOverrides ?? GhOverrides(), disabled: settings?.disabledAccounts ?? [])
             await discovery.reload(userInitiated: userInitiated, options: options) { state in
                 await self.apply(state, generation: generation)
+            }
+            // 前の設定ディレクトリで始めた読み直しの結果は捨てる（状態と同じ）
+            let detection = await discovery.ghDiagnostics()
+            if generation == configGeneration {
+                self.ghDetection = detection
             }
             reloadTask = nil
             if reloadRequested {

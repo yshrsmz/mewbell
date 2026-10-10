@@ -23,6 +23,15 @@ struct ReadThrough {
         case failed(fetchesBefore: Int)
     }
 
+    /// リクエストの結果が出た。`fetchCount` は次に始める取得の番号、`holdFor` は成功したときに取り除き続ける時間。
+    mutating func finish(succeeded: Bool, fetchCount: Int, at completedAt: Date, holdFor: TimeInterval) {
+        until =
+            succeeded
+            ? .succeeded(
+                fetchesBefore: fetchCount, completedAt: completedAt, deadline: completedAt.addingTimeInterval(holdFor))
+            : .failed(fetchesBefore: fetchCount)
+    }
+
     /// この番号・開始時刻の取得の結果から取り除くか。取得は順に行うので、一度 false になったらその後も false。
     func applies(toFetch number: Int, startedAt: Date) -> Bool {
         switch until {
@@ -38,6 +47,25 @@ struct ReadThrough {
 
 /// 操作したスレッドを取得の結果から隠す処理。
 enum HiddenThreads {
+    /// スレッドへの操作のリクエストを始める（終わるまで、どの取得の結果からも隠す）。
+    static func beginRequest(for threadID: String, in hidden: inout [String: HiddenUntil]) {
+        if case .requestsInFlight(let count) = hidden[threadID] {
+            hidden[threadID] = .requestsInFlight(count + 1)
+        } else {
+            hidden[threadID] = .requestsInFlight(1)
+        }
+    }
+
+    /// スレッドへの操作のリクエストが終わった。ほかに終わっていないリクエストが無ければ、`fetchCount`（次に始める取得の番号）
+    /// 以降の取得の 200 が出るまで隠す。
+    static func endRequest(for threadID: String, fetchCount: Int, in hidden: inout [String: HiddenUntil]) {
+        if case .requestsInFlight(let count) = hidden[threadID], count > 1 {
+            hidden[threadID] = .requestsInFlight(count - 1)
+        } else {
+            hidden[threadID] = .fetch(fetchCount)
+        }
+    }
+
     /// 操作の後に始めた取得の結果なら隠すのをやめ、そうでなければ既読・Done・すべて既読にしたスレッドを取り除く。
     /// 取得は 1 つのループで順に行うので、番号と開始時刻は結果の届く順に増える。
     static func revealOrHide(

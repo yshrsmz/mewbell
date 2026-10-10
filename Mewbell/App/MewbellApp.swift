@@ -22,7 +22,7 @@ struct MewbellApp: App {
         Settings {
             SettingsView(
                 settings: appDelegate.settings, accounts: appDelegate.accountStore,
-                launchAtLogin: appDelegate.launchAtLogin)
+                notifications: appDelegate.notificationStore, launchAtLogin: appDelegate.launchAtLogin)
         }
     }
 }

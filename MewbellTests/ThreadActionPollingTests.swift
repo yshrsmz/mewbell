@@ -282,11 +282,11 @@ struct MarkAllReadPollingTests {
 
     @Test func neitherSendsNorClearsWithoutAToken() async {
         await startLoaded([Self.twoThreads])
-        let updates = fixture.updates.value.count
         await fixture.tokens.discardToken(for: PollerFixture.alice)
         await markAllRead()
         #expect(puts.isEmpty)
-        #expect(fixture.updates.value.count == updates)
+        // 送れなかったことだけを知らせ、一覧はそのまま
+        #expect(fixture.last?.actionFailure?.kind == .noToken)
         #expect(lastIDs == ["1", "2"])
         fixture.poller.stop()
     }

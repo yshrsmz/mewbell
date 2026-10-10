@@ -71,6 +71,8 @@ protocol AccountDiscovering: Sendable {
     func discardAllTokens() async
     /// トークンをすべて捨て、以後は受け取らない（アプリの終了時）。
     func closeCredentials() async
+    /// 最後の読み直しでの gh の検出の結果（gh は実行しない）。
+    func ghDiagnostics() async -> GhDiagnostics
 }
 
 actor AccountDiscovery: AccountDiscovering, TokenProviding {
@@ -80,11 +82,15 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     private let runner: any ProcessRunning
     /// 子プロセスに渡す環境（設定ディレクトリを上書きしたときは、読み直しごとに `GH_CONFIG_DIR` を足す）
     private let environment: [String: String]
-    /// 設定で上書きしないときの設定ディレクトリ
-    private let configDirectory: URL
+    /// 設定で上書きしないときの設定ディレクトリと決め方
+    private let configDirectory: GhConfigDirectory.Resolved
     private let credentials: CredentialStore
     /// `gh --version` で対応を確かめた gh の実体のパス
     private var verifiedGhPath: URL?
+    /// `verifiedGhPath` を確かめたときのバージョン
+    private var verifiedVersion: GhVersion?
+    /// 最後の読み直しでの gh の検出の結果
+    private var lastGhDiagnostics = GhDiagnostics()
     /// 最後の読み直しで使った子プロセスの環境（401 の後の取り直しでも同じ設定ディレクトリを使うため）
     private var currentEnvironment: [String: String]
     /// `verifiedGhPath` を確かめたときの設定ディレクトリ（変わったら `gh --version` からやり直す）
@@ -105,12 +111,13 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         runner: any ProcessRunning,
         environment: [String: String],
         configDirectory: URL,
+        configDirectorySource: GhConfigDirectory.Source = .defaultLocation,
         credentials: CredentialStore
     ) {
         self.locator = locator
         self.runner = runner
         self.environment = environment
-        self.configDirectory = configDirectory
+        self.configDirectory = GhConfigDirectory.Resolved(url: configDirectory, source: configDirectorySource)
         self.credentials = credentials
         currentEnvironment = environment
     }
@@ -120,12 +127,14 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         let processEnvironment = ProcessInfo.processInfo.environment
         let environment = GhEnvironment.make(from: processEnvironment)
         let runner = SubprocessRunner()
+        let configDirectory = GhConfigDirectory.resolve(
+            environment: processEnvironment, homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
         return AccountDiscovery(
             locator: GhLocator(runner: runner, environment: environment),
             runner: runner,
             environment: environment,
-            configDirectory: GhConfigDirectory.resolve(
-                environment: processEnvironment, homeDirectory: FileManager.default.homeDirectoryForCurrentUser),
+            configDirectory: configDirectory.url,
+            configDirectorySource: configDirectory.source,
             credentials: credentials)
     }
 
@@ -144,6 +153,10 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
 
     func closeCredentials() async {
         await credentials.close()
+    }
+
+    func ghDiagnostics() async -> GhDiagnostics {
+        lastGhDiagnostics
     }
 
     func disable(_ id: AccountID) async {
@@ -222,26 +235,26 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     private func discover(
         userInitiated: Bool, options: DiscoveryOptions, update: @Sendable (DiscoveryState) async -> Void
     ) async -> DiscoveryState {
+        // 途中で返ったときに前の読み直しの値を残さないよう、分かった値だけを入れて最後に書き直す
+        var diagnostics = GhDiagnostics()
+        defer { lastGhDiagnostics = diagnostics }
         guard
-            let ghPath = await locator.locate(
+            let location = await locator.locate(
                 overridePath: options.overrides.executablePath, retryLoginShell: userInitiated)
         else {
             verifiedGhPath = nil
             return .ghNotFound
         }
-        // 設定で上書きした設定ディレクトリが使えなければ、ほかの候補に移らない（別の gh のログインを黙って使わないため）
-        // 読むのも gh に渡すのも、確かめた実体のパスにする
-        var overrideURL: URL?
-        if let override = options.overrides.configDirectory {
-            overrideURL = ConfigDirectoryValidator.validate(override)
-            guard overrideURL != nil else {
-                Self.logger.error("The overridden gh config directory is not usable")
-                let hostsFile = URL(filePath: override, directoryHint: .isDirectory).appending(path: "hosts.yml")
-                return .hostsFileUnreadable(path: hostsFile.path)
-            }
+        diagnostics.executable = location
+        let resolvedConfigDirectory: GhConfigDirectory.Resolved
+        switch resolveConfigDirectory(override: options.overrides.configDirectory) {
+        case .success(let resolved): resolvedConfigDirectory = resolved
+        case .failure(let unusable): return unusable.state
         }
-        let configDirectory = overrideURL ?? self.configDirectory
-        let environment = GhEnvironment.make(from: environment, configDirectory: overrideURL)
+        diagnostics.configDirectory = resolvedConfigDirectory
+        let configDirectory = resolvedConfigDirectory.url
+        let environment = GhEnvironment.make(
+            from: environment, configDirectory: resolvedConfigDirectory.source == .override ? configDirectory : nil)
         currentEnvironment = environment
         if verifiedConfigDirectory != configDirectory {
             verifiedGhPath = nil
@@ -257,8 +270,10 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
             return .hostsFileUnreadable(path: hostsURL.path)
         }
 
-        let client = GhClient(executable: ghPath, runner: runner, environment: environment)
-        if let unusable = await verifyVersion(of: ghPath, using: client) {
+        let client = GhClient(executable: location.url, runner: runner, environment: environment)
+        let (unusable, version) = await verifyVersion(of: location.url, using: client)
+        diagnostics.version = version
+        if let unusable {
             return unusable
         }
 
@@ -280,14 +295,32 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         return .accounts(accounts, disabled: disabled) { failed.contains($0.id) ? .unavailable : .ready }
     }
 
-    /// gh のパスが前回確かめたものと違えば `gh --version` で確かめる。使えなければその状態を返す。
-    private func verifyVersion(of ghPath: URL, using client: GhClient) async -> DiscoveryState? {
-        guard verifiedGhPath != ghPath else { return nil }
+    /// 使う設定ディレクトリ。設定で上書きした設定ディレクトリが使えなければ、ほかの候補に移らない
+    /// （別の gh のログインを黙って使わないため）。読むのも gh に渡すのも、確かめた実体のパスにする。
+    private func resolveConfigDirectory(override: String?) -> Result<
+        GhConfigDirectory.Resolved, UnusableConfigDirectory
+    > {
+        guard let override else { return .success(configDirectory) }
+        guard let url = ConfigDirectoryValidator.validate(override) else {
+            Self.logger.error("The overridden gh config directory is not usable")
+            let hostsFile = URL(filePath: override, directoryHint: .isDirectory).appending(path: "hosts.yml")
+            return .failure(UnusableConfigDirectory(state: .hostsFileUnreadable(path: hostsFile.path)))
+        }
+        return .success(GhConfigDirectory.Resolved(url: url, source: .override))
+    }
+
+    /// gh のパスが前回確かめたものと違えば `gh --version` で確かめる。使えなければその状態と、読めたバージョンを返す。
+    private func verifyVersion(of ghPath: URL, using client: GhClient) async -> (
+        unusable: DiscoveryState?, version: GhVersion?
+    ) {
+        if verifiedGhPath == ghPath, let verifiedVersion { return (nil, verifiedVersion) }
         verifiedGhPath = nil
-        guard let version = await client.version() else { return .ghUnavailable }
-        guard version.isSupported else { return .ghOutdated(version: version) }
+        verifiedVersion = nil
+        guard let version = await client.version() else { return (.ghUnavailable, nil) }
+        guard version.isSupported else { return (.ghOutdated(version: version), version) }
         verifiedGhPath = ghPath
-        return nil
+        verifiedVersion = version
+        return (nil, version)
     }
 
     /// アカウントごとの `gh auth token` を並べて実行し、取れたトークンを保存する。取れなかったアカウントを返す。
@@ -303,6 +336,11 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
             return failed
         }
     }
+}
+
+/// 上書きした設定ディレクトリが使えなかったときの、全体の状態。
+private struct UnusableConfigDirectory: Error {
+    let state: DiscoveryState
 }
 
 /// 走っている `gh auth token` と、ほかの呼び出し元が合流したかどうか。
