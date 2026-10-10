@@ -38,8 +38,9 @@ jobs:
         run: |
           project=Mewbell.xcodeproj/project.xcproj
           block="$(sed -n '/x-release-please-start-version/,/x-release-please-end/p' "$project")"
-          if ! grep -Eq '"MARKETING_VERSION": "[0-9]+\.[0-9]+\.[0-9]+"' <<<"$block"; then
-            echo "$project の release-please の印の中に MARKETING_VERSION（X.Y.Z）がありません" >&2
+          if ! grep -q 'x-release-please-end' "$project" ||
+            ! grep -Eq '"MARKETING_VERSION": "[0-9]+\.[0-9]+\.[0-9]+"' <<<"$block"; then
+            echo "$project の release-please の印（start と end）の中に MARKETING_VERSION（X.Y.Z）がありません" >&2
             exit 1
           fi
           if [[ "$(grep -c '"MARKETING_VERSION":' "$project")" != 1 ]] ||

@@ -93,7 +93,7 @@
 
 `actions/checkout`、`actions/create-github-app-token`、`googleapis/release-please-action` はコミット SHA で固定し、公開から 7 日以上経った版を選ぶ。`${{ }}` の値はシェルに直接埋め込まず、`env:` を通して渡す。
 
-失敗したとき: タグと draft の Release が残る。原因を直せる場合（ランナーの一時的な失敗など）は `gh run rerun --failed` でやり直す。コードを直す必要がある場合は、draft とタグを残したまま修正の PR をマージする。release-please はマニフェストとタグを前の版として扱って次の版の Release PR を作るので、その版は公開されない版になる（タグを消すと、release-please が前の版を見つけられなくなる）。この手順を README に書く。
+失敗したとき: タグと draft の Release が残る。原因を直せる場合（ランナーの一時的な失敗など）は `gh run rerun --failed` でやり直す。`release_created` はリリースを作った実行にしか出ないので、それができないとき（「Re-run all jobs」でやり直した、30 日を過ぎた）のために、`workflow_dispatch` の入力 `tag` で `build` ジョブだけを動かせるようにする（release-please は飛ばし、タグの形式を確かめてから使う。Environment が `main` に限られているので `main` からしか動かない）。コードを直す必要がある場合は、draft とタグを残したまま修正の PR をマージする。release-please はマニフェストとタグを前の版として扱って次の版の Release PR を作るので、その版は公開されない版になる（タグを消すと、release-please が前の版を見つけられなくなる）。この手順を README に書く。
 
 代替案: ビルドを手元で行う（最初の計画）。ユーザーがリリースに限って macOS ランナーを認めたため採らない。macOS のジョブだけで release-please も動かす。macOS ランナーは高く preview でもあるので、Release を作るときだけ動かす。
 

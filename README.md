@@ -46,8 +46,9 @@ Releases から入れた場合は、新しい zip の `Mewbell.app` で置き換
 ### アンインストール
 
 ```bash
-brew uninstall --cask mewbell
-brew uninstall --cask --zap mewbell   # 設定（~/Library/Preferences/com.codingfeline.mewbell.plist）と ~/Library/Application Support/com.codingfeline.mewbell も消す
+brew uninstall --cask mewbell          # アプリだけを消す
+# または
+brew uninstall --cask --zap mewbell    # 設定（~/Library/Preferences/com.codingfeline.mewbell.plist）と ~/Library/Application Support/com.codingfeline.mewbell も消す
 ```
 
 Releases から入れた場合は、`/Applications/Mewbell.app` をゴミ箱に入れます。ログイン時に起動するように登録していた場合は、アプリを消すと macOS が登録を外します。
@@ -122,7 +123,7 @@ CI（GitHub Actions）は ubuntu で lint と OpenSpec の検証だけを回し�
 
 うまくいかなかったとき:
 
-- ビルドや検査で失敗すると、Release は draft のまま残り、公開も tap の更新もされません。ランナーの一時的な失敗なら `gh run rerun <run-id> --failed` でやり直します
+- ビルドや検査で失敗すると、Release は draft のまま残り、公開も tap の更新もされません。ランナーの一時的な失敗なら `gh run rerun <run-id> --failed` でやり直します。「Re-run all jobs」でやり直したときや、やり直せる期間（30 日）を過ぎたときは、`gh workflow run release.yml --ref main -f tag=vX.Y.Z` でそのタグをビルドし直します（公開済みなら tap への知らせだけを送り直します）
 - コードを直す必要があるときは、draft の Release とタグをそのまま残して、修正の PR をマージします。release-please は `.release-please-manifest.json` とタグ `vX.Y.Z` を前の版として扱い、次の版の Release PR を作ります（X.Y.Z は公開されない版になります）。次の版を公開した後で、古い draft の Release は消してかまいません（`gh release delete vX.Y.Z`。タグは残します）
 - ランナーのイメージが変わって Xcode が見つからないと、`Check Xcode` で止まります。手元の Xcode とそろえて、`release.yml` の `XCODE_APP` と `XCODE_BUILD` を上げます
 - `.claude/rules/security.md` の「アプリとビルドの設定」を変えたときは、`scripts/lib/verify-app.sh` の検査も見直します

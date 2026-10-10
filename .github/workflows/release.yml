@@ -9,6 +9,12 @@ name: Release
 on:
   push:
     branches: [main]
+  # draft のまま残った Release を、タグを指定してビルドし直す（push の実行をやり直せないとき）
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "draft のまま残った Release のタグ（vX.Y.Z）"
+        required: true
 
 permissions:
   contents: read
@@ -20,6 +26,7 @@ env:
 
 jobs:
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     # 待っている実行が新しい push で置き換えられても、マージ済みで未リリースの Release PR は次の実行が拾う
     concurrency:
@@ -49,12 +56,18 @@ jobs:
 
   build:
     needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    # workflow_dispatch では release-please を飛ばすので、always() で needs の結果に関わらず条件を評価する
+    if: >-
+      always() && (
+        (github.event_name == 'push' && needs.release-please.result == 'success' &&
+          needs.release-please.outputs.release_created == 'true') ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: xcode-27
     timeout-minutes: 60
     # release_created はリリースを作った実行にしか出ないので、ビルドはタグごとに分けて取り消されないようにする
     concurrency:
-      group: release-build-${{ needs.release-please.outputs.tag_name }}
+      group: release-build-${{ github.event_name == 'workflow_dispatch' && inputs.tag || needs.release-please.outputs.tag_name }}
       cancel-in-progress: false
     environment: release
     permissions:
@@ -63,9 +76,16 @@ jobs:
       id-token: write
       attestations: write
     env:
-      TAG: ${{ needs.release-please.outputs.tag_name }}
-      VERSION: ${{ needs.release-please.outputs.version }}
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || needs.release-please.outputs.tag_name }}
     steps:
+      - name: Validate the tag
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "タグの形式が vX.Y.Z ではありません" >&2
+            exit 1
+          fi
+          echo "VERSION=${TAG#v}" >>"$GITHUB_ENV"
+
       # 公開済みのとき（公開の後の手順だけが失敗してやり直したとき）は、ビルドも attestation も添付もせず、
       # tap への知らせだけを送り直す。利用者が取った zip と Cask の SHA-256 を変えないため
       - id: state

@@ -31,7 +31,8 @@ verify_app() {
   fi
 
   local flags
-  flags="$(codesign -dv "$app" 2>&1 | sed -n 's/.*flags=0x[0-9a-f]*(\([^)]*\)).*/\1/p')"
+  # 署名が無いと codesign が失敗するが、set -e の呼び出し元でもここで止めずに、まとめて表示する
+  flags="$(codesign -dv "$app" 2>&1 | sed -n 's/.*flags=0x[0-9a-f]*(\([^)]*\)).*/\1/p' || true)"
   if [[ ",$flags," != *",runtime,"* ]]; then
     failures+=("Hardened Runtime（runtime）が無効です（flags: ${flags:-なし}）")
   fi

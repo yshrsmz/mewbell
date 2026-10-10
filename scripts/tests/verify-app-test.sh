@@ -113,6 +113,21 @@ plutil -replace CFBundleVersion -string 1 "$app/Contents/Info.plist"
 sign -o runtime "$app"
 expect fail "CFBundleVersion だけが違っても落ちる" "$app" 1.2.3 "CFBundleVersion"
 
+# package-release.sh と同じく set -euo pipefail の下で呼んでも、途中で止まらずに理由を出して失敗する
+# （expect の中の $(...) || rc=$? では errexit が効かないので、別の bash で動かす）
+app="$(make_app unsigned)"
+# clang の arm64 の出力にはリンカーの ad-hoc 署名が付いているので外す
+codesign --remove-signature "$app/Contents/MacOS/Mewbell"
+rc=0
+output="$(bash -euo pipefail -c 'source scripts/lib/verify-app.sh; verify_app "$1" 1.2.3' _ "$app" 2>&1)" || rc=$?
+if [[ $rc -ne 0 && "$output" == *"codesign --verify"* && "$output" == *"Hardened Runtime"* ]]; then
+  echo "ok: set -e の下でも、署名の無い .app は理由を出して落ちる"
+else
+  echo "NG: set -e の下で署名の無い .app を検査した（rc=${rc}）" >&2
+  echo "$output" | sed 's/^/    /' >&2
+  failures=$((failures + 1))
+fi
+
 app="$(make_app tampered)"
 sign -o runtime "$app"
 printf 'tampered' >>"$app/Contents/MacOS/Mewbell"
