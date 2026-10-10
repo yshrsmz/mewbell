@@ -74,26 +74,31 @@
 
 ### D3. リリースのワークフロー（mewbell）
 
-`.github/workflows/release.yml`。`on: push: branches: [main]`、ワークフローの既定は `permissions: contents: read`。concurrency はジョブごとに分ける。`release-please` は `group: release-please`（待っている実行が新しい push に置き換えられても、マージ済みで未リリースの Release PR は次の実行が拾う）。`build` は `group: release-build-<tag>` にして、後の push で取り消されないようにする（`release_created` はリリースを作った実行にしか出ないため）
+`.github/workflows/release.yml`。`on: push: branches: [main]` と `workflow_dispatch`（入力 `tag`）、ワークフローの既定は `permissions: contents: read`。リポジトリのコードと依存のコード（テスト、SPM のビルド、`package-release.sh`）は、書き込み権限・OIDC トークン・App の秘密鍵を持たないジョブでだけ動かす。テストや依存のコードが OIDC トークンで任意のファイルに attestation を付けたり、同じジョブの Action を書き換えて秘密鍵を盗んだりできないようにするため。
 
-1. ジョブ `release-please`（`ubuntu-24.04`、`environment: release`）
+1. ジョブ `release-please`（`ubuntu-24.04`、push のときだけ、`environment: release`、`concurrency: release-please`）
    - `actions/create-github-app-token` で mewbell 用 App のトークンを発行する（`repositories: mewbell`、`permission-contents: write`、`permission-pull-requests: write`）
-   - `googleapis/release-please-action` をそのトークンで実行し、`release_created`、`tag_name`、`version` を出力する
-2. ジョブ `build`（`runs-on: xcode-27`、`needs: release-please`、`if: needs.release-please.outputs.release_created == 'true'`、`environment: release`、`timeout-minutes: 60`、`permissions: contents: write`）
-   - 最初に `gh release view --json isDraft` で Release の状態を確かめる。読めなければ失敗にし、公開済み（公開の後の手順だけ失敗してやり直したとき）なら、ビルド・attestation・添付・公開を飛ばして tap への知らせだけを送る
+   - `googleapis/release-please-action` をそのトークンで実行し、`release_created` と `tag_name` を出力する。待っている実行が新しい push に置き換えられても、マージ済みで未リリースの Release PR は次の実行が拾う
+2. ジョブ `prepare`（`ubuntu-24.04`、`permissions: contents: write`。draft は書き込み権限が無いと読めないため。コードは checkout しない）
+   - push で `release_created` のとき、または `workflow_dispatch` のときに動く（`!cancelled()` の下で条件を評価する）
+   - タグ（`vX.Y.Z`）の形式を確かめ、`tag` と `version` を出力する
+   - `gh release view --json isDraft` で Release の状態を確かめ、読めなければ失敗にする。公開済み（公開の後の手順だけ失敗してやり直したとき）なら `published=true` を出力し、後のジョブはビルド・attestation・添付・公開を飛ばして tap への知らせだけを送る（利用者が取った zip と Cask を変えない）
+3. ジョブ `build`（`runs-on: xcode-27`、`timeout-minutes: 60`、`permissions: contents: read`、Environment なし、`concurrency: release-build-<tag>`。`release_created` はリリースを作った実行にしか出ないので、後の push で取り消されないようにする）
    - タグを checkout する（`persist-credentials: false`）
-   - `DEVELOPER_DIR=/Applications/Xcode_27.2_beta_2.app/Contents/Developer` にし、`xcodebuild -version` のビルド番号が `27B5028f` でなければ失敗する。ビルド番号はワークフローの先頭に `XCODE_BUILD` として置き、Xcode を上げるときに一緒に変える
-   - `bash scripts/tests/verify-app-test.sh`（数秒で終わるので先に）、`xcodebuild test`、`MEWBELL_WARNINGS_AS_ERRORS=YES` の Debug のビルド（Release の同じビルドは次の `package-release.sh` が兼ねる）
-   - `bash scripts/package-release.sh "$VERSION"`（D4）
-   - Cask の雛形（`packaging/homebrew/mewbell.rb.template`）を、作った zip の SHA-256 で埋め、一時的な tap に置いて `brew style` と `brew audit --cask --strict` を通す（tap はこのタグの雛形を使うので、公開の前に確かめる）
-   - `actions/attest-build-provenance` で zip の build provenance attestation を作る（このジョブだけに `id-token: write` と `attestations: write` を与える）
-   - `gh release upload "$TAG" … --clobber` で zip と `.sha256` を draft に添付し、`gh release edit "$TAG" --draft=false` で公開する。公開済みのときは最初の確認で飛ばすので、利用者が取った zip と Cask の SHA-256 は変わらない`GH_TOKEN` はジョブの `GITHUB_TOKEN`
-   - mewbell 用 App のトークンを `owner: yshrsmz`、`repositories: homebrew-tap`、`permission-contents: write` だけで発行し、`gh api repos/yshrsmz/homebrew-tap/dispatches -f event_type=mewbell-released -F 'client_payload[version]=…'` を送る
-3. lint は今の `ci.yml` のまま（Release PR にも走る）
+   - `DEVELOPER_DIR=$XCODE_APP/Contents/Developer` にし、`xcodebuild -version` のビルド番号が `XCODE_BUILD`（`27B5028f`）でなければ失敗する。`brew` があることも先に確かめる
+   - `bash scripts/tests/verify-app-test.sh`、`MEWBELL_WARNINGS_AS_ERRORS=YES` の `xcodebuild test`（Debug の警告をエラー扱いにしたビルドを兼ねる）、`bash scripts/package-release.sh "$VERSION"`（D4。Release の警告をエラー扱いにしたビルドを兼ねる）
+   - Cask の雛形（`packaging/homebrew/mewbell.rb.template`）を zip の SHA-256 で埋めて `mewbell.rb` を作り、一時的な tap に置いて `brew style` と `brew audit --cask --strict` を通す
+   - zip・`.sha256`・`mewbell.rb` を artifact にする（`actions/upload-artifact`、7 日）
+4. ジョブ `publish`（`ubuntu-24.04`、`environment: release`、`permissions: contents: write, id-token: write, attestations: write`。コードは checkout しない）
+   - artifact を受け取り、`sha256sum -c` で zip を確かめる
+   - `actions/attest-build-provenance` で zip と `mewbell.rb` の build provenance attestation を作る
+   - `gh release upload` で 3 つを draft に添付し、`gh release edit --draft=false` で公開する（`GH_TOKEN` はジョブの `GITHUB_TOKEN`）
+   - mewbell 用 App のトークンを `owner: yshrsmz`、`repositories: homebrew-tap`、`permission-contents: write` だけで発行し、`repository_dispatch`（`event_type=mewbell-released`、`client_payload[version]`）を送る
+5. lint は今の `ci.yml` のまま（Release PR にも走る）。release-please の印と、バージョンをプロジェクトの設定の 1 か所だけに書いていること（構成ごとの上書きも含めて）を確かめるステップを足す
 
-`actions/checkout`、`actions/create-github-app-token`、`googleapis/release-please-action` はコミット SHA で固定し、公開から 7 日以上経った版を選ぶ。`${{ }}` の値はシェルに直接埋め込まず、`env:` を通して渡す。
+`actions/checkout`、`actions/create-github-app-token`、`googleapis/release-please-action`、`actions/attest-build-provenance`、`actions/upload-artifact`、`actions/download-artifact` はコミット SHA で固定し、公開から 7 日以上経った版を選ぶ。`${{ }}` の値はシェルに直接埋め込まず、`env:` を通して渡す。
 
-失敗したとき: タグと draft の Release が残る。原因を直せる場合（ランナーの一時的な失敗など）は `gh run rerun --failed` でやり直す。`release_created` はリリースを作った実行にしか出ないので、それができないとき（「Re-run all jobs」でやり直した、30 日を過ぎた）のために、`workflow_dispatch` の入力 `tag` で `build` ジョブだけを動かせるようにする（release-please は飛ばし、タグの形式を確かめてから使う。Environment が `main` に限られているので `main` からしか動かない）。コードを直す必要がある場合は、draft とタグを残したまま修正の PR をマージする。release-please はマニフェストとタグを前の版として扱って次の版の Release PR を作るので、その版は公開されない版になる（タグを消すと、release-please が前の版を見つけられなくなる）。この手順を README に書く。
+失敗したとき: タグと draft の Release が残る。原因を直せる場合（ランナーの一時的な失敗など）は `gh run rerun --failed` でやり直す。`release_created` はリリースを作った実行にしか出ないので、それができないとき（「Re-run all jobs」でやり直した、30 日を過ぎた）のために、`workflow_dispatch` の入力 `tag` で `prepare` 以降のジョブを動かせるようにする（release-please は飛ばし、タグの形式を確かめてから使う。Environment が `main` に限られているので `main` からしか動かない）。コードを直す必要がある場合は、draft とタグを残したまま修正の PR をマージする。release-please はマニフェストとタグを前の版として扱って次の版の Release PR を作るので、その版は公開されない版になる（タグを消すと、release-please が前の版を見つけられなくなる）。この手順を README に書く。
 
 代替案: ビルドを手元で行う（最初の計画）。ユーザーがリリースに限って macOS ランナーを認めたため採らない。macOS のジョブだけで release-please も動かす。macOS ランナーは高く preview でもあるので、Release を作るときだけ動かす。
 
@@ -107,13 +112,14 @@
 
 homebrew-tap は OpenSpec の外なので、ここで形を決め、tasks で作る。
 
-- Cask の雛形は mewbell の `packaging/homebrew/mewbell.rb.template`（`@VERSION@` と `@SHA256@`）だけに置き、tap は知らせを受けたバージョンのタグの雛形を `raw.githubusercontent.com` から取る。雛形をリリースと一緒に版管理し、2 つのリポジトリのコピーがずれないようにするため。雛形の検査は mewbell のリリースのジョブが公開の前に行う（D3）
+- Cask の雛形は mewbell の `packaging/homebrew/mewbell.rb.template`（`@VERSION@` と `@SHA256@`）だけに置き、Cask はリリースのワークフローが作って attestation を付け、Release に添付する（D3）。tap は Cask を作らず、確かめた添付の `mewbell.rb` をそのまま使う。雛形がリリースと一緒に版管理され、Cask を作る処理が 1 か所だけになり、tap が検証されていない雛形をタグから取ることもない
 - `.github/workflows/update-mewbell.yml`: `on: repository_dispatch: types: [mewbell-released]`、既定の `permissions: contents: read`、`environment: release`
   - `env: VERSION: ${{ github.event.client_payload.version }}` で受け、`[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]` でなければ失敗する
   - いまの `Casks/mewbell.rb` の `version` と比べ、同じか新しいとき（`sort -V`）は何もせずに終わる。知らせのやり直しや古い版の知らせで、空の PR を作ったり Cask を戻したりしないため
-  - `curl -fsSL --proto '=https'` で `https://github.com/yshrsmz/mewbell/releases/download/v$VERSION/Mewbell-$VERSION.zip` と `.sha256` を取り、`sha256sum` の値と `.sha256` の値が一致することを確かめる（ダウンロードの破損を見つける）
-  - `gh attestation verify` で、zip が `yshrsmz/mewbell` の `.github/workflows/release.yml` が `refs/heads/main` で作ったものであることを確かめる。Release の添付ファイルは Contents の書き込み権限があれば差し替えられ、`.sha256` も同じ Release にあるので、SHA-256 の照合だけでは改ざんを防げない。attestation は GitHub の OIDC でそのワークフローの実行にだけ発行される鍵で署名されるので、漏れたトークンで添付を差し替えても通らない
-  - 雛形から `Casks/mewbell.rb` を作り、tap 用 App のトークン（`repositories: homebrew-tap`、`permission-contents: write`、`permission-pull-requests: write`）で、API（`git/refs` と `contents`）でブランチ `mewbell-$VERSION` を作ってコミットし（git の資格情報をランナーに置かない。コミットは App の名前になる）、PR を作り、`gh pr merge --auto --squash` を指定する。前の試みのブランチが残っているときは `main` に戻さずにその上に書く（開いている PR の中身を一時的に空にして、空のまま自動でマージされないように）。API の失敗は 404 とそれ以外を分け、404 以外は失敗にする
+  - `curl -fsSL --proto '=https'` で `https://github.com/yshrsmz/mewbell/releases/download/v$VERSION/` の zip・`.sha256`・`mewbell.rb` を取る
+  - `gh attestation verify` で、zip と `mewbell.rb` が `yshrsmz/mewbell` の `.github/workflows/release.yml` が `refs/heads/main` で作ったものであることを確かめる（`--deny-self-hosted-runners`）。Release の添付ファイルは Contents の書き込み権限があれば差し替えられ、`.sha256` も同じ Release にあるので、SHA-256 の照合だけでは改ざんを防げない。attestation は GitHub の OIDC でそのワークフローの実行にだけ発行される鍵で署名される
+  - zip の SHA-256 を計算して `.sha256` と比べ（破損）、`mewbell.rb` の `version` 行と `sha256` 行が知らせのバージョンと計算した SHA-256 に一致することを確かめる。attestation は「どのワークフローが作ったか」だけを示し、版とは結び付かないので、別の版の正しい Cask を差し込まれても通らないようにする
+  - tap 用 App のトークン（`repositories: homebrew-tap`、`permission-contents: write`、`permission-pull-requests: write`）で、API（`git/refs` と `contents`）でブランチ `mewbell-$VERSION` にコミットし（git の資格情報をランナーに置かない。コミットは App の名前になる）、PR を作り、`gh pr merge --auto --squash` を指定する。古い版の PR（`mewbell-` で始まるブランチ）が開いていれば閉じてブランチを消す（同じファイルを変えるので衝突して auto-merge が止まるため）。この版の PR が開いていればそのブランチに書き（開いている PR を一時的に空にしない）、PR の無いブランチが残っていれば `main` から作り直す。API の失敗は 404 とそれ以外を分け、404 以外は失敗にする
 - `.github/workflows/ci.yml`: `pull_request` で、`Casks/` の各 Cask に `brew style --cask` と `brew audit --cask --strict`（`--online` は付けない）を `macos-latest` で動かす。`brew audit --cask` が Linux で動くかを確かめられなかったため、確実に動く macOS にする（リリースのためのワークフローなので macOS ランナーの例外に入り、Cask の PR のときだけ動く）
 - ruleset: `main` へのマージに `ci` のチェックの成功を必須にする。リポジトリの設定で auto-merge を有効にする。App のトークンで作った PR は CI が走るので、auto-merge が働く
 

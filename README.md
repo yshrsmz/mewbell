@@ -51,7 +51,7 @@ brew uninstall --cask mewbell          # アプリだけを消す
 brew uninstall --cask --zap mewbell    # 設定（~/Library/Preferences/com.codingfeline.mewbell.plist）と ~/Library/Application Support/com.codingfeline.mewbell も消す
 ```
 
-Releases から入れた場合は、`/Applications/Mewbell.app` をゴミ箱に入れます。ログイン時に起動するように登録していた場合は、アプリを消すと macOS が登録を外します。
+Releases から入れた場合は、`/Applications/Mewbell.app` をゴミ箱に入れます。ログイン時に起動するように登録していた場合は、先に Mewbell の設定でオフにしておくか、消した後にシステム設定 → 一般 → ログイン項目と機能拡張 に残っていれば外してください（Homebrew の `zap` では外せません）。
 
 ## 通知の取得
 

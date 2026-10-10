@@ -43,8 +43,9 @@ jobs:
             echo "$project の release-please の印（start と end）の中に MARKETING_VERSION（X.Y.Z）がありません" >&2
             exit 1
           fi
-          if [[ "$(grep -c '"MARKETING_VERSION":' "$project")" != 1 ]] ||
-            [[ "$(grep -c '"CURRENT_PROJECT_VERSION":' "$project")" != 1 ]] ||
+          # [config=Release] のような構成ごとの上書きも数える
+          if [[ "$(grep -c '"MARKETING_VERSION[":[]' "$project")" != 1 ]] ||
+            [[ "$(grep -c '"CURRENT_PROJECT_VERSION[":[]' "$project")" != 1 ]] ||
             ! grep -Fq '"CURRENT_PROJECT_VERSION": "$(MARKETING_VERSION)"' "$project"; then
             echo "$project のバージョンは、プロジェクトの設定の MARKETING_VERSION 1 か所だけに書き、CURRENT_PROJECT_VERSION は \$(MARKETING_VERSION) にします" >&2
             exit 1

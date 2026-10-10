@@ -2,8 +2,9 @@ name: Release
 
 # main への push ごとに release-please が Release PR を作る・更新する。
 # Release PR をマージするとタグと draft の Release ができ、macOS ランナーがタグからビルド・検査して
-# zip と SHA-256 を添付してから公開し、最後に homebrew-tap へ Cask の更新を知らせる
-# （openspec/specs/distribution）。macOS ランナーを使うのはこのワークフローだけ（CLAUDE.md）。
+# zip・SHA-256・Cask を作り、別のジョブが attestation を付けて添付してから公開し、最後に homebrew-tap へ
+# Cask の更新を知らせる（openspec/specs/distribution）。
+# テストやビルドのコードは、OIDC トークン・書き込み権限・App の秘密鍵を持たないジョブ（build）でだけ動かす。
 # App の秘密鍵は main に限定した Environment `release` にだけ置く（.claude/rules/security.md）。
 
 on:
@@ -28,16 +29,15 @@ jobs:
   release-please:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
     # 待っている実行が新しい push で置き換えられても、マージ済みで未リリースの Release PR は次の実行が拾う
     concurrency:
       group: release-please
       cancel-in-progress: false
-    timeout-minutes: 10
-    environment: release
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
     steps:
       # App のトークンで Release PR を作ると、その PR でも CI（lint）が走る
       - id: app-token
@@ -54,48 +54,50 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
 
-  build:
+  # 対象のタグを決め、Release が公開済みかを確かめる。公開済みのとき（公開の後の手順だけが失敗してやり直したとき）は、
+  # ビルドも attestation も添付もせず、tap への知らせだけを送り直す（利用者が取った zip と Cask を変えない）
+  prepare:
     needs: release-please
-    # workflow_dispatch では release-please を飛ばすので、always() で needs の結果に関わらず条件を評価する
+    # workflow_dispatch では release-please を飛ばすので、cancelled 以外は needs の結果に関わらず条件を評価する
     if: >-
-      always() && (
+      !cancelled() && (
         (github.event_name == 'push' && needs.release-please.result == 'success' &&
           needs.release-please.outputs.release_created == 'true') ||
         github.event_name == 'workflow_dispatch'
       )
-    runs-on: xcode-27
-    timeout-minutes: 60
-    # release_created はリリースを作った実行にしか出ないので、ビルドはタグごとに分けて取り消されないようにする
-    concurrency:
-      group: release-build-${{ github.event_name == 'workflow_dispatch' && inputs.tag || needs.release-please.outputs.tag_name }}
-      cancel-in-progress: false
-    environment: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
+      # draft の Release は書き込み権限が無いと読めない。このジョブはコードを checkout しない
       contents: write
-      # zip の build provenance attestation を作る（homebrew-tap が gh attestation verify で確かめる）
-      id-token: write
-      attestations: write
-    env:
-      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || needs.release-please.outputs.tag_name }}
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+      published: ${{ steps.state.outputs.published }}
     steps:
-      - name: Validate the tag
+      - id: tag
+        name: Validate the tag
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || needs.release-please.outputs.tag_name }}
         run: |
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "タグの形式が vX.Y.Z ではありません" >&2
             exit 1
           fi
-          echo "VERSION=${TAG#v}" >>"$GITHUB_ENV"
+          {
+            echo "tag=$TAG"
+            echo "version=${TAG#v}"
+          } >>"$GITHUB_OUTPUT"
 
-      # 公開済みのとき（公開の後の手順だけが失敗してやり直したとき）は、ビルドも attestation も添付もせず、
-      # tap への知らせだけを送り直す。利用者が取った zip と Cask の SHA-256 を変えないため
       - id: state
         name: Check the release state
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
           case "$draft" in
-            true) ;;
+            true) echo "published=false" >>"$GITHUB_OUTPUT" ;;
             false)
               echo "$TAG は公開済みなので、tap への知らせだけを送ります"
               echo "published=true" >>"$GITHUB_OUTPUT"
@@ -106,14 +108,26 @@ jobs:
               ;;
           esac
 
+  # テスト・ビルド・検査をして配布物を作る。書き込み権限・OIDC トークン・シークレットを持たない
+  build:
+    needs: prepare
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.published == 'false' }}
+    runs-on: xcode-27
+    timeout-minutes: 60
+    # release_created はリリースを作った実行にしか出ないので、タグごとに分けて後の push で取り消されないようにする
+    concurrency:
+      group: release-build-${{ needs.prepare.outputs.tag }}
+      cancel-in-progress: false
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.state.outputs.published != 'true'
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
 
       - name: Check Xcode
-        if: steps.state.outputs.published != 'true'
         run: |
           if [[ ! -d "$XCODE_APP" ]]; then
             echo "$XCODE_APP がありません。ランナーのイメージを確かめて XCODE_APP と XCODE_BUILD を上げてください" >&2
@@ -128,33 +142,31 @@ jobs:
             echo "Xcode のビルド番号が $XCODE_BUILD ではありません: $actual" >&2
             exit 1
           fi
-          # Cask の雛形の確認に使う。長いビルドの後で気づかないよう、先に確かめる
+          # Cask の確認に使う。長いビルドの後で気づかないよう、先に確かめる
           command -v brew
           brew help trust >/dev/null
 
       # 数秒で終わるので、時間のかかるビルドより先に検査そのものを確かめる
       - name: Test verify_app
-        if: steps.state.outputs.published != 'true'
         run: bash scripts/tests/verify-app-test.sh
 
       # Debug の警告をエラー扱いにしたビルドを兼ねる。Release の分は package-release.sh が行う
       - name: Test with warnings as errors
-        if: steps.state.outputs.published != 'true'
         run: xcodebuild -project Mewbell.xcodeproj -scheme Mewbell MEWBELL_WARNINGS_AS_ERRORS=YES test
 
       - name: Package
-        if: steps.state.outputs.published != 'true'
         run: bash scripts/package-release.sh "$VERSION"
 
-      # homebrew-tap はこのタグの雛形から Cask を作るので、公開する前に同じ形で確かめる
-      - name: Check the cask template
-        if: steps.state.outputs.published != 'true'
+      # homebrew-tap はこの Cask をそのまま使う（attestation と version・sha256 を確かめてから）
+      - name: Render and check the cask
         run: |
+          dist="build/dist/$VERSION"
+          sha256="$(cut -d ' ' -f 1 "$dist/Mewbell-$VERSION.zip.sha256")"
+          sed -e "s/@VERSION@/$VERSION/g" -e "s/@SHA256@/$sha256/g" \
+            packaging/homebrew/mewbell.rb.template >"$dist/mewbell.rb"
           tap="$RUNNER_TEMP/homebrew-check"
           mkdir -p "$tap/Casks"
-          sha256="$(cut -d ' ' -f 1 "build/dist/$VERSION/Mewbell-$VERSION.zip.sha256")"
-          sed -e "s/@VERSION@/$VERSION/g" -e "s/@SHA256@/$sha256/g" \
-            packaging/homebrew/mewbell.rb.template >"$tap/Casks/mewbell.rb"
+          cp "$dist/mewbell.rb" "$tap/Casks/mewbell.rb"
           git -C "$tap" init -q
           git -C "$tap" add -A
           git -C "$tap" -c user.name=ci -c user.email=ci@localhost commit -qm check
@@ -164,20 +176,66 @@ jobs:
           brew style --cask yshrsmz/check/mewbell
           brew audit --cask --strict yshrsmz/check/mewbell
 
-      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        if: steps.state.outputs.published != 'true'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          subject-path: build/dist/${{ env.VERSION }}/Mewbell-${{ env.VERSION }}.zip
+          name: release-${{ needs.prepare.outputs.version }}
+          path: build/dist/${{ needs.prepare.outputs.version }}/
+          if-no-files-found: error
+          retention-days: 7
+
+  # attestation を付けて添付し、公開して、tap に知らせる。リポジトリのコードは checkout も実行もしない
+  publish:
+    needs: [prepare, build]
+    if: >-
+      !cancelled() && needs.prepare.result == 'success' && (
+        needs.build.result == 'success' || needs.prepare.outputs.published == 'true'
+      )
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: release
+    concurrency:
+      group: release-publish-${{ needs.prepare.outputs.tag }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      # zip と Cask の build provenance attestation を作る（homebrew-tap が gh attestation verify で確かめる）
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      PUBLISHED: ${{ needs.prepare.outputs.published }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: env.PUBLISHED == 'false'
+        with:
+          name: release-${{ needs.prepare.outputs.version }}
+          path: dist
+
+      - name: Check the artifact
+        if: env.PUBLISHED == 'false'
+        working-directory: dist
+        run: |
+          ls -la
+          sha256sum -c "Mewbell-$VERSION.zip.sha256"
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: env.PUBLISHED == 'false'
+        with:
+          subject-path: |
+            dist/Mewbell-${{ needs.prepare.outputs.version }}.zip
+            dist/mewbell.rb
 
       # 添付してから公開する。ここまでのどこかで失敗したら Release は draft のまま残る
       - name: Upload and publish
-        if: steps.state.outputs.published != 'true'
+        if: env.PUBLISHED == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-            "build/dist/$VERSION/Mewbell-$VERSION.zip" \
-            "build/dist/$VERSION/Mewbell-$VERSION.zip.sha256"
+            "dist/Mewbell-$VERSION.zip" \
+            "dist/Mewbell-$VERSION.zip.sha256" \
+            dist/mewbell.rb
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
 
       # tap へ知らせるトークンは homebrew-tap の Contents の書き込みだけに絞る（dispatch に要る）

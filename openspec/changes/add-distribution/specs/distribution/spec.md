@@ -82,6 +82,7 @@ Gatekeeper の評価（`spctl --assess`）は ad-hoc 署名では通らないた
 
 - `Mewbell-X.Y.Z.zip`: `Mewbell.app` だけを、コード署名を壊さない方法で圧縮したもの。dSYM やビルドの中間ファイルを含めてはならない（MUST NOT）
 - `Mewbell-X.Y.Z.zip.sha256`: zip の SHA-256（16 進数小文字）とファイル名
+- `mewbell.rb`: Cask の雛形にバージョンと zip の SHA-256 を入れた Homebrew Cask（リリースのワークフローが作り、`brew style` と `brew audit --cask --strict` を通す）
 
 作った zip を展開した `Mewbell.app` が同じ検査を通ることを確かめなければならない（MUST）。配布物には、トークン、gh の出力、ビルドした環境のパスを含む設定ファイルを入れてはならない（MUST NOT）。同じ処理を手元でも実行でき、手元では Release への添付も公開もしてはならない（MUST NOT）。
 
@@ -89,18 +90,18 @@ Gatekeeper の評価（`spctl --assess`）は ad-hoc 署名では通らないた
 
 - **GIVEN** バージョン `0.2.0` で、確認と検査をすべて通った
 - **WHEN** 配布物を作る
-- **THEN** `Mewbell-0.2.0.zip` と `Mewbell-0.2.0.zip.sha256` ができる
+- **THEN** `Mewbell-0.2.0.zip` と `Mewbell-0.2.0.zip.sha256` ができる（リリースのワークフローではさらに `mewbell.rb` ができる）
 - **AND** zip の中身は `Mewbell.app` だけで、展開した `Mewbell.app` は検査を通る
 
 ### Requirement: 公開の順序
 
-Release は、配布物の zip の build provenance attestation を作り、zip と SHA-256 を添付し終え、そのバージョンの Cask の雛形が `brew style` と `brew audit` を通った後でだけ公開しなければならない（MUST）。Release を作った後のビルドは、後から来た `main` への push によって取り消されてはならない（MUST NOT）。ビルド・検査・添付のどこかで失敗したときは、Release を draft のまま残し、公開してはならない（MUST NOT）。公開済みの Release の添付ファイルを差し替えてはならない（MUST NOT）。tap への知らせは、Release を公開した後でだけ送らなければならない（MUST）。
+Release は、`mewbell.rb` が `brew style` と `brew audit` を通り、zip と `mewbell.rb` の build provenance attestation を作り、zip・SHA-256・`mewbell.rb` を添付し終えた後でだけ公開しなければならない（MUST）。Release を作った後のビルドは、後から来た `main` への push によって取り消されてはならない（MUST NOT）。ビルド・検査・添付のどこかで失敗したときは、Release を draft のまま残し、公開してはならない（MUST NOT）。公開済みの Release の添付ファイルを差し替えてはならない（MUST NOT）。tap への知らせは、Release を公開した後でだけ送らなければならない（MUST）。
 
 #### Scenario: 添付してから公開する
 
 - **GIVEN** `v0.2.0` の draft の Release があり、配布物ができた
 - **WHEN** ビルドのジョブが続きを行う
-- **THEN** zip と SHA-256 が添付され、その後に Release が公開され、その後に tap へ知らせが送られる
+- **THEN** zip・SHA-256・`mewbell.rb` が添付され、その後に Release が公開され、その後に tap へ知らせが送られる
 
 #### Scenario: 検査で失敗する
 
@@ -110,7 +111,7 @@ Release は、配布物の zip の build provenance attestation を作り、zip 
 
 ### Requirement: CI の資格情報
 
-リリースと tap の更新に使う資格情報は GitHub App のインストールトークンだけにし、個人のアクセストークン（PAT）を使ってはならない（MUST NOT）。App の秘密鍵は、`main` からの実行だけに限定した Environment のシークレットに置かなければならない（MUST）。トークンはジョブごとに発行し、対象のリポジトリと権限をそのジョブに要るものに絞らなければならない（MUST）。tap へ知らせるトークンは、`yshrsmz/homebrew-tap` だけを対象にし、Contents の書き込みだけを持たなければならない（MUST）。ワークフローの既定の `permissions` は `contents: read` にし、書き込みはそれが要るジョブにだけ与えなければならない（MUST）。トークンと秘密鍵をログに出してはならない（MUST NOT）。ワークフローで使う Action はコミット SHA で固定しなければならない（MUST）。
+リリースと tap の更新に使う資格情報は GitHub App のインストールトークンだけにし、個人のアクセストークン（PAT）を使ってはならない（MUST NOT）。App の秘密鍵は、`main` からの実行だけに限定した Environment のシークレットに置かなければならない（MUST）。トークンはジョブごとに発行し、対象のリポジトリと権限をそのジョブに要るものに絞らなければならない（MUST）。tap へ知らせるトークンは、`yshrsmz/homebrew-tap` だけを対象にし、Contents の書き込みだけを持たなければならない（MUST）。ワークフローの既定の `permissions` は `contents: read` にし、書き込みはそれが要るジョブにだけ与えなければならない（MUST）。テスト・ビルド・配布物の作成（リポジトリのコードと依存のコードを実行する処理）は、書き込み権限・OIDC トークン（`id-token: write`）・App の秘密鍵を持たないジョブで行わなければならない（MUST）。attestation・添付・公開・tap への知らせは、リポジトリのコードを実行しない別のジョブで行わなければならない（MUST）。トークンと秘密鍵をログに出してはならない（MUST NOT）。ワークフローで使う Action はコミット SHA で固定しなければならない（MUST）。
 
 #### Scenario: tap へ知らせるトークン
 
@@ -129,18 +130,19 @@ Release は、配布物の zip の build provenance attestation を作り、zip 
 Mewbell は、Release を公開した後に `yshrsmz/homebrew-tap` へ `repository_dispatch` を送り、payload にはバージョンだけを入れなければならない（SHALL）。tap 側のワークフローは payload を信用せず、次を満たさなければならない（MUST）。
 
 - バージョンが `X.Y.Z` の形式でなければ何もせずに失敗する。payload の値をシェルのコマンドに直接埋め込まない
-- zip の URL をバージョンから `https://github.com/yshrsmz/mewbell/releases/download/vX.Y.Z/Mewbell-X.Y.Z.zip` として組み立て、それ以外の URL を使わない
-- zip を自分でダウンロードして SHA-256 を計算し、Release に添付された `.sha256` の値と一致しなければ失敗する（ダウンロードの破損を見つけるため。添付ファイルが正しいことは、Release に書けるのが Mewbell のリリースのワークフローだけであることに頼る）
-- zip の build provenance attestation を確かめ、`yshrsmz/mewbell` の `.github/workflows/release.yml` が `main` で作ったものでなければ失敗する
-- Cask の雛形は、そのバージョンのタグの Mewbell のリポジトリにあるものを使う
+- 添付ファイルの URL をバージョンから `https://github.com/yshrsmz/mewbell/releases/download/vX.Y.Z/<file>` として組み立て、それ以外の URL を使わない
+- zip と `mewbell.rb` の build provenance attestation を確かめ、`yshrsmz/mewbell` の `.github/workflows/release.yml` が `main` で作ったものでなければ失敗する
+- zip を自分でダウンロードして SHA-256 を計算し、Release に添付された `.sha256` の値と一致しなければ失敗する（ダウンロードの破損を見つけるため）
+- `mewbell.rb` の `version` が知らせのバージョンと、`sha256` が自分で計算した zip の SHA-256 と一致しなければ失敗する（attestation は Cask とバージョンを結び付けないため、別の版の Cask を差し込まれるのを防ぐ）
+- Cask は確かめた `mewbell.rb` をそのまま使い、自分では作らない
 - いまの Cask と同じか古いバージョンの知らせでは、何も変えずに終わる
-- Cask を更新する PR を作り、tap の CI（`brew style` と `brew audit`）が通ったときだけ自動でマージする。前の試みの PR が開いているときは、その PR を更新する
+- Cask を更新する PR を作り、tap の CI（`brew style` と `brew audit`）が通ったときだけ自動でマージする。この版の PR が開いているときはその PR を更新し、古い版の PR が開いているときは閉じる
 
 #### Scenario: Cask を更新する
 
 - **GIVEN** `v0.2.0` の Release が公開され、tap に `version: 0.2.0` の知らせが届いた
 - **WHEN** tap のワークフローが動く
-- **THEN** 自分で計算した SHA-256 を入れて `version "0.2.0"` にした `Casks/mewbell.rb` の PR ができ、CI が通った後にマージされる
+- **THEN** attestation と `version`・`sha256` を確かめた `mewbell.rb` で `Casks/mewbell.rb` を更新する PR ができ、CI が通った後にマージされる
 
 #### Scenario: 不正なバージョン
 
@@ -156,9 +158,15 @@ Mewbell は、Release を公開した後に `yshrsmz/homebrew-tap` へ `reposito
 
 #### Scenario: 差し替えられた zip
 
-- **GIVEN** 誰かが Release の zip と `.sha256` を、互いに一致する別のものに差し替えた
+- **GIVEN** 誰かが Release の zip・`.sha256`・`mewbell.rb` を、互いに一致する別のものに差し替えた
 - **WHEN** tap のワークフローが確かめる
-- **THEN** zip の attestation を確かめられずに失敗し、PR を作らない
+- **THEN** attestation を確かめられずに失敗し、PR を作らない
+
+#### Scenario: 別の版の Cask
+
+- **GIVEN** 誰かが `v0.3.0` の Release に、`v0.2.0` の正しい zip・`.sha256`・`mewbell.rb` を添付した
+- **WHEN** tap に `version: 0.3.0` の知らせが届く
+- **THEN** `mewbell.rb` の `version` が `0.3.0` ではないので失敗し、PR を作らない
 
 #### Scenario: SHA-256 が合わない
 

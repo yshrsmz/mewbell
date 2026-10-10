@@ -17,6 +17,9 @@ if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 # 警告をエラー扱いにする。リリースのワークフローの Release のビルドはこれで兼ねる
+# 前のビルドの成果物（ソースから消したリソースなど）が残らないよう、Release の分を消してから作る
+xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release \
+  -derivedDataPath build/DerivedData clean >/dev/null
 bash scripts/build.sh Release MEWBELL_WARNINGS_AS_ERRORS=YES
 verify_app build/Release/Mewbell.app "$version"
 
