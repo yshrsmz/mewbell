@@ -113,7 +113,7 @@ CI（GitHub Actions）は ubuntu で lint と OpenSpec の検証だけを回し�
 
 リリースは [release-please](https://github.com/googleapis/release-please) と GitHub Actions（`.github/workflows/release.yml`）で行います。
 
-1. `main` に PR をマージするたびに、release-please が Release PR を作る・更新する。バージョンは Conventional Commits（`feat:` は minor、`fix:` は patch。1.0.0 より前は破壊的変更も minor）で決まり、`project.xcproj` の `MARKETING_VERSION` と `CURRENT_PROJECT_VERSION`、`CHANGELOG.md` を書き換える
+1. `main` に PR をマージするたびに、release-please が Release PR を作る・更新する。バージョンは Conventional Commits（`feat:` は minor、`fix:` は patch。1.0.0 より前は破壊的変更も minor）で決まり、`project.xcproj` の `MARKETING_VERSION`（`CURRENT_PROJECT_VERSION` はこれを参照する）と `CHANGELOG.md` を書き換える
 2. Release PR をマージすると、タグ `vX.Y.Z` と draft の Release ができる
 3. macOS ランナー（`xcode-27` イメージ）がタグからテストとビルドを行い、署名と entitlement を検査して（`scripts/lib/verify-app.sh`）、zip と SHA-256 を添付してから Release を公開する
 4. 公開の後に [homebrew-tap](https://github.com/yshrsmz/homebrew-tap) へ知らせ、tap 側が Cask を更新する PR を作って、CI が通ったら自動でマージする

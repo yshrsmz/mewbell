@@ -16,7 +16,8 @@ if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 2
 fi
 
-bash scripts/build.sh Release
+# 警告をエラー扱いにする。リリースのワークフローの Release のビルドはこれで兼ねる
+bash scripts/build.sh Release MEWBELL_WARNINGS_AS_ERRORS=YES
 verify_app build/Release/Mewbell.app "$version"
 
 work="$(mktemp -d)"

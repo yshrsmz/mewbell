@@ -61,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ env.TAG }}
           persist-credentials: false
 
       - name: Check Xcode
@@ -80,18 +80,16 @@ jobs:
             exit 1
           fi
 
+      # 数秒で終わるので、時間のかかるビルドより先に検査そのものを確かめる
+      - name: Test verify_app
+        run: bash scripts/tests/verify-app-test.sh
+
       - name: Test
         run: xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test
 
-      - name: Build with warnings as errors
-        run: |
-          for configuration in Debug Release; do
-            xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration "$configuration" \
-              MEWBELL_WARNINGS_AS_ERRORS=YES build
-          done
-
-      - name: Test verify_app
-        run: bash scripts/tests/verify-app-test.sh
+      # Release の警告をエラー扱いにしたビルドは package-release.sh が行う
+      - name: Build Debug with warnings as errors
+        run: xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug MEWBELL_WARNINGS_AS_ERRORS=YES build
 
       - name: Package
         run: bash scripts/package-release.sh "$VERSION"

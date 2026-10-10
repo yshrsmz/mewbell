@@ -44,5 +44,5 @@
 
 ## 8. 別コンテキストでのレビュー
 
-- [ ] 8.1 新しいコンテキストの opus サブエージェントで `simplify` スキルを実行し、作業ツリーに入った変更を確かめる。確認: `bash scripts/tests/verify-app-test.sh` と `bash scripts/lint.sh` が引き続き通る
+- [x] 8.1 新しいコンテキストの opus サブエージェントで `simplify` スキルを実行し、作業ツリーに入った変更を確かめる。確認: `bash scripts/tests/verify-app-test.sh` と `bash scripts/lint.sh` が引き続き通る 結果: 5 件の変更を採用した（`CURRENT_PROJECT_VERSION` を `$(MARKETING_VERSION)` にして印の外へ、`build.sh` がビルド設定を受け取る、`package-release.sh` の Release ビルドを警告をエラー扱いにして CI の Release ビルドの重複をなくす、`release.yml` で検査のテストを先に、tap の `ci` から `push` のトリガーを外す）。Cask の雛形が 2 つのリポジトリにあることは D5 の判断どおりとして変えていない
 - [ ] 8.2 別の新しいコンテキストの opus サブエージェントで `code-review` スキルを effort `medium` で実行し、指摘ごとに「直した / 直さない（理由）」を決めて対応する。ワークフローやスクリプトのロジックに手を入れたら 8.2 をやり直す。確認: 指摘の件数と対応結果、セキュリティ上の確認（Hardened Runtime、entitlement、ATS、CI の資格情報の範囲、tap の payload の検証、Cask が Gatekeeper を迂回しないこと）を PR 本文に書いた

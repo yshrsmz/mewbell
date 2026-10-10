@@ -59,11 +59,11 @@
 
 ### D2. バージョンを 1 か所にまとめる
 
-`MARKETING_VERSION` と `CURRENT_PROJECT_VERSION` を 2 つのターゲットの設定から消し、プロジェクトの設定に 1 回だけ書く。release-please の generic updater の印をコメント行で付ける。
+`MARKETING_VERSION` と `CURRENT_PROJECT_VERSION` を 2 つのターゲットの設定から消し、プロジェクトの設定に 1 回だけ書く。`CURRENT_PROJECT_VERSION` は `MARKETING_VERSION` を参照し、値を持つのは `MARKETING_VERSION` だけにする。release-please の generic updater の印をコメント行で付ける。
 
 ```
+    "CURRENT_PROJECT_VERSION": "$(MARKETING_VERSION)",
     // x-release-please-start-version
-    "CURRENT_PROJECT_VERSION": "0.1.0",
     "MARKETING_VERSION": "0.1.0",
     // x-release-please-end
 ```
@@ -82,7 +82,7 @@
 2. ジョブ `build`（`runs-on: xcode-27`、`needs: release-please`、`if: needs.release-please.outputs.release_created == 'true'`、`environment: release`、`timeout-minutes: 60`、`permissions: contents: write`）
    - タグを checkout する（`persist-credentials: false`）
    - `DEVELOPER_DIR=/Applications/Xcode_27.2_beta_2.app/Contents/Developer` にし、`xcodebuild -version` のビルド番号が `27B5028f` でなければ失敗する。ビルド番号はワークフローの先頭に `XCODE_BUILD` として置き、Xcode を上げるときに一緒に変える
-   - `xcodebuild test`、`MEWBELL_WARNINGS_AS_ERRORS=YES` の Debug と Release のビルド、`bash scripts/tests/verify-app-test.sh`
+   - `bash scripts/tests/verify-app-test.sh`（数秒で終わるので先に）、`xcodebuild test`、`MEWBELL_WARNINGS_AS_ERRORS=YES` の Debug のビルド（Release の同じビルドは次の `package-release.sh` が兼ねる）
    - `bash scripts/package-release.sh "$VERSION"`（D4）
    - `gh release upload "$TAG" … --clobber` で zip と `.sha256` を draft に添付し、`gh release edit "$TAG" --draft=false` で公開する。`GH_TOKEN` はジョブの `GITHUB_TOKEN`
    - mewbell 用 App のトークンを `owner: yshrsmz`、`repositories: homebrew-tap`、`permission-contents: write` だけで発行し、`gh api repos/yshrsmz/homebrew-tap/dispatches -f event_type=mewbell-released -F 'client_payload[version]=…'` を送る
@@ -97,7 +97,7 @@
 ### D4. 配布物を作る処理は CI と手元で共通にする
 
 - `scripts/lib/verify-app.sh` の `verify_app <path-to-.app> <version>`: `codesign --verify --deep --strict`、`codesign -dv` の `flags=` に `runtime`、`codesign -d --entitlements - --xml` に禁止の entitlement が無いこと、Info.plist（`plutil -extract`）に `NSAppTransportSecurity` の緩める設定が無いこと、`CFBundleIdentifier`、`CFBundleShortVersionString` と `CFBundleVersion` が `<version>` と一致すること、`lipo -archs` に `arm64` と `x86_64` があることを確かめ、満たさない項目の名前を表示して 0 以外で返す
-- `scripts/package-release.sh X.Y.Z`: 形式の確認 → `bash scripts/build.sh Release` → `verify_app` → 一時ディレクトリで `ditto -c -k --norsrc --noextattr --noqtn --noacl --keepParent` で zip（拡張属性を入れない）、`zipinfo -1` で中身が `Mewbell.app/` の下だけであることを確かめる、`shasum -a 256` で `.sha256` → 展開した zip を `verify_app` → すべて通ったら `build/dist/X.Y.Z/` に移す（`build/release` は大文字と小文字を区別しない APFS で `build/Release` と重なるので使わない）。添付・公開・dispatch はしない（それはワークフローが行う）。手元では、リリースの前の試しや、検査が落ちたときの調べに使う
+- `scripts/package-release.sh X.Y.Z`: 形式の確認 → `bash scripts/build.sh Release MEWBELL_WARNINGS_AS_ERRORS=YES`（`build.sh` は 2 つめ以降の引数をビルド設定として `xcodebuild` に渡す） → `verify_app` → 一時ディレクトリで `ditto -c -k --norsrc --noextattr --noqtn --noacl --keepParent` で zip（拡張属性を入れない）、`zipinfo -1` で中身が `Mewbell.app/` の下だけであることを確かめる、`shasum -a 256` で `.sha256` → 展開した zip を `verify_app` → すべて通ったら `build/dist/X.Y.Z/` に移す（`build/release` は大文字と小文字を区別しない APFS で `build/Release` と重なるので使わない）。添付・公開・dispatch はしない（それはワークフローが行う）。手元では、リリースの前の試しや、検査が落ちたときの調べに使う
 - `scripts/tests/verify-app-test.sh`: `clang` で小さな universal の実行ファイルを作って偽の `.app` を組み、正常なものが通り、`get-task-allow` 付き・`runtime` 無し・`NSAllowsArbitraryLoads` 付き・`arm64` だけ・`CFBundleIdentifier` 違い・バージョン違い・署名後の改変がそれぞれ失敗することを確かめる。ubuntu の CI には `codesign` が無いので、リリースのワークフローと手元で実行する
 
 ### D5. Cask の更新（homebrew-tap）

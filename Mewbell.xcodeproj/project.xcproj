@@ -153,8 +153,8 @@
     "LOCALIZATION_PREFERS_STRING_CATALOGS": "YES",
     "MACOSX_DEPLOYMENT_TARGET": "26.0",
     // release-please が書き換える（release-please-config.json）。Mewbell と MewbellTests で共有する
+    "CURRENT_PROJECT_VERSION": "$(MARKETING_VERSION)",
     // x-release-please-start-version
-    "CURRENT_PROJECT_VERSION": "0.1.0",
     "MARKETING_VERSION": "0.1.0",
     // x-release-please-end
     "MEWBELL_WARNINGS_AS_ERRORS": "NO",
