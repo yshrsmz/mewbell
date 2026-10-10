@@ -20,7 +20,7 @@
 
 ## 4. 公開と実機での確認
 
-- [ ] 4.1 `yshrsmz/homebrew-tap` を作ってよいかをユーザーに AskUserQuestion で確かめてから、`gh repo create yshrsmz/homebrew-tap --public` で作り、`Casks/` と短い README を置く。確認: `brew tap yshrsmz/tap` が通る
+- [x] 4.1 `yshrsmz/homebrew-tap` を用意し、`Casks/` と短い README（使い方、`brew trust`、Gatekeeper の「このまま開く」、quarantine を消さないこと）を置く。確認: `brew tap yshrsmz/tap` が通る。結果: リポジトリはユーザーが作った。CI は入れていない。Cask はまだ置いていない（4.3 で置く）
 - [ ] 4.2 ad-hoc 署名の更新の影響を確かめる: `CURRENT_PROJECT_VERSION` だけを変えた 2 つの Release ビルドを作り、`codesign -dr -` の designated requirement が違うことを見たうえで、1 つ目を `/Applications` に入れて通知を許可しログイン項目に登録し、2 つ目で置き換えて起動する。確認: 通知の許可とログイン項目の登録が残るかを記録し、外れるなら README と Cask の `caveats` に設定し直す手順を書く（残るなら書かない）。handover の「ad-hoc 署名のローカルビルドで、再ビルドの後も通知の許可が残るか」もこれで閉じる
 - [ ] 4.3 この change を main にマージした後、ユーザーに確かめてから `bash scripts/release.sh 0.1.0` を実行し、表示されたコマンドでタグ `v0.1.0` の push、draft のリリース、添付ファイルの SHA-256 の照合、公開、tap への `Casks/mewbell.rb` の push を行う。確認: `curl -sL` で取った zip の SHA-256 が Cask と一致する
 - [ ] 4.4 別のユーザーアカウントか、`/Applications/Mewbell.app` を消した状態で `brew install --cask yshrsmz/tap/mewbell` を実行する。確認: (a) `caveats` が表示される、(b) 初回起動で Gatekeeper に止められ、システム設定の「このまま開く」で起動できる、(c) メニューバーに猫が出て通知を取得できる、(d) `brew uninstall --cask --zap mewbell` で `/Applications/Mewbell.app` と `~/Library/Preferences/com.codingfeline.mewbell.plist` が消える
