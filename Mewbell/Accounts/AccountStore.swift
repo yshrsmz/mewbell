@@ -75,7 +75,8 @@ final class AccountStore {
             }
             // 前の設定ディレクトリで始めた読み直しの結果は捨てる（状態と同じ）
             let detection = await discovery.ghDiagnostics()
-            if generation == configGeneration {
+            // 同じ値なら入れ直さない（開いている Diagnostics タブを描き直さないため）
+            if generation == configGeneration, detection != ghDetection {
                 self.ghDetection = detection
             }
             reloadTask = nil

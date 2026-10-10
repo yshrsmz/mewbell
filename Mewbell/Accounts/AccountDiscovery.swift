@@ -85,15 +85,13 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     /// 設定で上書きしないときの設定ディレクトリと決め方
     private let configDirectory: GhConfigDirectory.Resolved
     private let credentials: CredentialStore
-    /// `gh --version` で対応を確かめた gh の実体のパス
-    private var verifiedGhPath: URL?
-    /// `verifiedGhPath` を確かめたときのバージョン
-    private var verifiedVersion: GhVersion?
+    /// `gh --version` で対応を確かめた gh の実体のパスと、そのバージョン
+    private var verifiedGh: (path: URL, version: GhVersion)?
     /// 最後の読み直しでの gh の検出の結果
     private var lastGhDiagnostics = GhDiagnostics()
     /// 最後の読み直しで使った子プロセスの環境（401 の後の取り直しでも同じ設定ディレクトリを使うため）
     private var currentEnvironment: [String: String]
-    /// `verifiedGhPath` を確かめたときの設定ディレクトリ（変わったら `gh --version` からやり直す）
+    /// `verifiedGh` を確かめたときの設定ディレクトリ（変わったら `gh --version` からやり直す）
     private var verifiedConfigDirectory: URL?
     /// アカウントごとの走っている `gh auth token`（読み直しと取り直しで共有する）
     private var inFlightTokenFetches: [AccountID: TokenFetch] = [:]
@@ -110,14 +108,13 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         locator: GhLocator,
         runner: any ProcessRunning,
         environment: [String: String],
-        configDirectory: URL,
-        configDirectorySource: GhConfigDirectory.Source = .defaultLocation,
+        configDirectory: GhConfigDirectory.Resolved,
         credentials: CredentialStore
     ) {
         self.locator = locator
         self.runner = runner
         self.environment = environment
-        self.configDirectory = GhConfigDirectory.Resolved(url: configDirectory, source: configDirectorySource)
+        self.configDirectory = configDirectory
         self.credentials = credentials
         currentEnvironment = environment
     }
@@ -127,14 +124,12 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         let processEnvironment = ProcessInfo.processInfo.environment
         let environment = GhEnvironment.make(from: processEnvironment)
         let runner = SubprocessRunner()
-        let configDirectory = GhConfigDirectory.resolve(
-            environment: processEnvironment, homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
         return AccountDiscovery(
             locator: GhLocator(runner: runner, environment: environment),
             runner: runner,
             environment: environment,
-            configDirectory: configDirectory.url,
-            configDirectorySource: configDirectory.source,
+            configDirectory: GhConfigDirectory.resolve(
+                environment: processEnvironment, homeDirectory: FileManager.default.homeDirectoryForCurrentUser),
             credentials: credentials)
     }
 
@@ -195,7 +190,7 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     func refreshToken(for id: AccountID) async -> AccessToken? {
         await credentials.remove(id)
         guard knownAccountIDs.contains(id) else { return nil }
-        guard let ghPath = verifiedGhPath else {
+        guard let ghPath = verifiedGh?.path else {
             Self.logger.error("Cannot refresh the token of \(id) before gh is verified")
             return nil
         }
@@ -242,7 +237,7 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
             let location = await locator.locate(
                 overridePath: options.overrides.executablePath, retryLoginShell: userInitiated)
         else {
-            verifiedGhPath = nil
+            verifiedGh = nil
             return .ghNotFound
         }
         diagnostics.executable = location
@@ -257,7 +252,7 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
             from: environment, configDirectory: resolvedConfigDirectory.source == .override ? configDirectory : nil)
         currentEnvironment = environment
         if verifiedConfigDirectory != configDirectory {
-            verifiedGhPath = nil
+            verifiedGh = nil
             verifiedConfigDirectory = configDirectory
         }
         // gh は hosts.yml を解釈できないと --version でも失敗するので、バージョンより先に読む
@@ -313,13 +308,11 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
     private func verifyVersion(of ghPath: URL, using client: GhClient) async -> (
         unusable: DiscoveryState?, version: GhVersion?
     ) {
-        if verifiedGhPath == ghPath, let verifiedVersion { return (nil, verifiedVersion) }
-        verifiedGhPath = nil
-        verifiedVersion = nil
+        if let verifiedGh, verifiedGh.path == ghPath { return (nil, verifiedGh.version) }
+        verifiedGh = nil
         guard let version = await client.version() else { return (.ghUnavailable, nil) }
         guard version.isSupported else { return (.ghOutdated(version: version), version) }
-        verifiedGhPath = ghPath
-        verifiedVersion = version
+        verifiedGh = (ghPath, version)
         return (nil, version)
     }
 

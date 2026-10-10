@@ -38,14 +38,6 @@ struct FeedDiagnosticsTests {
         #expect(FailureKind(ThreadActionResult.rateLimited) == .rateLimited)
     }
 
-    @Test func groupsIntoThreeCategories() {
-        #expect(FailureKind.unauthorized.category == .unauthorized)
-        #expect(FailureKind.rateLimited.category == .rateLimited)
-        for kind in [FailureKind.network, .httpStatus(500), .redirect, .noToken, .malformedBody] {
-            #expect(kind.category == .other)
-        }
-    }
-
     @Test func derivesThePollInterval() {
         #expect(PollIntervalInfo(pollInterval: 120) == PollIntervalInfo(seconds: 120, fromHeader: true))
         #expect(PollIntervalInfo(pollInterval: 60) == PollIntervalInfo(seconds: 60, fromHeader: true))

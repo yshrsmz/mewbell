@@ -30,4 +30,14 @@ struct ActionFailureMessageTests {
             ActionFailureMessage.text(for: failure).hasPrefix("Could not mark all as read because of the rate limit."))
         #expect(ActionFailureMessage.command(for: failure, host: "acme.ghe.com") == nil)
     }
+
+    @Test func givesNoReasonForOtherFailures() {
+        for kind in [FailureKind.network, .httpStatus(500), .redirect, .noToken, .malformedBody] {
+            let failure = failure(.read, kind)
+            #expect(
+                ActionFailureMessage.text(for: failure)
+                    == "Could not mark a thread as read. Unread threads come back after the next fetch.")
+            #expect(ActionFailureMessage.command(for: failure, host: "github.com") == nil)
+        }
+    }
 }

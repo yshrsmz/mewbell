@@ -150,8 +150,7 @@ struct AccountSectionView: View {
     }
 
     @ViewBuilder private func threads(_ feed: FeedState) -> some View {
-        switch feed.phase {
-        case .loaded, .retrying:
+        if feed.phase.showsThreads {
             let groups = NotificationGrouping.groups(from: feed.threads)
             if groups.isEmpty {
                 Text("No unread notifications")
@@ -176,8 +175,6 @@ struct AccountSectionView: View {
                 }
                 .padding(.leading, 22)
             }
-        case .loading, .scopeInsufficient, .unauthorized:
-            EmptyView()
         }
     }
 }

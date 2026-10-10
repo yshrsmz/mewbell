@@ -5,7 +5,7 @@ import Foundation
 struct DiagnosticsReport: Sendable, Equatable {
     struct Row: Sendable, Equatable, Identifiable {
         let label: String
-        /// 値の文。nil なら値が分からない（時刻だけの行は空文字）
+        /// 値の文。nil で `time` も無ければ値が分からない（`time` だけなら時刻だけを出す）
         let text: String?
         /// 値に添える時刻
         var time: Date?
@@ -58,10 +58,9 @@ struct DiagnosticsReport: Sendable, Equatable {
         let format = Date.ISO8601FormatStyle(includingFractionalSeconds: false, timeZone: .gmt)
         let body = sections.map { section in
             let rows = section.rows.map { row in
-                let text = row.text.flatMap { $0.isEmpty ? nil : $0 }
                 let time = row.time.map { $0.formatted(format) }
                 let value =
-                    switch (text, time) {
+                    switch (row.text, time) {
                     case (let text?, let time?): "\(text) (\(time))"
                     case (let text?, nil): text
                     case (nil, let time?): time
@@ -113,11 +112,9 @@ struct DiagnosticsReport: Sendable, Equatable {
         }
         rows += [
             Row(label: "Fetch", text: describe(feed.phase)),
+            Row(label: "Last fetched", text: nil, time: diagnostics.lastFetchedAt),
             Row(
-                label: "Last fetched", text: diagnostics.lastFetchedAt == nil ? nil : "",
-                time: diagnostics.lastFetchedAt),
-            Row(
-                label: "Next fetch", text: diagnostics.nextFetchAt == nil ? "Not scheduled" : "",
+                label: "Next fetch", text: diagnostics.nextFetchAt == nil ? "Not scheduled" : nil,
                 time: diagnostics.nextFetchAt),
             Row(label: "Poll interval", text: interval),
             Row(label: "Scopes", text: scopes),
@@ -184,7 +181,7 @@ struct DiagnosticsReport: Sendable, Equatable {
         }
     }
 
-    static func describe(_ action: ThreadActionKind) -> String {
+    private static func describe(_ action: ThreadActionKind) -> String {
         switch action {
         case .read: "Mark as read"
         case .done: "Mark as done"
@@ -192,7 +189,7 @@ struct DiagnosticsReport: Sendable, Equatable {
         }
     }
 
-    static func describe(_ kind: FailureKind) -> String {
+    private static func describe(_ kind: FailureKind) -> String {
         switch kind {
         case .network: "Network error"
         case .httpStatus(let status): "HTTP \(status)"

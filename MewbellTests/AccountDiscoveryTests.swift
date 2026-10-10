@@ -68,7 +68,8 @@ final class DiscoveryFixture: Sendable {
         let locator = GhLocator(
             candidates: candidates ?? [ghPath], runner: runner, environment: [:], loginShell: { nil })
         return AccountDiscovery(
-            locator: locator, runner: runner, environment: [:], configDirectory: configDirectory,
+            locator: locator, runner: runner, environment: [:],
+            configDirectory: GhConfigDirectory.Resolved(url: configDirectory, source: .defaultLocation),
             credentials: credentials)
     }
 

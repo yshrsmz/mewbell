@@ -50,22 +50,6 @@ enum FailureKind: Sendable, Equatable {
         case .failed(let failure): self.init(failure)
         }
     }
-
-    /// ポップオーバーに出す分類（状態コードは出さない）。
-    var category: FailureCategory {
-        switch self {
-        case .unauthorized: .unauthorized
-        case .rateLimited: .rateLimited
-        default: .other
-        }
-    }
-}
-
-/// ポップオーバーで操作の失敗を伝えるときの分類。
-enum FailureCategory: Sendable, Equatable {
-    case unauthorized
-    case rateLimited
-    case other
 }
 
 /// 失敗を記録する操作。
@@ -101,16 +85,14 @@ struct PollIntervalInfo: Sendable, Equatable {
     var seconds: Int
     /// `X-Poll-Interval` に従った（false なら既定の 60 秒）
     var fromHeader: Bool
+}
 
-    init(seconds: Int, fromHeader: Bool) {
-        self.seconds = seconds
-        self.fromHeader = fromHeader
-    }
-
-    /// 取得の結果の `X-Poll-Interval` から決める（`PollSchedule.afterSuccess` と同じ規則）。
+extension PollIntervalInfo {
+    /// 取得の結果の `X-Poll-Interval` から決める（間隔は `PollSchedule.afterSuccess` が決めたもの）。
     init(pollInterval: Int?) {
-        let minimum = PollSchedule.minimumInterval
-        self.init(seconds: max(minimum, pollInterval ?? minimum), fromHeader: (pollInterval ?? 0) >= minimum)
+        self.init(
+            seconds: Int(PollSchedule.afterSuccess(pollInterval: pollInterval).components.seconds),
+            fromHeader: (pollInterval ?? 0) >= PollSchedule.minimumInterval)
     }
 }
 
@@ -125,4 +107,10 @@ struct FeedDiagnostics: Sendable, Equatable {
     var scopes: OAuthScopes?
     var lastFetchFailure: TimedFailure?
     var lastActionFailure: ActionFailure?
+
+    /// 取得できた（200 / 304）時刻と、その後に使う間隔を記録する。
+    mutating func recordSuccess(at date: Date, pollInterval: Int?) {
+        lastFetchedAt = date
+        self.pollInterval = PollIntervalInfo(pollInterval: pollInterval)
+    }
 }

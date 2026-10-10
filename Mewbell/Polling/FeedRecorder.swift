@@ -25,12 +25,6 @@ struct FeedRecorder {
         }
     }
 
-    /// 取得できた（200 / 304）時刻と、その後に使う間隔を記録する。
-    func recordSuccess(pollInterval: Int?, at date: Date, in state: inout FeedState) {
-        state.diagnostics.lastFetchedAt = date
-        state.diagnostics.pollInterval = PollIntervalInfo(pollInterval: pollInterval)
-    }
-
     /// 操作の失敗を、知らせる失敗と最後の操作の失敗の両方に記録する。`fetchCount` は次に始める取得の番号。
     /// リクエストの間に止まっていたら、知らせる失敗は記録しない（止まっていることは取得の状態で伝わる）。
     mutating func recordActionFailure(

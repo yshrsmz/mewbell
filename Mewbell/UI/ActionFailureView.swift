@@ -10,13 +10,13 @@ enum ActionFailureMessage {
             case .markAllRead: "Could not mark all as read"
             }
         let reason =
-            switch failure.kind.category {
+            switch failure.kind {
             case .unauthorized: " because GitHub rejected the token from gh"
             case .rateLimited: " because of the rate limit"
-            case .other: ""
+            default: ""
             }
         let followUp =
-            failure.kind.category == .unauthorized
+            failure.kind == .unauthorized
             ? "Log in again with the command below. Unread threads come back after the next fetch."
             : "Unread threads come back after the next fetch."
         return "\(action)\(reason). \(followUp)"
@@ -24,7 +24,7 @@ enum ActionFailureMessage {
 
     /// 文に添えるコマンド（認証エラーのときだけ）。
     static func command(for failure: ActionFailure, host: String) -> String? {
-        failure.kind.category == .unauthorized ? "gh auth login --hostname \(host)" : nil
+        failure.kind == .unauthorized ? "gh auth login --hostname \(host)" : nil
     }
 }
 

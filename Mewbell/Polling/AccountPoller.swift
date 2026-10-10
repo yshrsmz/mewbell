@@ -294,7 +294,7 @@ actor AccountPoller {
     private func succeeded(pollInterval: Int?) -> Duration {
         consecutiveFailures = 0
         state.phase = .loaded(updatedAt: now())
-        recorder.recordSuccess(pollInterval: pollInterval, at: now(), in: &state)
+        state.diagnostics.recordSuccess(at: now(), pollInterval: pollInterval)
         return PollSchedule.afterSuccess(pollInterval: pollInterval)
     }
 

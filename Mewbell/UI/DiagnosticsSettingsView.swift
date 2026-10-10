@@ -14,19 +14,22 @@ struct DiagnosticsSettingsView: View {
             accounts: DiagnosticsReport.accounts(in: accounts.state, feeds: notifications.feeds) {
                 settings.preferences(for: $0)
             },
-            appVersion: Self.appVersion, osVersion: ProcessInfo.processInfo.operatingSystemVersionString)
+            appVersion: Self.appVersion, osVersion: Self.osVersion)
     }
 
     var body: some View {
         DiagnosticsReportView(report: report)
     }
 
-    private static var appVersion: String {
+    // 起動中は変わらないので 1 回だけ読む（一覧が変わるたびに report を作り直すため）
+    private static let appVersion: String = {
         let info = Bundle.main.infoDictionary ?? [:]
         let version = info["CFBundleShortVersionString"] as? String ?? "?"
         let build = info["CFBundleVersion"] as? String ?? "?"
         return "\(version) (\(build))"
-    }
+    }()
+
+    private static let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
 }
 
 /// `DiagnosticsReport` の節と行を並べ、Copy でテキストをクリップボードに入れる。
@@ -77,7 +80,7 @@ private struct DiagnosticsValueText: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            if let text = row.text, !text.isEmpty {
+            if let text = row.text {
                 Text(text)
             } else if row.time == nil {
                 Text(DiagnosticsReport.unknown).foregroundStyle(.secondary)
