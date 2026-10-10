@@ -237,6 +237,31 @@ struct NotificationStoreRefreshTests {
         store.stopAll()
     }
 
+    @Test func keepsTheDiagnosticsOfAStoppedAccountWhenResuming() async {
+        transport.setHandler { _ in PollerFixture.ok(1...1, scopes: "gist") }
+        tokens.set("test-token-alice", for: alice)
+        let client = GitHubAPIClient(transport: transport)
+        let store = NotificationStore(
+            makePoller: { [tokens, sleeper, clock] account, endpoints, _, _, _, onUpdate in
+                AccountPoller(
+                    accountID: account.id, endpoints: endpoints, client: client, tokens: tokens, sleep: sleeper.sleep,
+                    now: { clock.value }, onUpdate: onUpdate)
+            }, openURL: { _ in })
+        store.sync(with: .accounts([AccountStatus(account: Account(id: alice, isActive: true), tokenState: .ready)]))
+        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.phase == .scopeInsufficient } }
+        let stopped = store.feeds[alice]?.diagnostics
+        #expect(stopped?.lastFetchedAt == nil)
+        #expect(stopped?.scopes == OAuthScopes(header: "gist"))
+        transport.pausedMethod.value = "GET"
+        tokens.refreshedValue.value = "test-token-alice-2"
+        store.refresh()
+        // 再開したポーラーが出し直すまで、前の値を残す
+        #expect(store.feeds[alice]?.phase == .loading)
+        #expect(store.feeds[alice]?.diagnostics == stopped)
+        transport.pausedMethod.value = nil
+        store.stopAll()
+    }
+
     @Test func endsTheProgressWhenAFetchFails() async {
         let store = await loadedStore()
         transport.setHandler { _ throws(TransportError) in

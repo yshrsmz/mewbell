@@ -209,6 +209,26 @@ struct NotificationStoreSettingsTests {
         store.stopAll()
     }
 
+    @Test func restartingDropsTheNoticeAndTheDiagnostics() async throws {
+        let store = await loadedStore()
+        // このフェイクは PATCH にも 200 を返すので、既読化は失敗になる
+        let thread = try #require(store.feeds[alice]?.threads.first)
+        store.markRead(thread, in: alice)
+        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.actionFailure != nil } }
+        #expect(store.feeds[alice]?.diagnostics.lastActionFailure?.kind == .httpStatus(200))
+        #expect(store.feeds[alice]?.diagnostics.pollInterval != nil)
+        settings.setParticipatingOnly(true, for: alice)
+        store.restart(alice)
+        #expect(store.feeds[alice] == .loading)
+        await advance(until: { store.feeds[alice]?.threads.map(\.id) == ["4", "5"] })
+        let feed = store.feeds[alice]
+        #expect(feed?.actionFailure == nil)
+        #expect(feed?.isTruncated == false)
+        #expect(feed?.diagnostics.lastActionFailure == nil)
+        #expect(feed?.diagnostics.lastFetchFailure == nil)
+        store.stopAll()
+    }
+
     @Test func dropsLateUpdatesFromTheStoppedPoller() async {
         let store = await loadedStore()
         // 前のポーラーの取得の途中で作り直す

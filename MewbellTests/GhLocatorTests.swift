@@ -108,7 +108,8 @@ struct GhLocatorTests {
             return FakeProcessRunner.output("")
         }
         let found = await locator(candidates: [first, second], runner: runner).locate()
-        #expect(found == ExecutableValidator.validate(first))
+        #expect(found?.url == ExecutableValidator.validate(first))
+        #expect(found?.source == .standardLocation)
         #expect(runner.requests.isEmpty)
     }
 
@@ -117,14 +118,15 @@ struct GhLocatorTests {
         let valid = try directory.makeFile("local/gh")
         let runner = FakeProcessRunner { _ in FakeProcessRunner.output("") }
         let found = await locator(candidates: [writable, valid], runner: runner).locate()
-        #expect(found == ExecutableValidator.validate(valid))
+        #expect(found?.url == ExecutableValidator.validate(valid))
     }
 
     @Test func fallsBackToTheLoginShellAndUsesTheLastLine() async throws {
         let ghFile = try directory.makeFile("custom/gh")
         let runner = FakeProcessRunner { _ in FakeProcessRunner.output("rc says hi\n\(ghFile)\n") }
         let found = await locator(candidates: ["/nonexistent/gh"], runner: runner).locate()
-        #expect(found == ExecutableValidator.validate(ghFile))
+        #expect(found?.url == ExecutableValidator.validate(ghFile))
+        #expect(found?.source == .loginShell)
         let request = try #require(runner.requests.first)
         #expect(request.executable.path == "/bin/zsh")
         #expect(request.arguments == ["-i", "-l", "-c", "command -v gh"])
@@ -196,6 +198,14 @@ struct GhLocatorTests {
         let locator = locator(candidates: [candidate], runner: runner)
         #expect(await locator.locate(overridePath: override) == nil)
         #expect(runner.requests.isEmpty)
+    }
+
+    @Test func reportsAnOverridePathAsTheOverride() async throws {
+        let candidate = try directory.makeFile("homebrew/gh")
+        let override = try directory.makeFile("override/gh")
+        let runner = FakeProcessRunner { _ in FakeProcessRunner.output("") }
+        let found = await locator(candidates: [candidate], runner: runner).locate(overridePath: override)
+        #expect(found == GhLocation(url: try #require(ExecutableValidator.validate(override)), source: .override))
     }
 }
 

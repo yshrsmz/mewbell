@@ -53,6 +53,22 @@ enum LoginShell {
     }
 }
 
+/// gh を見つけた方法。
+enum GhExecutableSource: Sendable, Equatable {
+    /// 設定で上書きしたパス
+    case override
+    /// 既定の場所（`/opt/homebrew/bin/gh`、`/usr/local/bin/gh`）
+    case standardLocation
+    /// ログインシェルの `command -v gh`
+    case loginShell
+}
+
+/// 見つけた gh の実体のパスと、見つけた方法。
+struct GhLocation: Sendable, Equatable {
+    let url: URL
+    let source: GhExecutableSource
+}
+
 /// gh 実行ファイルを探す。ログインシェルでの検索はアプリの起動から終了までに 1 回だけ行う。
 actor GhLocator {
     static let defaultCandidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh"]
@@ -79,16 +95,16 @@ actor GhLocator {
         self.loginShell = loginShell
     }
 
-    /// 使える gh の実体のパス。`overridePath` があるときは、それだけを確かめる（M4 で設定から渡す）。
+    /// 使える gh の実体のパスと見つけた方法。`overridePath`（設定の上書き）があるときは、それだけを確かめる。
     /// ログインシェルでの検索は自動では 1 回だけ行う。`retryLoginShell` が true（ユーザーが再読み込みを押した）で、
     /// 前回の検索で見つからなかったときに限り、もう一度検索する。
-    func locate(overridePath: String? = nil, retryLoginShell: Bool = false) async -> URL? {
+    func locate(overridePath: String? = nil, retryLoginShell: Bool = false) async -> GhLocation? {
         if let overridePath {
-            return ExecutableValidator.validate(overridePath)
+            return ExecutableValidator.validate(overridePath).map { GhLocation(url: $0, source: .override) }
         }
         for candidate in candidates {
             if let url = ExecutableValidator.validate(candidate) {
-                return url
+                return GhLocation(url: url, source: .standardLocation)
             }
         }
         if retryLoginShell, let previous = loginShellSearch,
@@ -98,7 +114,7 @@ actor GhLocator {
         }
         let search = loginShellSearch ?? Task { await searchLoginShell() }
         loginShellSearch = search
-        return await search.value.flatMap(ExecutableValidator.validate)
+        return await search.value.flatMap(ExecutableValidator.validate).map { GhLocation(url: $0, source: .loginShell) }
     }
 
     private func searchLoginShell() async -> String? {

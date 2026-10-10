@@ -33,7 +33,9 @@ enum FetchFailure: Error, Equatable, Sendable {
 }
 
 enum NotificationsFetchResult: Sendable, Equatable {
-    case updated(threads: [NotificationThread], lastModified: String?, pollInterval: Int?, scopes: OAuthScopes)
+    /// `truncated` は 10 ページ目にも `rel="next"` があった（それより古い未読を取得していない）
+    case updated(
+        threads: [NotificationThread], lastModified: String?, pollInterval: Int?, scopes: OAuthScopes, truncated: Bool)
     case notModified(pollInterval: Int?)
     /// 401
     case unauthorized
@@ -62,6 +64,9 @@ enum ThreadActionResult: Sendable, Equatable {
 /// 状態を持たない。`AccountPoller` の中から呼ぶ。
 struct GitHubAPIClient: Sendable {
     static let pageLimit = 10
+    static let perPage = 50
+    /// 1 回の取得で取るスレッドの上限（これを超える古い未読は取らない）
+    static let threadLimit = pageLimit * perPage
     static let bodyLimit = 5 * 1024 * 1024
     private static let logger = Logger(category: "GitHubAPI")
     private static let userAgent =
@@ -80,7 +85,7 @@ struct GitHubAPIClient: Sendable {
         components?.queryItems = [
             URLQueryItem(name: "all", value: "false"),
             URLQueryItem(name: "participating", value: participating ? "true" : "false"),
-            URLQueryItem(name: "per_page", value: "50"),
+            URLQueryItem(name: "per_page", value: String(Self.perPage)),
         ]
         guard var url = components?.url else { return .failed(.rejectedURL) }
 
@@ -114,14 +119,24 @@ struct GitHubAPIClient: Sendable {
             threads += pageThreads.filter { seenIDs.insert($0.id).inserted }
             let first = firstResponse ?? response
             firstResponse = first
-            guard page < Self.pageLimit, let next = LinkHeader.nextURL(in: response.header("Link")) else {
+            let next = LinkHeader.nextURL(in: response.header("Link"))
+            guard page < Self.pageLimit, let next else {
                 // 続きが無いか、ページの上限まで取った（それ以上は取らず、取った分で一覧を作る）
                 return .updated(
                     threads: threads, lastModified: first.header("Last-Modified"),
-                    pollInterval: Self.pollInterval(first), scopes: OAuthScopes(header: first.header("X-OAuth-Scopes")))
+                    pollInterval: Self.pollInterval(first), scopes: OAuthScopes(header: first.header("X-OAuth-Scopes")),
+                    truncated: next != nil)
             }
             url = next
             page += 1
+        }
+    }
+
+    /// スレッドを既読か Done にする。
+    func perform(_ action: ThreadAction, endpoints: APIEndpoints, token: AccessToken) async -> ThreadActionResult {
+        switch action {
+        case .read(let threadID): await markThreadRead(endpoints: endpoints, token: token, threadID: threadID)
+        case .done(let threadID): await markThreadDone(endpoints: endpoints, token: token, threadID: threadID)
         }
     }
 

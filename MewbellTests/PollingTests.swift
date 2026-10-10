@@ -35,9 +35,7 @@ struct AccountPollerTests {
         fixture.respond([PollerFixture.ok(1...3), PollerFixture.notModified])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
-        #expect(
-            fixture.last
-                == FeedState(phase: .loaded(updatedAt: PollerFixture.now), threads: fixture.last?.threads ?? []))
+        #expect(fixture.last?.phase == .loaded(updatedAt: PollerFixture.now))
         #expect(fixture.last?.threads.count == 3)
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
@@ -121,7 +119,8 @@ struct AccountPollerTests {
         fixture.respond([HTTPResponse(statusCode: 401), HTTPResponse(statusCode: 401), PollerFixture.ok(1...1)])
         fixture.poller.start()
         await waitUntil { self.fixture.last?.phase == .unauthorized }
-        #expect(fixture.last == FeedState(phase: .unauthorized, threads: []))
+        #expect(fixture.last?.phase == .unauthorized)
+        #expect(fixture.last?.threads.isEmpty == true)
         #expect(fixture.tokens.refreshCount.value == 1)
         #expect(fixture.tokens.discardCount.value == 1)
         try? await Task.sleep(for: .milliseconds(50))
@@ -206,7 +205,8 @@ struct AccountPollerTests {
         fixture.poller.resume()
         await fixture.sleeper.waitForSleeps(1)
         #expect(fixture.tokens.refreshCount.value == 1)
-        #expect(fixture.updates.value.contains(.loading))
+        // 再開の間は最初の取得中を出す（Diagnostics の値は持ち越す）
+        #expect(fixture.updates.value.contains { $0.phase == .loading && $0.threads.isEmpty })
         #expect(fixture.last?.threads.count == 3)
         #expect(fixture.ifModifiedSince == [nil, nil])
         #expect(fixture.authorizations.last == "Bearer test-token-alice-2")
@@ -316,7 +316,8 @@ struct NotificationStoreTests {
         await sleeper.waitForSleeps(1)
         tokens.refreshedValue.value = "test-token-alice"
         store.refresh()
-        #expect(store.feeds[alice] == .loading)
+        #expect(store.feeds[alice]?.phase == .loading)
+        #expect(store.feeds[alice]?.threads.isEmpty == true)
         await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.threads.count == 1 } }
         // トークンを取り直すのは止まっていた alice だけ。bob は前の取得から 10 秒の下限を待っている
         #expect(tokens.refreshCount.value == 2)

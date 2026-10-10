@@ -81,7 +81,10 @@ struct AccountSectionView: View {
             case .fetching, .ready:
                 // 401 の後などにトークンを取り直している間も、それまでの状態を出し続ける
                 if let feed {
-                    FeedStatusView(account: account, phase: feed.phase)
+                    FeedStatusView(account: account, phase: feed.phase, isTruncated: feed.isTruncated)
+                    if let failure = feed.actionFailure {
+                        ActionFailureView(failure: failure, host: account.host)
+                    }
                     threads(feed)
                 }
             }
@@ -118,7 +121,7 @@ struct AccountSectionView: View {
             if status.tokenState == .ready, let feed, !feed.phase.isStopped {
                 MarkAllReadButton(
                     count: feed.threads.count, newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead,
-                    participatingOnly: participatingOnly
+                    participatingOnly: participatingOnly, isTruncated: feed.isTruncated
                 ) {
                     actions.markAllRead(account.id)
                 }
@@ -147,8 +150,7 @@ struct AccountSectionView: View {
     }
 
     @ViewBuilder private func threads(_ feed: FeedState) -> some View {
-        switch feed.phase {
-        case .loaded, .retrying:
+        if feed.phase.showsThreads {
             let groups = NotificationGrouping.groups(from: feed.threads)
             if groups.isEmpty {
                 Text("No unread notifications")
@@ -173,8 +175,6 @@ struct AccountSectionView: View {
                 }
                 .padding(.leading, 22)
             }
-        case .loading, .scopeInsufficient, .unauthorized:
-            EmptyView()
         }
     }
 }
@@ -183,6 +183,8 @@ struct AccountSectionView: View {
 struct FeedStatusView: View {
     let account: Account
     let phase: FeedPhase
+    /// 一覧を 10 ページで打ち切った（取得できた・失敗して待っているときだけ出す）
+    var isTruncated = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -219,6 +221,13 @@ struct FeedStatusView: View {
             case .unauthorized:
                 Text("GitHub rejected the token from gh. Log in again, then reload:")
                 CommandRow(command: "gh auth login --hostname \(account.host)")
+            }
+            if isTruncated, phase.showsThreads {
+                Label(
+                    "Showing the newest \(GitHubAPIClient.threadLimit) unread notifications. Older unread ones are not shown.",
+                    systemImage: "ellipsis.circle"
+                )
+                .foregroundStyle(.secondary)
             }
         }
         .font(.caption)
@@ -296,6 +305,25 @@ struct FeedStatusView: View {
     let alice = Account(id: AccountID(host: "github.com", user: "alice"), isActive: true)
     return NotificationListView(
         statuses: [AccountStatus(account: alice, tokenState: .disabled)], feeds: [:], actions: .none
+    )
+    .padding()
+    .frame(width: 380)
+}
+
+#Preview("Truncated") {
+    let alice = Account(id: AccountID(host: "github.com", user: "alice"), isActive: true)
+    let now = Date()
+    let threads = (1...3).compactMap { index in
+        RepositoryName(fullName: "octo/app").map { repository in
+            NotificationThread(
+                id: "\(index)", reason: "subscribed", updatedAt: now.addingTimeInterval(-Double(index) * 60),
+                title: "Thread \(index)", kind: .issue, subjectURL: nil, repository: repository)
+        }
+    }
+    return NotificationListView(
+        statuses: [AccountStatus(account: alice, tokenState: .ready)],
+        feeds: [alice.id: FeedState(phase: .loaded(updatedAt: now), threads: threads, isTruncated: true)],
+        actions: .none
     )
     .padding()
     .frame(width: 380)

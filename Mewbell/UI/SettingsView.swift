@@ -5,6 +5,7 @@ import SwiftUI
 struct SettingsView: View {
     let settings: AppSettings
     let accounts: AccountStore
+    let notifications: NotificationStore
     let launchAtLogin: LaunchAtLogin
 
     var body: some View {
@@ -17,6 +18,9 @@ struct SettingsView: View {
             }
             Tab("gh", systemImage: "terminal") {
                 GhSettingsView(settings: settings)
+            }
+            Tab("Diagnostics", systemImage: "stethoscope") {
+                DiagnosticsSettingsView(settings: settings, accounts: accounts, notifications: notifications)
             }
         }
         .frame(width: 520, height: 420)

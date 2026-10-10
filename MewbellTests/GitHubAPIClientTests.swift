@@ -129,7 +129,7 @@ struct GitHubAPIClientTests {
         }
         let result = await client(transport).fetchNotifications(
             endpoints: github, token: aliceToken, ifModifiedSince: nil)
-        guard case .updated(let threads, let lastModified, let pollInterval, let scopes) = result else {
+        guard case .updated(let threads, let lastModified, let pollInterval, let scopes, let truncated) = result else {
             Issue.record("unexpected result \(result)")
             return
         }
@@ -137,6 +137,7 @@ struct GitHubAPIClientTests {
         #expect(lastModified == "LM-1")
         #expect(pollInterval == 60)
         #expect(scopes.allowsNotifications)
+        #expect(!truncated)
     }
 
     @Test(arguments: [
@@ -164,7 +165,7 @@ struct GitHubAPIClientTests {
         }
         let result = await client(transport).fetchNotifications(
             endpoints: github, token: aliceToken, ifModifiedSince: nil)
-        if case .updated(let threads, _, _, _) = result {
+        if case .updated(let threads, _, _, _, _) = result {
             #expect(threads.map(\.id) == ["1", "2", "3", "4", "5"])
         } else {
             Issue.record("unexpected result \(result)")
@@ -181,8 +182,9 @@ struct GitHubAPIClientTests {
         let result = await client(transport).fetchNotifications(
             endpoints: github, token: aliceToken, ifModifiedSince: nil)
         #expect(transport.requests.count == 10)
-        if case .updated(let threads, _, _, _) = result {
+        if case .updated(let threads, _, _, _, let truncated) = result {
             #expect(threads.count == 10)
+            #expect(truncated)
         } else {
             Issue.record("unexpected result \(result)")
         }
@@ -293,5 +295,61 @@ struct GitHubAPIClientTests {
                 #expect(!text.contains("test-error-body"))
             }
         }
+    }
+}
+
+/// 10 ページで打ち切ったかどうかのテスト。
+struct NotificationPagingTests {
+    private let github: APIEndpoints
+    private let token: AccessToken
+
+    init() throws {
+        github = try #require(APIEndpoints(host: "github.com"))
+        token = try #require(AccessToken(ghOutput: Data("test-token-alice".utf8)))
+    }
+
+    /// `lastPage` ページ目まで `rel="next"` を付け、そのページで終わる。各ページは `ids(page)` のスレッド。
+    private func fetchPages(
+        _ lastPage: Int, ids: @escaping @Sendable (Int) -> ClosedRange<Int> = { ($0 * 100)...($0 * 100) }
+    ) async -> NotificationsFetchResult {
+        let transport = FakeHTTPTransport { request in
+            // `per_page` と取り違えないように、`page` のクエリだけを読む
+            let page =
+                request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems?
+                .first { $0.name == "page" }?.value.flatMap { Int($0) } ?? 1
+            let link =
+                page < lastPage
+                ? ["Link": "<https://api.github.com/notifications?page=\(page + 1)>; rel=\"next\""] : [:]
+            return HTTPResponse(statusCode: 200, headers: link, body: FakeHTTPTransport.page(ids(page)))
+        }
+        return await GitHubAPIClient(transport: transport).fetchNotifications(
+            endpoints: github, token: token, ifModifiedSince: nil)
+    }
+
+    @Test func isNotTruncatedWhenTheTenthPageIsTheLast() async {
+        guard case .updated(_, _, _, _, let truncated) = await fetchPages(10) else {
+            Issue.record("unexpected result")
+            return
+        }
+        #expect(!truncated)
+    }
+
+    @Test func isNotTruncatedWhenPagesEndEarly() async {
+        guard case .updated(let threads, _, _, _, let truncated) = await fetchPages(2) else {
+            Issue.record("unexpected result")
+            return
+        }
+        #expect(threads.count == 2)
+        #expect(!truncated)
+    }
+
+    @Test func isTruncatedByTheNextLinkEvenWithFewerThreads() async {
+        // どのページも同じスレッドを返すので、重複を除くと 1 件だけになる
+        guard case .updated(let threads, _, _, _, let truncated) = await fetchPages(11, ids: { _ in 1...1 }) else {
+            Issue.record("unexpected result")
+            return
+        }
+        #expect(threads.count == 1)
+        #expect(truncated)
     }
 }

@@ -57,6 +57,16 @@ final class BlockingDiscovery: AccountDiscovering {
     private let recordedEvents = Mutex<[String]>([])
     private let recordedOptions = Mutex<[DiscoveryOptions]>([])
     private let resultState = Mutex<DiscoveryState>(.notLoggedIn)
+    private let ghState = Mutex(GhDiagnostics())
+    private let ghReads = Mutex(0)
+
+    /// `ghDiagnostics()` が返す値
+    var ghDetection: GhDiagnostics {
+        get { ghState.withLock { $0 } }
+        set { ghState.withLock { $0 = newValue } }
+    }
+    /// `ghDiagnostics()` が呼ばれた回数
+    var ghReadCount: Int { ghReads.withLock { $0 } }
 
     /// 読み込みの最後に渡す状態
     var result: DiscoveryState {
@@ -107,6 +117,11 @@ final class BlockingDiscovery: AccountDiscovering {
 
     func closeCredentials() async {
         recordedEvents.withLock { $0.append("closed") }
+    }
+
+    func ghDiagnostics() async -> GhDiagnostics {
+        ghReads.withLock { $0 += 1 }
+        return ghDetection
     }
 
     /// 待っている読み込みを 1 つ進める（待っていなければ、次の読み込みをすぐ通す）。

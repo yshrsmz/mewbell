@@ -8,16 +8,23 @@ struct GhConfigDirectoryTests {
 
     @Test func prefersGhConfigDir() {
         let environment = ["GH_CONFIG_DIR": "/custom/gh", "XDG_CONFIG_HOME": "/xdg"]
-        #expect(GhConfigDirectory.resolve(environment: environment, homeDirectory: home).path == "/custom/gh")
+        let resolved = GhConfigDirectory.resolve(environment: environment, homeDirectory: home)
+        #expect(resolved.url.path == "/custom/gh")
+        #expect(resolved.source == .ghConfigDir)
     }
 
     @Test func usesXdgConfigHome() {
         let environment = ["GH_CONFIG_DIR": "", "XDG_CONFIG_HOME": "/xdg"]
-        #expect(GhConfigDirectory.resolve(environment: environment, homeDirectory: home).path == "/xdg/gh")
+        // 空の `GH_CONFIG_DIR` は使わない
+        let resolved = GhConfigDirectory.resolve(environment: environment, homeDirectory: home)
+        #expect(resolved.url.path == "/xdg/gh")
+        #expect(resolved.source == .xdgConfigHome)
     }
 
     @Test func defaultsToDotConfig() {
-        #expect(GhConfigDirectory.resolve(environment: [:], homeDirectory: home).path == "/Users/me/.config/gh")
+        let resolved = GhConfigDirectory.resolve(environment: [:], homeDirectory: home)
+        #expect(resolved.url.path == "/Users/me/.config/gh")
+        #expect(resolved.source == .defaultLocation)
     }
 }
 
