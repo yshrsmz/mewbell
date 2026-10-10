@@ -2,15 +2,15 @@
 
 ## 1. バージョンと署名・entitlement の検査（mewbell）
 
-- [ ] 1.1 `project.xcproj` の `MARKETING_VERSION` と `CURRENT_PROJECT_VERSION` を 2 つのターゲットから消し、プロジェクトの設定に `0.1.0` で 1 回だけ書き、`// x-release-please-start-version` と `// x-release-please-end` の行で囲む（D2）。確認: `xcodebuild -showBuildSettings -configuration Release` で両ターゲットの 2 つの値が `0.1.0`、`bash scripts/build.sh Release` の Info.plist の `CFBundleShortVersionString` と `CFBundleVersion` が `0.1.0`、`lipo -archs` が `x86_64 arm64`（universal でなければ Release に `ARCHS` を設定する）。Diagnostics のコピーと `User-Agent` のバージョンが変わらず `0.1.0` であることをテストで確かめる（既存のテストが通る）
-- [ ] 1.2 `scripts/lib/verify-app.sh` に `verify_app <path-to-.app> <version>` を作る（D4。spec の「署名と entitlement の検査」の項目をすべて確かめ、満たさない項目の名前を表示して 0 以外で返す。`spctl --assess` は使わない）。確認: `build/Release/Mewbell.app` と `0.1.0` で通り、`0.2.0` では失敗する
-- [ ] 1.3 `scripts/tests/verify-app-test.sh` を作る（D4）。確認: スクリプトを実行して、(a) 正常な偽の .app が通る、(b) `get-task-allow` 付き、(c) `-o runtime` 無し、(d) `NSAllowsArbitraryLoads` 付き、(e) `arm64` だけ、(f) `CFBundleIdentifier` 違い、(g) バージョン違い、(h) 署名後に中のファイルを書き換えたもの、がそれぞれ失敗し、失敗した項目の名前が出る
-- [ ] 1.4 `scripts/package-release.sh X.Y.Z` を作る（D4。形式の確認、Release ビルド、`verify_app`、一時ディレクトリでの zip と `.sha256`、展開した zip の `verify_app`、すべて通った後の `build/release/X.Y.Z/` への移動。添付・公開・dispatch はしない）。確認: `bash scripts/package-release.sh 0.1.0` で (a) 2 つのファイルができる、(b) `unzip -l` の中身が `Mewbell.app/` の下だけ、(c) `shasum -a 256 -c` が通る、(d) `abc` を渡すと形式のエラー、(e) `0.2.0` を渡すと検査で失敗し `build/release/0.2.0/` が作られない
+- [x] 1.1 `project.xcproj` の `MARKETING_VERSION` と `CURRENT_PROJECT_VERSION` を 2 つのターゲットから消し、プロジェクトの設定に `0.1.0` で 1 回だけ書き、`// x-release-please-start-version` と `// x-release-please-end` の行で囲む（D2）。確認: `xcodebuild -showBuildSettings -configuration Release` で両ターゲットの 2 つの値が `0.1.0`、`bash scripts/build.sh Release` の Info.plist の `CFBundleShortVersionString` と `CFBundleVersion` が `0.1.0`、`lipo -archs` が `x86_64 arm64`（universal でなければ Release に `ARCHS` を設定する）。Diagnostics のコピーと `User-Agent` のバージョンが変わらず `0.1.0` であることをテストで確かめる（既存のテストが通る）
+- [x] 1.2 `scripts/lib/verify-app.sh` に `verify_app <path-to-.app> <version>` を作る（D4。spec の「署名と entitlement の検査」の項目をすべて確かめ、満たさない項目の名前を表示して 0 以外で返す。`spctl --assess` は使わない）。確認: `build/Release/Mewbell.app` と `0.1.0` で通り、`0.2.0` では失敗する
+- [x] 1.3 `scripts/tests/verify-app-test.sh` を作る（D4）。確認: スクリプトを実行して、(a) 正常な偽の .app が通る、(b) `get-task-allow` 付き、(c) `-o runtime` 無し、(d) `NSAllowsArbitraryLoads` 付き、(e) `arm64` だけ、(f) `CFBundleIdentifier` 違い、(g) バージョン違い、(h) 署名後に中のファイルを書き換えたもの、がそれぞれ失敗し、失敗した項目の名前が出る
+- [x] 1.4 `scripts/package-release.sh X.Y.Z` を作る（D4。形式の確認、Release ビルド、`verify_app`、一時ディレクトリでの zip と `.sha256`、展開した zip の `verify_app`、すべて通った後の `build/dist/X.Y.Z/` への移動。添付・公開・dispatch はしない）。確認: `bash scripts/package-release.sh 0.1.0` で (a) 2 つのファイルができる、(b) `unzip -l` の中身が `Mewbell.app/` の下だけ、(c) `shasum -a 256 -c` が通る、(d) `abc` を渡すと形式のエラー、(e) `0.2.0` を渡すと検査で失敗し `build/dist/0.2.0/` が作られない
 
 ## 2. Cask の雛形（mewbell と homebrew-tap）
 
 - [x] 2.1 `yshrsmz/homebrew-tap` を用意し、`Casks/` と短い README（使い方、`brew trust`、Gatekeeper の「このまま開く」、quarantine を消さないこと）を置く。確認: `brew tap yshrsmz/tap` が通る。結果: リポジトリはユーザーが作った
-- [ ] 2.2 `packaging/homebrew/mewbell.rb.template` を作る（spec の「Homebrew Cask の中身」。`@VERSION@` と `@SHA256@`。`xattr` や `postflight` は入れない）。確認: 1.4 の zip の値で埋めたものを手元の tap の clone に置き、`brew style` と `brew audit --cask --strict` が通る（Linux で `brew audit --cask` が動くかもここで確かめ、D5 の Open Question を閉じる）
+- [x] 2.2 `packaging/homebrew/mewbell.rb.template` を作る（spec の「Homebrew Cask の中身」。`@VERSION@` と `@SHA256@`。`xattr` や `postflight` は入れない）。確認: 1.4 の zip の値で埋めたものを手元の tap の clone に置き、`brew style` と `brew audit --cask --strict` が通る。結果: `depends_on macos: ">= :tahoe"` は `brew style` が `:tahoe` に直すよう指摘したので直した。Linux での `brew audit --cask` は確かめられないので、tap の CI は `macos-latest` にした（D5）
 
 ## 3. GitHub App と Environment（ユーザーの作業を含む）
 

@@ -157,7 +157,7 @@ Homebrew Cask（`Casks/mewbell.rb`）は次を満たさなければならない�
 
 - `version` がリリースのバージョン、`sha256` が zip の SHA-256 と一致する
 - `url` が `https://github.com/yshrsmz/mewbell/releases/download/v#{version}/Mewbell-#{version}.zip` である
-- `depends_on macos: ">= :tahoe"`（macOS 26 以上）を持つ
+- `depends_on macos: :tahoe`（macOS 26 以上。今の Homebrew では `">= :tahoe"` ではなくこの書き方）を持つ
 - `app "Mewbell.app"` で `/Applications` に入れる
 - アンインストールのときに `com.codingfeline.mewbell` を終了させる
 - `zap` で `~/Library/Preferences/com.codingfeline.mewbell.plist` を消す

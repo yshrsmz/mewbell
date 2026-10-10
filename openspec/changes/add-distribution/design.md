@@ -96,7 +96,7 @@
 ### D4. 配布物を作る処理は CI と手元で共通にする
 
 - `scripts/lib/verify-app.sh` の `verify_app <path-to-.app> <version>`: `codesign --verify --deep --strict`、`codesign -dv` の `flags=` に `runtime`、`codesign -d --entitlements - --xml` に禁止の entitlement が無いこと、Info.plist（`plutil -extract`）に `NSAppTransportSecurity` の緩める設定が無いこと、`CFBundleIdentifier`、`CFBundleShortVersionString` と `CFBundleVersion` が `<version>` と一致すること、`lipo -archs` に `arm64` と `x86_64` があることを確かめ、満たさない項目の名前を表示して 0 以外で返す
-- `scripts/package-release.sh X.Y.Z`: 形式の確認 → `bash scripts/build.sh Release` → `verify_app` → 一時ディレクトリで `ditto -c -k --sequesterRsrc --keepParent` で zip、`shasum -a 256` で `.sha256` → 展開した zip を `verify_app` → すべて通ったら `build/release/X.Y.Z/` に移す。添付・公開・dispatch はしない（それはワークフローが行う）。手元では、リリースの前の試しや、検査が落ちたときの調べに使う
+- `scripts/package-release.sh X.Y.Z`: 形式の確認 → `bash scripts/build.sh Release` → `verify_app` → 一時ディレクトリで `ditto -c -k --norsrc --noextattr --noqtn --noacl --keepParent` で zip（拡張属性を入れない）、`zipinfo -1` で中身が `Mewbell.app/` の下だけであることを確かめる、`shasum -a 256` で `.sha256` → 展開した zip を `verify_app` → すべて通ったら `build/dist/X.Y.Z/` に移す（`build/release` は大文字と小文字を区別しない APFS で `build/Release` と重なるので使わない）。添付・公開・dispatch はしない（それはワークフローが行う）。手元では、リリースの前の試しや、検査が落ちたときの調べに使う
 - `scripts/tests/verify-app-test.sh`: `clang` で小さな universal の実行ファイルを作って偽の `.app` を組み、正常なものが通り、`get-task-allow` 付き・`runtime` 無し・`NSAllowsArbitraryLoads` 付き・`arm64` だけ・`CFBundleIdentifier` 違い・バージョン違い・署名後の改変がそれぞれ失敗することを確かめる。ubuntu の CI には `codesign` が無いので、リリースのワークフローと手元で実行する
 
 ### D5. Cask の更新（homebrew-tap）
@@ -108,7 +108,7 @@ homebrew-tap は OpenSpec の外なので、ここで形を決め、tasks で作
   - `env: VERSION: ${{ github.event.client_payload.version }}` で受け、`[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]` でなければ失敗する
   - `curl -fsSL --proto '=https'` で `https://github.com/yshrsmz/mewbell/releases/download/v$VERSION/Mewbell-$VERSION.zip` と `.sha256` を取り、`shasum -a 256` の値と `.sha256` の値が一致することを確かめる
   - 雛形から `Casks/mewbell.rb` を作り、tap 用 App のトークン（`repositories: homebrew-tap`、`permission-contents: write`、`permission-pull-requests: write`）でブランチ `mewbell-$VERSION` を push して PR を作り、`gh pr merge --auto --squash` を指定する
-- `.github/workflows/ci.yml`: `pull_request` で `brew style Casks` と `brew audit --cask --strict`（`--online` は付けない）。`brew audit --cask` が Linux で動くかは実装で確かめ、動かなければ `macos-latest` で動かす（リリースのためのワークフローなので macOS ランナーの例外に入る）
+- `.github/workflows/ci.yml`: `pull_request` で `brew style Casks` と `brew audit --cask --strict`（`--online` は付けない）を `macos-latest` で動かす。`brew audit --cask` が Linux で動くかを確かめられなかったため、確実に動く macOS にする（リリースのためのワークフローなので macOS ランナーの例外に入り、Cask の PR のときだけ動く）
 - ruleset: `main` へのマージに `ci` のチェックの成功を必須にする。リポジトリの設定で auto-merge を有効にする。App のトークンで作った PR は CI が走るので、auto-merge が働く
 
 代替案: mewbell のワークフローから tap に直接 push する。tap に CI を通さない変更が入り、mewbell 側に tap の PR の権限まで持たせることになるので採らない。
@@ -166,4 +166,3 @@ homebrew-tap は OpenSpec の外なので、ここで形を決め、tasks で作
 ## Open Questions
 
 - `Release-As: 0.1.0` で最初の Release PR を `0.1.0` にできるか（できなければマニフェストを `0.0.0` から始める）。D1 の形は変わらない
-- `brew audit --cask` が ubuntu で動くか（動かなければ tap の CI を `macos-latest` にする）。D5 の形は変わらない
