@@ -152,8 +152,7 @@ actor AccountPoller {
                 if result != .failed(.noToken) {
                     refreshedToken = false
                 }
-                state.diagnostics.nextFetchAt = now().addingTimeInterval(Double(delay.components.seconds))
-                await publish(state)
+                await announceNextFetch(after: delay)
                 refreshWaiters.finish()
                 guard await pause(for: delay) else { return }
             }
@@ -177,6 +176,7 @@ actor AccountPoller {
             if refreshWaiters.isEmpty { return true }
         }
         guard let remaining = refreshWaiters.remainingWait(now: now()) else { return true }
+        await announceNextFetch(after: remaining)
         return (try? await sleep(remaining)) != nil && !Task.isCancelled
     }
 
@@ -192,7 +192,10 @@ actor AccountPoller {
     private func fetch(with token: AccessToken) async -> (NotificationsFetchResult, Int) {
         // 印は送る前に下ろす（取得中に押された再読み込みを、その前に始めた取得で消さないため）
         let requested = unconditionalRequested.exchange(false, ordering: .relaxed)
-        let isDue = requested || periodicUnconditionalFetchIsDue
+        let isDue =
+            requested
+            || PollSchedule.unconditionalFetchIsDue(
+                lastFullFetch: lastFullFetch, now: now(), interval: Self.unconditionalFetchInterval)
         if isDue, lastModified != nil {
             Self.logger.info("Fetching \(self.accountID) without If-Modified-Since")
         }
@@ -221,13 +224,10 @@ actor AccountPoller {
         return (result, number)
     }
 
-    /// 最後に 200 で一覧を取り直してから間隔がたったか。時計が戻ったとき（差が負）も、たったものとして扱う
-    /// （戻った分だけ取り直しが遅れないように）。`lastModified` と `lastFullFetch` はどちらも 200 で入るので、
-    /// トークンの取り直しや停止で `lastModified` を消せば、時刻を消さなくても次は条件なしになる
-    private var periodicUnconditionalFetchIsDue: Bool {
-        guard let lastFullFetch else { return true }
-        let elapsed = now().timeIntervalSince(lastFullFetch)
-        return elapsed >= Self.unconditionalFetchInterval || elapsed < 0
+    /// 次の取得の予定時刻を Diagnostics に出す。
+    private func announceNextFetch(after delay: Duration) async {
+        state.diagnostics.nextFetchAt = now().adding(delay)
+        await publish(state)
     }
 
     /// 取得の結果を状態に反映し、次にすることを決める。`fetchNumber` は取得の番号、`refreshedToken` は直前にトークンを取り直したか。
@@ -258,7 +258,7 @@ actor AccountPoller {
             return await refreshToken() ? .retryNow : .stop
         case .rateLimited(let retryAt):
             let delay = PollSchedule.afterRateLimit(retryAt: retryAt, now: now())
-            state.phase = retrying(after: delay, rateLimited: true)
+            state.phase = .retrying(after: delay, rateLimited: true, now: now())
             return .wait(delay)
         case .forbidden(let scopes) where scopes.scopes != nil && !scopes.allowsNotifications:
             Self.logger.error("\(self.accountID) was refused for lacking the repo and notifications scopes")
@@ -267,12 +267,12 @@ actor AccountPoller {
         case .failed(.noToken):
             // 読み直しや取り直しの途中で一時的にトークンが無いだけのことが多いので、待ち時間は延ばさない
             let delay = PollSchedule.afterSuccess(pollInterval: nil)
-            state.phase = retrying(after: delay, rateLimited: false)
+            state.phase = .retrying(after: delay, rateLimited: false, now: now())
             return .wait(delay)
         case .forbidden, .invalidRequest, .failed:
             consecutiveFailures += 1
             let delay = PollSchedule.afterFailure(consecutiveFailures: consecutiveFailures)
-            state.phase = retrying(after: delay, rateLimited: false)
+            state.phase = .retrying(after: delay, rateLimited: false, now: now())
             return .wait(delay)
         }
     }
@@ -298,10 +298,6 @@ actor AccountPoller {
         return PollSchedule.afterSuccess(pollInterval: pollInterval)
     }
 
-    private func retrying(after delay: Duration, rateLimited: Bool) -> FeedPhase {
-        .retrying(nextAttempt: now().addingTimeInterval(Double(delay.components.seconds)), rateLimited: rateLimited)
-    }
-
     /// 止まった状態にする。スレッドは捨てる（Diagnostics の値は `FeedRecorder.stopped` で持ち越す）。
     private func stop(as phase: FeedPhase) async {
         state = recorder.stopped(as: phase, from: state)
@@ -324,11 +320,15 @@ extension AccountPoller {
     /// レート制限の待ちでなければ再読み込みで早められる）。止めるなら nil、続けるならトークンを取り直したか。
     fileprivate func beginLoop(refreshingTokenFirst: Bool) async -> Bool? {
         if refreshingTokenFirst {
+            // トークンを取り直すので、前のトークンのスコープは出さない
+            state.diagnostics.scopes = nil
             await publish(recorder.stopped(as: .loading, from: state))
             return await refreshToken() ? true : nil
         }
         guard let firstFetchNotBefore, firstFetchNotBefore > now() else { return false }
-        return await pause(for: .seconds(firstFetchNotBefore.timeIntervalSince(now()))) ? false : nil
+        let delay = Duration.seconds(firstFetchNotBefore.timeIntervalSince(now()))
+        await announceNextFetch(after: delay)
+        return await pause(for: delay) ? false : nil
     }
 
     /// 操作の失敗をログに書き、記録して UI に知らせる。
@@ -367,7 +367,7 @@ extension AccountPoller {
 
     /// `newest`（ユーザーが押したときに表示していた一覧の `updated_at` の最大値）までを、すべて既読にする。
     /// 一覧からすぐに外し、`PUT /notifications` を送り、次の取得を条件なしにする。取得できていないとき、
-    /// トークンが無いとき、一覧が空のときは何もしない。押した後に届いたスレッドは、`newest` より新しいので外さない。
+    /// 一覧が空のときは何もしない。トークンが無いときは送らずに失敗として知らせる。押した後に届いたスレッドは外さない。
     func markAllRead(through newest: Date) async {
         // 取得の状態は、トークンを待っている間に変わることがあるので待った後に見る
         let token = await tokens.currentToken(for: accountID)

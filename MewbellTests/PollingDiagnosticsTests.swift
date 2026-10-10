@@ -105,6 +105,63 @@ struct PollingDiagnosticsTests {
     }
 }
 
+/// 次の取得の予定時刻と、再開のときのスコープのテスト。
+struct NextFetchDiagnosticsTests {
+    private let fixture: PollerFixture
+
+    init() throws {
+        fixture = try PollerFixture()
+    }
+
+    @Test func announcesACarriedWaitBeforeTheFirstFetch() async throws {
+        let until = PollerFixture.now.addingTimeInterval(30)
+        let updates = LockedValue<[FeedState]>([])
+        let sleeper = ManualSleeper()
+        let poller = AccountPoller(
+            accountID: PollerFixture.alice, endpoints: try #require(APIEndpoints(host: "github.com")),
+            client: GitHubAPIClient(transport: fixture.transport), tokens: fixture.tokens,
+            carriedWait: CarriedWait(until: until, rateLimited: false, lastAttemptStartedAt: nil),
+            sleep: sleeper.sleep, now: { PollerFixture.now },
+            onUpdate: { state in updates.withLock { $0.append(state) } })
+        poller.start()
+        await sleeper.waitForSleeps(1)
+        #expect(updates.value.last?.diagnostics.nextFetchAt == until)
+        #expect(fixture.transport.requests.isEmpty)
+        poller.stop()
+    }
+
+    @Test func announcesTheEarlierFetchAfterAReload() async {
+        fixture.respond([PollerFixture.ok(1...3), PollerFixture.ok(1...3)])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        #expect(fixture.last?.diagnostics.nextFetchAt == PollerFixture.now.addingTimeInterval(60))
+        // 前の取得の開始から 3 秒後に押すと、下限の 10 秒まで待ってから取得する
+        fixture.moveClock(by: 3)
+        let refresh = Task { await fixture.poller.refreshNow() }
+        await fixture.sleeper.waitForSleeps(2)
+        #expect(fixture.last?.diagnostics.nextFetchAt == PollerFixture.now.addingTimeInterval(10))
+        fixture.advance(by: 7)
+        await refresh.value
+        fixture.poller.stop()
+    }
+
+    @Test func dropsTheOldScopesWhenResuming() async {
+        fixture.respond([PollerFixture.ok(1...3, scopes: "gist")])
+        fixture.poller.start()
+        await waitUntil { self.fixture.last?.phase == .scopeInsufficient }
+        #expect(fixture.last?.diagnostics.scopes == OAuthScopes(header: "gist"))
+        fixture.tokens.refreshedValue.value = "test-token-alice-2"
+        fixture.respond([PollerFixture.ok(1...3)])
+        let updatesBefore = fixture.updates.value.count
+        fixture.poller.resume()
+        await fixture.sleeper.waitForSleeps(1)
+        let loading = fixture.updates.value.dropFirst(updatesBefore).first { $0.phase == .loading }
+        #expect(loading != nil)
+        #expect(loading?.diagnostics.scopes == nil)
+        fixture.poller.stop()
+    }
+}
+
 /// `AccountPoller` が記録する操作の失敗のテスト。
 struct ActionFailurePollingTests {
     private let fixture: PollerFixture

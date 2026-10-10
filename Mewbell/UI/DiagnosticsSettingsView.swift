@@ -36,6 +36,8 @@ struct DiagnosticsSettingsView: View {
 struct DiagnosticsReportView: View {
     let report: DiagnosticsReport
     @State private var copied = false
+    /// 押した回数（押し直したら「Copied」を戻す待ちをやり直す）
+    @State private var copyCount = 0
 
     var body: some View {
         Form {
@@ -61,16 +63,17 @@ struct DiagnosticsReportView: View {
             }
         }
         .formStyle(.grouped)
+        .task(id: copyCount) {
+            guard copied, (try? await Task.sleep(for: .seconds(2))) != nil else { return }
+            copied = false
+        }
     }
 
     private func copy() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(report.plainText, forType: .string)
         copied = true
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            copied = false
-        }
+        copyCount += 1
     }
 }
 

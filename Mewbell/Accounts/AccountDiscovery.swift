@@ -240,7 +240,8 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
             verifiedGh = nil
             return .ghNotFound
         }
-        diagnostics.executable = location
+        // バージョンは、同じ gh を確かめ済みなら hosts.yml を読めなくても出す
+        diagnostics = GhDiagnostics(executable: location, version: verifiedVersion(of: location.url))
         let resolvedConfigDirectory: GhConfigDirectory.Resolved
         switch resolveConfigDirectory(override: options.overrides.configDirectory) {
         case .success(let resolved): resolvedConfigDirectory = resolved
@@ -302,6 +303,11 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
             return .failure(UnusableConfigDirectory(state: .hostsFileUnreadable(path: hostsFile.path)))
         }
         return .success(GhConfigDirectory.Resolved(url: url, source: .override))
+    }
+
+    /// `ghPath` を確かめ済みなら、そのバージョン。
+    private func verifiedVersion(of ghPath: URL) -> GhVersion? {
+        verifiedGh.flatMap { $0.path == ghPath ? $0.version : nil }
     }
 
     /// gh のパスが前回確かめたものと違えば `gh --version` で確かめる。使えなければその状態と、読めたバージョンを返す。

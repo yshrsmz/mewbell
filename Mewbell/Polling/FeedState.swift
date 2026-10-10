@@ -18,6 +18,11 @@ enum FeedPhase: Sendable, Equatable {
         if case .retrying(_, rateLimited: true) = self { true } else { false }
     }
 
+    /// `delay` 後に取り直す「失敗して待っている」。
+    static func retrying(after delay: Duration, rateLimited: Bool, now: Date) -> FeedPhase {
+        .retrying(nextAttempt: now.adding(delay), rateLimited: rateLimited)
+    }
+
     /// 一覧を出す状態か（取得できた、失敗して待っている）。
     var showsThreads: Bool {
         switch self {

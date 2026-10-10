@@ -83,7 +83,22 @@ struct GhDiagnosticsTests {
         let detection = await discovery.ghDiagnostics()
         #expect(detection.executable != nil)
         #expect(detection.configDirectory == nil)
-        #expect(detection.version == nil)
+        // 同じ gh は確かめ済みなので、バージョンは出す
+        #expect(detection.version == GhVersion(major: 2, minor: 62, patch: 0))
+    }
+
+    @Test func keepsTheVerifiedVersionWhenHostsFileIsUnreadable() async throws {
+        try fixture.writeHosts(oneAccount)
+        let discovery = fixture.discovery()
+        _ = await reload(discovery)
+        try fixture.writeHosts("github.com: [unterminated")
+        #expect(
+            await reload(discovery)
+                == .hostsFileUnreadable(path: fixture.configDirectory.appending(path: "hosts.yml").path))
+        let detection = await discovery.ghDiagnostics()
+        #expect(detection.version == GhVersion(major: 2, minor: 62, patch: 0))
+        #expect(detection.configDirectory?.source == .defaultLocation)
+        #expect(versionRuns == 1)
     }
 
     @Test func recordsAnOverriddenConfigDirectory() async throws {
