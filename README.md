@@ -116,8 +116,10 @@ CI（GitHub Actions）は ubuntu で lint と OpenSpec の検証だけを回し�
 
 1. `main` に PR をマージするたびに、release-please が Release PR を作る・更新する。バージョンは Conventional Commits（`feat:` は minor、`fix:` は patch。1.0.0 より前は破壊的変更も minor）で決まり、`project.xcproj` の `MARKETING_VERSION`（`CURRENT_PROJECT_VERSION` はこれを参照する）と `CHANGELOG.md` を書き換える
 2. Release PR をマージすると、タグ `vX.Y.Z` と draft の Release ができる
-3. macOS ランナー（`xcode-27` イメージ）がタグからテストとビルドを行い、署名と entitlement を検査して（`scripts/lib/verify-app.sh`）、zip と SHA-256 を添付してから Release を公開する
+3. macOS ランナー（`xcode-27` イメージ）がタグからテストとビルドを行い、署名と entitlement を検査して（`scripts/lib/verify-app.sh`）、zip・SHA-256・Cask（`mewbell.rb`。`brew style` と `brew audit` を通す）を作る。別のジョブがそれらに build provenance attestation を付けて添付してから、Release を公開する（tap は添付の `mewbell.rb` を使うので、手で直すときも 3 つとも添付する）
 4. 公開の後に [homebrew-tap](https://github.com/yshrsmz/homebrew-tap) へ知らせ、tap 側が Cask を更新する PR を作って、CI が通ったら自動でマージする
+
+最初の版は `release-please-config.json` の `initial-version`（`0.1.0`）で決まります。タグが 1 つも無いと release-please はマニフェスト（`0.0.0`）を前の版として使わず、`initial-version` が無いと `1.0.0` を出すためです。どちらも、最初のリリースが済むまでは変えないでください。
 
 配布物は手元でも `bash scripts/package-release.sh X.Y.Z` で同じように作れます（`build/dist/X.Y.Z/` に置き、添付や公開はしません）。
 

@@ -8,7 +8,7 @@ Mewbell のリリースの流れと配布物の約束を定める。release-plea
 
 ### Requirement: バージョンとリリースの起点
 
-Mewbell のバージョンは `X.Y.Z`（それぞれ 0 以上の整数）の形式で、`project.xcproj` のプロジェクトの設定の 1 か所（`MARKETING_VERSION` と `CURRENT_PROJECT_VERSION`）にだけ書かなければならない（MUST）。バージョンの更新は release-please の Release PR だけで行い、Release PR は `main` に入った Conventional Commits から作らなければならない（SHALL）。Release PR をマージしたときに、タグ `vX.Y.Z` と draft の GitHub Release を作らなければならない（SHALL）。リリースのワークフローは `main` への push でだけ動き、`pull_request` や `pull_request_target` で動いてはならない（MUST NOT）。
+Mewbell のバージョンは `X.Y.Z`（それぞれ 0 以上の整数）の形式で、`project.xcproj` のプロジェクトの設定の 1 か所（`MARKETING_VERSION` と `CURRENT_PROJECT_VERSION`）にだけ書かなければならない（MUST）。バージョンの更新は release-please の Release PR だけで行い、Release PR は `main` に入った Conventional Commits から作らなければならない（SHALL）。Release PR をマージしたときに、タグ `vX.Y.Z` と draft の GitHub Release を作らなければならない（SHALL）。リリースのワークフローは `main` への push と、draft のまま残った Release をタグ（`vX.Y.Z` の形式を確かめる）を指定してビルドし直す `main` からの手動の実行（`workflow_dispatch`）でだけ動き、`pull_request` や `pull_request_target` で動いてはならない（MUST NOT）。
 
 #### Scenario: Release PR
 

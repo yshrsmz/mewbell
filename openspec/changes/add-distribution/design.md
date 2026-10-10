@@ -80,6 +80,7 @@
    - `actions/create-github-app-token` で mewbell 用 App のトークンを発行する（`repositories: mewbell`、`permission-contents: write`、`permission-pull-requests: write`）
    - `googleapis/release-please-action` をそのトークンで実行し、`release_created` と `tag_name` を出力する。待っている実行が新しい push に置き換えられても、マージ済みで未リリースの Release PR は次の実行が拾う
 2. ジョブ `prepare`（`ubuntu-24.04`、`permissions: contents: write`。draft は書き込み権限が無いと読めないため。コードは checkout しない）
+   - `github.ref` が `refs/heads/main` のときだけ動く（`workflow_dispatch` を別のブランチから動かしても、macOS ランナーを使う前に止まる）
    - push で `release_created` のとき、または `workflow_dispatch` のときに動く（`!cancelled()` の下で条件を評価する）
    - タグ（`vX.Y.Z`）の形式を確かめ、`tag` と `version` を出力する
    - `gh release view --json isDraft` で Release の状態を確かめ、読めなければ失敗にする。公開済み（公開の後の手順だけ失敗してやり直したとき）なら `published=true` を出力し、後のジョブはビルド・attestation・添付・公開を飛ばして tap への知らせだけを送る（利用者が取った zip と Cask を変えない）
@@ -90,6 +91,7 @@
    - Cask の雛形（`packaging/homebrew/mewbell.rb.template`）を zip の SHA-256 で埋めて `mewbell.rb` を作り、一時的な tap に置いて `brew style` と `brew audit --cask --strict` を通す
    - zip・`.sha256`・`mewbell.rb` を artifact にする（`actions/upload-artifact`、7 日）
 4. ジョブ `publish`（`ubuntu-24.04`、`environment: release`、`permissions: contents: write, id-token: write, attestations: write`。コードは checkout しない）
+   - 添付の直前に Release の状態をもう一度確かめる。`prepare` の後に、同じタグの別の実行（push と手動のやり直しが重なったとき）が公開したかもしれず、公開の後の手順だけを `gh run rerun --failed` でやり直すと `publish` が丸ごと動くため。公開済みなら artifact の受け取り・attestation・添付をせずに知らせだけを送る（artifact の保存期間を過ぎても知らせは送れる）
    - artifact を受け取り、`sha256sum -c` で zip を確かめる
    - `actions/attest-build-provenance` で zip と `mewbell.rb` の build provenance attestation を作る
    - `gh release upload` で 3 つを draft に添付し、`gh release edit --draft=false` で公開する（`GH_TOKEN` はジョブの `GITHUB_TOKEN`）
@@ -115,7 +117,7 @@ homebrew-tap は OpenSpec の外なので、ここで形を決め、tasks で作
 - Cask の雛形は mewbell の `packaging/homebrew/mewbell.rb.template`（`@VERSION@` と `@SHA256@`）だけに置き、Cask はリリースのワークフローが作って attestation を付け、Release に添付する（D3）。tap は Cask を作らず、確かめた添付の `mewbell.rb` をそのまま使う。雛形がリリースと一緒に版管理され、Cask を作る処理が 1 か所だけになり、tap が検証されていない雛形をタグから取ることもない
 - `.github/workflows/update-mewbell.yml`: `on: repository_dispatch: types: [mewbell-released]`、既定の `permissions: contents: read`、`environment: release`
   - `env: VERSION: ${{ github.event.client_payload.version }}` で受け、`[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]` でなければ失敗する
-  - いまの `Casks/mewbell.rb` の `version` と比べ、同じか新しいとき（`sort -V`）は何もせずに終わる。知らせのやり直しや古い版の知らせで、空の PR を作ったり Cask を戻したりしないため
+  - いまの `Casks/mewbell.rb` の `version` と、開いている Cask の PR（`mewbell-X.Y.Z`）の版と比べ、同じか新しいものがあるとき（`sort -V`）は何もせずに終わる。知らせのやり直しや遅れて届いた古い版の知らせで、空の PR を作ったり、Cask を戻したり、新しい版の PR を閉じたりしないため
   - `curl -fsSL --proto '=https'` で `https://github.com/yshrsmz/mewbell/releases/download/v$VERSION/` の zip・`.sha256`・`mewbell.rb` を取る
   - `gh attestation verify` で、zip と `mewbell.rb` が `yshrsmz/mewbell` の `.github/workflows/release.yml` が `refs/heads/main` で作ったものであることを確かめる（`--deny-self-hosted-runners`）。Release の添付ファイルは Contents の書き込み権限があれば差し替えられ、`.sha256` も同じ Release にあるので、SHA-256 の照合だけでは改ざんを防げない。attestation は GitHub の OIDC でそのワークフローの実行にだけ発行される鍵で署名される
   - zip の SHA-256 を計算して `.sha256` と比べ（破損）、`mewbell.rb` の `version` 行と `sha256` 行が知らせのバージョンと計算した SHA-256 に一致することを確かめる。attestation は「どのワークフローが作ったか」だけを示し、版とは結び付かないので、別の版の正しい Cask を差し込まれても通らないようにする

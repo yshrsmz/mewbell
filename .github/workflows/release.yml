@@ -60,7 +60,7 @@ jobs:
     needs: release-please
     # workflow_dispatch では release-please を飛ばすので、cancelled 以外は needs の結果に関わらず条件を評価する
     if: >-
-      !cancelled() && (
+      !cancelled() && github.ref == 'refs/heads/main' && (
         (github.event_name == 'push' && needs.release-please.result == 'success' &&
           needs.release-please.outputs.release_created == 'true') ||
         github.event_name == 'workflow_dispatch'
@@ -204,8 +204,26 @@ jobs:
     env:
       TAG: ${{ needs.prepare.outputs.tag }}
       VERSION: ${{ needs.prepare.outputs.version }}
-      PUBLISHED: ${{ needs.prepare.outputs.published }}
     steps:
+      # prepare の後に別の実行が公開したかもしれない（同じタグの実行が重なった、公開の後の手順だけを
+      # やり直した）ので、添付の直前にもう一度確かめる。公開済みなら添付を差し替えずに知らせだけを送る
+      - name: Check the release state again
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+          case "$draft" in
+            true) echo "PUBLISHED=false" >>"$GITHUB_ENV" ;;
+            false)
+              echo "$TAG は公開済みなので、添付を差し替えずに tap への知らせだけを送ります"
+              echo "PUBLISHED=true" >>"$GITHUB_ENV"
+              ;;
+            *)
+              echo "$TAG の状態を読めませんでした: $draft" >&2
+              exit 1
+              ;;
+          esac
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         if: env.PUBLISHED == 'false'
         with:
