@@ -55,8 +55,6 @@ final class AccountStore {
         if userInitiated && !state.hasAccounts {
             state = .checking
         }
-        let options = DiscoveryOptions(
-            overrides: settings?.ghOverrides ?? GhOverrides(), disabled: settings?.disabledAccounts ?? [])
         let generation = configGeneration
         let discardsTokens = discardsTokensBeforeNextReload
         discardsTokensBeforeNextReload = false
@@ -66,6 +64,9 @@ final class AccountStore {
             if discardsTokens {
                 await discovery.discardAllTokens()
             }
+            // 設定は待った後に読む（待っている間に無効にしたアカウントを、古い設定で取り直さないため）
+            let options = DiscoveryOptions(
+                overrides: settings?.ghOverrides ?? GhOverrides(), disabled: settings?.disabledAccounts ?? [])
             await discovery.reload(userInitiated: userInitiated, options: options) { state in
                 await self.apply(state, generation: generation)
             }
@@ -118,7 +119,8 @@ final class AccountStore {
             state = .checking
             onStateChange?(state)
         }
-        reload(userInitiated: true)
+        // ログインシェルでの gh の検索はユーザーの再読み込みのときだけにする（設定ディレクトリは gh の場所に関係しない）
+        reload()
     }
 
     private func disable(_ id: AccountID) {

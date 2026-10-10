@@ -47,6 +47,14 @@ struct MainAppLoginItem: LoginItemService {
     }
 }
 
+/// 何も登録しない（テストのホストや SwiftUI プレビュー用）。
+struct InertLoginItem: LoginItemService {
+    var status: LoginItemStatus = .notRegistered
+    func register() throws {}
+    func unregister() throws {}
+    func openSystemSettings() {}
+}
+
 /// 「ログイン時に起動する」の表示の状態。登録の状態は保存せず、いつも macOS から読む。
 @MainActor
 @Observable

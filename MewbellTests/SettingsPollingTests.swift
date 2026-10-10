@@ -112,11 +112,11 @@ struct NotificationStoreSettingsTests {
         tokens.set("test-token-bob", for: bob)
         let client = GitHubAPIClient(transport: transport)
         return NotificationStore(
-            makePoller: { [tokens, sleeper, made] account, endpoints, participating, stoppedAs, onUpdate in
+            makePoller: { [tokens, sleeper, made] account, endpoints, participating, initialPhase, onUpdate in
                 made.withLock { $0.append("\(account.id) \(participating)") }
                 return AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
-                    participating: participating, stoppedAs: stoppedAs, sleep: sleeper.sleep, onUpdate: onUpdate)
+                    participating: participating, initialPhase: initialPhase, sleep: sleeper.sleep, onUpdate: onUpdate)
             }, notifier: notifier, openURL: { [opened] url in opened.withLock { $0.append(url) } },
             preferences: { [settings] in settings.preferences(for: $0) })
     }
@@ -234,6 +234,28 @@ struct NotificationStoreSettingsTests {
         store.refresh()
         await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.threads.map(\.id) == ["4", "5"] } }
         #expect(store.feeds[alice]?.threads.map(\.id) == ["4", "5"])
+        store.stopAll()
+    }
+
+    @Test func keepsTheRateLimitWaitWhenRestarting() async {
+        // 最初の取得がレート制限で失敗する
+        transport.setHandler { _ in
+            HTTPResponse(statusCode: 429, headers: ["Retry-After": "120"])
+        }
+        tokens.set("test-token-alice", for: alice)
+        let store = makeStore()
+        store.sync(with: .accounts([status(alice, .ready)]))
+        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.phase.isRateLimited == true } }
+        let count = transport.requests.count
+        let sleeps = sleeper.durations.count
+        settings.setParticipatingOnly(true, for: alice)
+        store.restart(alice)
+        #expect(store.feeds[alice]?.phase.isRateLimited == true)
+        // 新しいポーラーは、前の再試行の時刻まで待ってから取得する
+        await sleeper.waitForSleeps(sleeps + 1)
+        #expect(transport.requests.count == count)
+        let wait = sleeper.durations.last ?? .zero
+        #expect(wait > .seconds(100) && wait <= .seconds(120))
         store.stopAll()
     }
 }

@@ -206,7 +206,8 @@ struct AccountStoreSettingsTests {
         await store.waitForReload()
         #expect(reported == [.checking, .notLoggedIn])
         let events = discovery.events
-        #expect(events == ["reload", "reloadFinished", "discardAll", "reload(user)", "reloadFinished"])
+        // 設定ディレクトリの変更では、ログインシェルで gh を探し直さない（ユーザーの再読み込みではない）
+        #expect(events == ["reload", "reloadFinished", "discardAll", "reload", "reloadFinished"])
     }
 }
 
@@ -223,5 +224,25 @@ struct AccountStoreDisableOrderTests {
         store.setEnabled(true, for: bob)
         await store.waitForReload()
         #expect(discovery.events.prefix(2) == ["disable github.com/bob", "reload"])
+    }
+}
+
+@MainActor
+struct AccountStoreOptionsTimingTests {
+    @Test func readsTheSettingsAfterWaitingForPendingDisables() async {
+        let discovery = BlockingDiscovery()
+        let settings = AppSettings(storage: InMemorySettingsStorage())
+        let store = AccountStore(discovery: discovery, settings: settings, state: .accounts([]))
+        let alice = AccountID(host: "github.com", user: "alice")
+        let bob = AccountID(host: "github.com", user: "bob")
+        discovery.finish()
+        settings.setEnabled(false, for: bob)
+        store.setEnabled(false, for: bob)
+        store.reload()
+        // 読み直しが無効化を待っている間に、もう 1 つ無効にする
+        settings.setEnabled(false, for: alice)
+        store.setEnabled(false, for: alice)
+        await store.waitForReload()
+        #expect(discovery.options.first?.disabled == [alice, bob])
     }
 }

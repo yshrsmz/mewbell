@@ -53,9 +53,8 @@ actor AccountPoller {
 
     init(
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,
-        participating: Bool = false, stoppedAs stoppedPhase: FeedPhase? = nil,
-        sleep: @escaping Sleep = { try await Task.sleep(for: $0) },
-        now: @escaping @Sendable () -> Date = { Date() },
+        participating: Bool = false, initialPhase: FeedPhase? = nil,
+        sleep: @escaping Sleep = { try await Task.sleep(for: $0) }, now: @escaping @Sendable () -> Date = { Date() },
         onUpdate: @escaping @Sendable (FeedState) async -> Void
     ) {
         self.accountID = accountID
@@ -63,10 +62,8 @@ actor AccountPoller {
         self.client = client
         self.tokens = tokens
         self.participating = participating
-        if let stoppedPhase {
-            // 止まった状態で作り直したポーラー。始めずに、再読み込みでの再開（`refreshNow`）を待つ
-            state = FeedState(phase: stoppedPhase, threads: [])
-        }
+        // 作り直す前の止まった状態（再読み込みでの再開を待つ）かレート制限の待ち（その時刻まで最初の取得を待つ）を持ち越す
+        state = initialPhase.map { FeedState(phase: $0, threads: []) } ?? .loading
         self.sleep = sleep
         self.now = now
         self.onUpdate = onUpdate
@@ -76,7 +73,10 @@ actor AccountPoller {
     nonisolated func start() {
         loop.withLock { loop in
             guard loop.task == nil, !loop.discarded else { return }
-            loop.task = Task { await self.run(refreshingTokenFirst: false) }
+            loop.task = Task {
+                guard await self.waitOutCarriedRateLimit() else { return }
+                await self.run(refreshingTokenFirst: false)
+            }
         }
     }
 
@@ -208,7 +208,9 @@ actor AccountPoller {
         guard !Task.isCancelled else { return result }
         if case .updated(let threads, let lastModified, let pollInterval, let scopes) = result {
             result = .updated(
-                threads: revealOrHide(threads, fetchNumber: number, startedAt: startedAt), lastModified: lastModified,
+                threads: HiddenThreads.revealOrHide(
+                    threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt),
+                lastModified: lastModified,
                 pollInterval: pollInterval, scopes: scopes)
         }
         if case .updated = result {
@@ -314,8 +316,14 @@ actor AccountPoller {
     }
 }
 
-// 一覧のスレッドへの操作と、操作したスレッドを取得の結果から隠す処理
+// 持ち越したレート制限の待ち、一覧のスレッドへの操作と、操作したスレッドを取得の結果から隠す処理
 extension AccountPoller {
+    /// レート制限の待ちを持ち越して作り直したときは、その再試行の時刻まで待つ。止められたら false。
+    fileprivate func waitOutCarriedRateLimit() async -> Bool {
+        guard case .retrying(let nextAttempt, rateLimited: true) = state.phase else { return true }
+        return await pause(for: .seconds(max(0, nextAttempt.timeIntervalSince(now()))))
+    }
+
     /// スレッドを既読か Done にする。一覧からすぐに外し、リクエストを送り、次の取得を条件なしにする。
     /// 止まっているときとトークンが無いときは送らない（次の条件なしの取得で、未読のままなら一覧に戻る）。
     func perform(_ action: ThreadAction) async {
@@ -387,13 +395,5 @@ extension AccountPoller {
                 : .failed(fetchesBefore: fetchCount)
         }
         unconditionalRequested.store(true, ordering: .relaxed)
-    }
-
-    /// 取得の結果から、既読・Done・すべて既読にしたスレッドを取り除く（`HiddenThreads.revealOrHide`）。
-    private func revealOrHide(_ threads: [NotificationThread], fetchNumber: Int, startedAt: Date)
-        -> [NotificationThread]
-    {
-        HiddenThreads.revealOrHide(
-            threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: fetchNumber, startedAt: startedAt)
     }
 }

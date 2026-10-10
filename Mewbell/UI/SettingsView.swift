@@ -173,6 +173,8 @@ struct PathOverrideField: View {
     let commit: (String?) -> Void
 
     @State private var text = ""
+    /// 保存されている上書きが使えるか（パスが変わったときだけ確かめる）
+    @State private var isPathUsable = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -188,14 +190,19 @@ struct PathOverrideField: View {
                 }
                 .disabled(path == nil && text.isEmpty)
             }
-            if let path, !isUsable(path) {
+            if path != nil, !isPathUsable {
                 Label(unusableMessage, systemImage: "exclamationmark.triangle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .onAppear { text = path ?? "" }
-        .onChange(of: path) { _, path in text = path ?? "" }
+        .onAppear { update(path) }
+        .onChange(of: path) { _, path in update(path) }
+    }
+
+    private func update(_ path: String?) {
+        text = path ?? ""
+        isPathUsable = path.map(isUsable) ?? true
     }
 
     private func choose() {
@@ -213,7 +220,7 @@ struct PathOverrideField: View {
 #Preview("General") {
     GeneralSettingsView(
         settings: AppSettings(storage: InMemorySettingsStorage()),
-        launchAtLogin: LaunchAtLogin(service: PreviewLoginItem(status: .requiresApproval))
+        launchAtLogin: LaunchAtLogin(service: InertLoginItem(status: .requiresApproval))
     )
     .frame(width: 520, height: 300)
 }
@@ -244,12 +251,4 @@ struct PathOverrideField: View {
     let settings = AppSettings(storage: InMemorySettingsStorage())
     settings.setGhExecutableOverride("/tmp/nonexistent/gh")
     return GhSettingsView(settings: settings).frame(width: 520, height: 360)
-}
-
-/// プレビュー用の、状態だけを返す `LoginItemService`。
-private struct PreviewLoginItem: LoginItemService {
-    let status: LoginItemStatus
-    func register() throws {}
-    func unregister() throws {}
-    func openSystemSettings() {}
 }

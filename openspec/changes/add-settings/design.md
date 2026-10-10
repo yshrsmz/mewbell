@@ -96,7 +96,7 @@ UserDefaults（`UserDefaults.standard`、ドメインは Bundle ID）に次の�
 - `AccountStore.disable` が状態を先に書き換えるのは、`reload` を待たずにポップオーバーとバッジから外すため。その直後に走っていた読み直しが古い options で終わって `.ready` を返すことがあるので、`AccountStore.apply` で、今の `AppSettings` で無効なアカウントを `.disabled` に置き換えてから反映する
 - 通知のクリックで既読を取っておく `pendingReads` は、`.disabled` のアカウントの分も捨てる（spec notifications「通知のクリック」）
 - `AccountDiscovery` は無効なアカウントの集合（`disabledIDs`）を自分でも持つ。読み直しの始めに options から受け取り、`disable` でも足す。`knownAccountIDs` は `gh --version` などの await の後に `disabledIDs` から作るので、古い設定で始めた読み直しが、途中で無効にしたアカウントを戻してトークンを取り直すことはない
-- `AccountStore` は送った `disable` を `pendingDisable` に積み、後から始める読み直しはそれを待つ。無効にしてすぐ有効に戻したとき、遅れて届いた `disable` が、有効に戻した後の読み直しで取ったトークンを消さないようにするため
+- `AccountStore` は送った `disable` を `pendingDisable` に積み、後から始める読み直しはそれを待つ。読み直しに渡す options は、待ち終えてから `AppSettings` を読んで作る（待っている間に無効にしたアカウントを含めるため）。無効にしてすぐ有効に戻したとき、遅れて届いた `disable` が、有効に戻した後の読み直しで取ったトークンを消さないようにするため
 - `discardAllTokens` は走っている `gh auth token`（`inFlightTokenFetches`）を外し、`tokenEpoch` を進める。それより前に始めた取得の結果は保存せず、後の読み直しも合流しない（前の設定ディレクトリの取得なので）
 
 ### D6. ポーラーの停止と作り直し
@@ -105,7 +105,8 @@ UserDefaults（`UserDefaults.standard`、ドメインは Bundle ID）に次の�
 - `PollerFactory` に `participating: Bool` を足し、ポーラーを作るときに `AppSettings` から読む。`AccountPoller` は `participating` を `let` で持ち、すべての取得で `fetchNotifications(..., participating:)` に渡す
 - `restart(id)` は、ポーラーを止めて取り除き、`feeds[id] = .loading`、`notifier.resetBaseline(id)` の後に、同じアカウントに新しい世代のポーラーを作って `start()` する。新しいポーラーは `Last-Modified` も `hidden` も持たないので、最初の取得は条件なしになる。トークンは `CredentialStore` にあるので gh は呼ばない
 - 作り直しで `hidden` と `readThroughs` が消えるので、直前に既読にしたスレッドが、GitHub の反映が遅れたときに一度だけ一覧に戻ることがある（Risks）
-- 「スコープ不足」「認証エラー」で止まっているアカウントは、`AccountPoller(stoppedAs:)` で止まった状態のまま作り直し、始めない。再読み込みの `refreshNow` が、止まっているポーラーと同じく `resume()` で再開する
+- 「スコープ不足」「認証エラー」で止まっているアカウントは、`AccountPoller(initialPhase:)` で止まった状態のまま作り直し、始めない。再読み込みの `refreshNow` が、止まっているポーラーと同じく `resume()` で再開する
+- レート制限で待っているアカウントは、`initialPhase` に `.retrying(rateLimited: true)` を渡して作り直す。新しいポーラーは最初の取得の前に、その再試行の時刻まで待つ（CLAUDE.md の「レート制限で待っている間は早めない」）
 - 代替案: `AccountPoller` に `setParticipating(_:)` を足してループの中で切り替える → `Last-Modified`・隠しているスレッド・走っている取得の結果を、どちらの一覧のものか区別して捨てる処理が要る。作り直しなら、既存の世代の仕組みで遅れて届いた結果も捨てられる
 
 ### D7. 通知のオフと音

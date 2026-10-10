@@ -4,7 +4,7 @@ import UserNotifications
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let settings: AppSettings
-    let launchAtLogin = LaunchAtLogin(service: MainAppLoginItem())
+    let launchAtLogin: LaunchAtLogin
     let accountStore: AccountStore
     let notificationStore: NotificationStore
     let notificationPermission: NotificationPermission
@@ -14,12 +14,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     override init() {
         if LaunchContext.isTestHostOrPreview {
             settings = AppSettings(storage: InMemorySettingsStorage())
+            launchAtLogin = LaunchAtLogin(service: InertLoginItem())
             accountStore = AccountStore(discovery: nil)
             notificationStore = NotificationStore(makePoller: nil, openURL: { _ in })
             notificationPermission = NotificationPermission(center: nil)
             clickHandler = nil
         } else {
             let settings = AppSettings(storage: UserDefaultsStorage())
+            launchAtLogin = LaunchAtLogin(service: MainAppLoginItem())
             let discovery = AccountDiscovery.live(credentials: CredentialStore())
             let center = LiveUserNotificationCenter()
             let notifier = SystemNotifier(
