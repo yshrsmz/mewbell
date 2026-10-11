@@ -61,12 +61,14 @@ struct NotificationThreadTests {
             """
     }
 
-    private func decode(_ items: [String]) -> [NotificationThread]? {
-        NotificationThread.decodeList(from: Data("[\(items.joined(separator: ","))]".utf8))
+    private func decode(_ items: [String]) throws -> [NotificationThread]? {
+        NotificationThread.decodeList(
+            from: Data("[\(items.joined(separator: ","))]".utf8),
+            endpoints: try #require(APIEndpoints(host: "github.com")))
     }
 
     @Test func decodesAThread() throws {
-        let threads = try #require(decode([Self.thread()]))
+        let threads = try #require(try decode([Self.thread()]))
         let thread = try #require(threads.first)
         #expect(thread.id == "1")
         #expect(thread.reason == "review_requested")
@@ -75,17 +77,19 @@ struct NotificationThreadTests {
         #expect(thread.repository == RepositoryName(owner: "octo", name: "app"))
         #expect(thread.subjectURL?.absoluteString == "https://api.github.com/repos/octo/app/pulls/42")
         #expect(thread.updatedAt == Date(timeIntervalSince1970: 1_791_460_800))
+        // 番号は読み取るときに求める
+        #expect(thread.subjectNumber == "42")
     }
 
     @Test func acceptsANullSubjectURL() throws {
-        let threads = try #require(decode([Self.thread(subjectURL: nil)]))
+        let threads = try #require(try decode([Self.thread(subjectURL: nil)]))
         #expect(threads.count == 1)
         #expect(threads.first?.subjectURL == nil)
     }
 
     @Test func skipsMalformedThreadsOnly() throws {
         let threads = try #require(
-            decode([
+            try decode([
                 Self.thread(id: "1"),
                 Self.thread(id: "2", fullName: nil),
                 Self.thread(id: "3", fullName: "no-slash"),
@@ -96,8 +100,11 @@ struct NotificationThreadTests {
         #expect(threads.map(\.id) == ["1", "6"])
     }
 
-    @Test func rejectsABodyThatIsNotAnArray() {
-        #expect(NotificationThread.decodeList(from: Data(#"{"message": "Bad credentials"}"#.utf8)) == nil)
+    @Test func rejectsABodyThatIsNotAnArray() throws {
+        let endpoints = try #require(APIEndpoints(host: "github.com"))
+        #expect(
+            NotificationThread.decodeList(from: Data(#"{"message": "Bad credentials"}"#.utf8), endpoints: endpoints)
+                == nil)
     }
 
     @Test(arguments: ["octo/app", "my-org/repo.name", "a_b/c_d"])

@@ -69,7 +69,7 @@ struct AccountPollerTests {
     @Test func backsOffAndKeepsTheThreadsWhileFailing() async {
         fixture.respond([PollerFixture.ok(1...2)])
         fixture.poller.start()
-        for count in 1...4 {
+        for count in 1...3 {
             await fixture.sleeper.waitForSleeps(count)
             fixture.sleeper.advance()
         }
@@ -79,7 +79,9 @@ struct AccountPollerTests {
         #expect(
             fixture.last?.phase
                 == .retrying(nextAttempt: PollerFixture.now.addingTimeInterval(240), rateLimited: false))
+        // 応答を差し替えてから待ちを進める（先に進めると、次の取得が前の応答を受け取ることがある）
         fixture.respond([PollerFixture.ok(1...1)])
+        fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(5)
         #expect(fixture.sleeper.durations.last == .seconds(60))
         fixture.poller.stop()

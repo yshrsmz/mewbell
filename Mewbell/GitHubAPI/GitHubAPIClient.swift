@@ -111,7 +111,7 @@ struct GitHubAPIClient: Sendable {
             default:
                 return classifyFailure(response)
             }
-            guard let pageThreads = NotificationThread.decodeList(from: response.body) else {
+            guard let pageThreads = NotificationThread.decodeList(from: response.body, endpoints: endpoints) else {
                 Self.logger.error("Could not decode notifications page \(page, privacy: .private)")
                 return .failed(.malformedBody)
             }

@@ -6,6 +6,7 @@ struct MenuBarContentView: View {
     let notifications: NotificationStore
     let permission: NotificationPermission
     let settings: AppSettings
+    let expansion: ListExpansion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -28,8 +29,8 @@ struct MenuBarContentView: View {
 
             if case .accounts(let statuses) = store.state {
                 NotificationListView(
-                    statuses: statuses, feeds: notifications.feeds,
-                    participatingOnly: { settings.preferences(for: $0).participatingOnly },
+                    statuses: statuses, feeds: notifications.feeds, repositories: notifications.repositories,
+                    participatingOnly: { settings.preferences(for: $0).participatingOnly }, expansion: expansion,
                     actions: ThreadListActions(
                         open: { notifications.open($0, in: $1) },
                         markRead: { notifications.markRead($0, in: $1) },
@@ -75,17 +76,18 @@ struct MenuBarContentView: View {
                                 id: "\(index)", reason: "subscribed",
                                 updatedAt: Date().addingTimeInterval(-Double(index) * 600),
                                 title: "Thread \(index)", kind: .issue, subjectURL: nil,
-                                repository: repository)
+                                repository: repository, subjectNumber: nil)
                         }
                     })
             ]),
         permission: NotificationPermission(center: nil, authorization: .denied),
-        settings: AppSettings(storage: InMemorySettingsStorage()))
+        settings: AppSettings(storage: InMemorySettingsStorage()), expansion: ListExpansion())
 }
 
 #Preview("gh not found") {
     MenuBarContentView(
         store: AccountStore(discovery: nil, state: .ghNotFound),
         notifications: NotificationStore(makePoller: nil, openURL: { _ in }),
-        permission: NotificationPermission(center: nil), settings: AppSettings(storage: InMemorySettingsStorage()))
+        permission: NotificationPermission(center: nil), settings: AppSettings(storage: InMemorySettingsStorage()),
+        expansion: ListExpansion())
 }

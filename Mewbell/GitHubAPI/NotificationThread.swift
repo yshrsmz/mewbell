@@ -68,25 +68,27 @@ struct NotificationThread: Hashable, Sendable, Identifiable {
     /// `subject.url`（API の URL。Web で開くときは `ThreadWebURL` で組み立て直す）
     let subjectURL: URL?
     let repository: RepositoryName
+    /// Issue・Pull request の番号。読み取るときに `ThreadWebURL.subjectNumber` で求める（開く URL と同じ検証を通らなければ nil）
+    let subjectNumber: String?
 }
 
 extension NotificationThread {
     /// `GET /notifications` のレスポンスボディを読む。形の崩れたスレッドは 1 件ずつ読み飛ばす。
-    /// ボディ全体が JSON の配列でなければ nil。
-    static func decodeList(from data: Data) -> [NotificationThread]? {
+    /// ボディ全体が JSON の配列でなければ nil。番号（`subjectNumber`）は `endpoints` で求める。
+    static func decodeList(from data: Data, endpoints: APIEndpoints) -> [NotificationThread]? {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         guard let items = try? decoder.decode([LenientThread].self, from: data) else { return nil }
-        return items.compactMap { $0.value }
+        return items.compactMap { $0.value?.thread(endpoints: endpoints) }
     }
 }
 
 /// 1 件のデコードに失敗しても配列全体を失敗させないための入れ物。
 private struct LenientThread: Decodable {
-    let value: NotificationThread?
+    let value: ThreadDTO?
 
     init(from decoder: any Decoder) throws {
-        value = (try? ThreadDTO(from: decoder)).flatMap(\.thread)
+        value = try? ThreadDTO(from: decoder)
     }
 }
 
@@ -107,13 +109,17 @@ private struct ThreadDTO: Decodable {
     let subject: Subject
     let repository: Repository
 
-    var thread: NotificationThread? {
+    /// 検証を通ったスレッド。通らなければ nil。
+    func thread(endpoints: APIEndpoints) -> NotificationThread? {
         guard !id.isEmpty, let repository = RepositoryName(fullName: repository.fullName),
             let updatedAt = try? Date(updatedAt, strategy: .iso8601)
         else { return nil }
+        let kind = SubjectKind(apiValue: subject.type)
+        let subjectURL = subject.url.flatMap(URL.init(string:))
         return NotificationThread(
-            id: id, reason: reason ?? "", updatedAt: updatedAt, title: subject.title,
-            kind: SubjectKind(apiValue: subject.type), subjectURL: subject.url.flatMap(URL.init(string:)),
-            repository: repository)
+            id: id, reason: reason ?? "", updatedAt: updatedAt, title: subject.title, kind: kind,
+            subjectURL: subjectURL, repository: repository,
+            subjectNumber: ThreadWebURL.subjectNumber(
+                kind: kind, subjectURL: subjectURL, repository: repository, endpoints: endpoints))
     }
 }

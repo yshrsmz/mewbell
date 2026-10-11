@@ -18,7 +18,12 @@ final class NotificationStore {
         )
         -> AccountPoller
 
-    private(set) var feeds: [AccountID: FeedState] = [:]
+    private(set) var feeds: [AccountID: FeedState] = [:] {
+        didSet { updateRepositories(from: oldValue) }
+    }
+    /// アカウントごとのリポジトリのグループ。一覧だけが使う並べ方なので、ポーラーではなくここで、スレッドが変わったときに
+    /// 1 回だけ作る。描画の中ではグループ分けをしない。
+    private(set) var repositories: [AccountID: [RepositoryGroup]] = [:]
     /// 再読み込みで早めた取得が終わっていない
     private(set) var isRefreshing = false
 
@@ -26,7 +31,8 @@ final class NotificationStore {
     @ObservationIgnored private let makePoller: PollerFactory?
     @ObservationIgnored private var pollers: [AccountID: PollerEntry] = [:]
     @ObservationIgnored private var nextGeneration = 0
-    @ObservationIgnored private let notifier: (any ThreadNotifying)?
+    /// 新着の判定と、macOS の通知・`onNewThreads` への受け渡し
+    @ObservationIgnored private let threadChanges: ThreadChangeDispatcher
     @ObservationIgnored private let openURL: @MainActor (URL) -> Void
     /// アカウントごとの設定（ポーラーを作るときの `participating`）
     @ObservationIgnored private let preferences: @MainActor (AccountID) -> AccountPreferences
@@ -34,6 +40,8 @@ final class NotificationStore {
     @ObservationIgnored private var pendingReads: [AccountID: Set<String>] = [:]
     /// 止めたポーラーの、次の取得を早めてよい時刻（無効にしてすぐ有効に戻したときに間隔やレート制限の待ちを抜けないように）
     @ObservationIgnored private var carriedWaits: [AccountID: CarriedWait] = [:]
+    /// 読み込みが終わって、残すアカウント（一覧にあって無効でない）が決まった（一覧の折りたたみの状態を整理するため）
+    @ObservationIgnored private let onAccountsRetained: (@MainActor (Set<AccountID>) -> Void)?
 
     /// `makePoller` が nil のときはポーリングしない（テストのホストや SwiftUI プレビュー用）。
     /// `openURL` は既定値を持たせない（テストで本物のブラウザを開かないように、呼び出し元に必ず渡させる）。
@@ -41,18 +49,35 @@ final class NotificationStore {
         makePoller: PollerFactory?, notifier: (any ThreadNotifying)? = nil,
         openURL: @escaping @MainActor (URL) -> Void,
         preferences: @escaping @MainActor (AccountID) -> AccountPreferences = { _ in .default },
+        onNewThreads: (@MainActor (AccountID, [NotificationThread]) -> Void)? = nil,
+        onAccountsRetained: (@MainActor (Set<AccountID>) -> Void)? = nil,
         feeds: [AccountID: FeedState] = [:]
     ) {
         self.makePoller = makePoller
-        self.notifier = notifier
+        threadChanges = ThreadChangeDispatcher(notifier: notifier, onNewThreads: onNewThreads)
         self.openURL = openURL
         self.preferences = preferences
+        self.onAccountsRetained = onAccountsRetained
         self.feeds = feeds
+        // didSet は init では呼ばれないので、ここでも作る
+        updateRepositories(from: [:])
     }
 
-    static func live(tokens: any TokenProviding, notifier: any ThreadNotifying, settings: AppSettings)
-        -> NotificationStore
-    {
+    /// `oldValue` からスレッドが変わったアカウントだけ作り直し、`feeds` から消えたアカウントを消す。
+    private func updateRepositories(from oldValue: [AccountID: FeedState]) {
+        for id in oldValue.keys where feeds[id] == nil {
+            repositories[id] = nil
+        }
+        for (id, feed) in feeds where oldValue[id]?.threads != feed.threads {
+            repositories[id] = RepositoryGroup.groups(from: feed.threads)
+        }
+    }
+
+    static func live(
+        tokens: any TokenProviding, notifier: any ThreadNotifying, settings: AppSettings,
+        onNewThreads: @escaping @MainActor (AccountID, [NotificationThread]) -> Void,
+        onAccountsRetained: @escaping @MainActor (Set<AccountID>) -> Void
+    ) -> NotificationStore {
         let client = GitHubAPIClient(transport: URLSessionTransport())
         return NotificationStore(
             makePoller: { account, endpoints, participating, initialPhase, carriedWait, onUpdate in
@@ -61,7 +86,8 @@ final class NotificationStore {
                     participating: participating, initialPhase: initialPhase, carriedWait: carriedWait,
                     onUpdate: onUpdate)
             }, notifier: notifier, openURL: { NSWorkspace.shared.open($0) },
-            preferences: { settings.preferences(for: $0) })
+            preferences: { settings.preferences(for: $0) }, onNewThreads: onNewThreads,
+            onAccountsRetained: onAccountsRetained)
     }
 
     /// 全アカウントの未読の一覧の件数の合計（止まったアカウントと無効のアカウントはスレッドを持たないので 0 件）。
@@ -75,23 +101,23 @@ final class NotificationStore {
     /// （作り直すと、止めたポーリングが勝手に再開したり、取り直しと重なったりするため）。
     func sync(with state: DiscoveryState) {
         guard makePoller != nil else { return }
-        let statuses: [AccountStatus] = if case .accounts(let statuses) = state { statuses } else { [] }
-        let active = statuses.filter { $0.tokenState != .disabled }
+        let active = state.enabledStatuses
         let keptIDs = Set(active.map(\.id))
         for id in pollers.keys where !keptIDs.contains(id) {
             let entry = pollers.removeValue(forKey: id)
             entry?.poller.stop()
             carriedWaits[id] = carriedWait(of: id, startedWith: entry?.carriedWait)
             feeds[id] = nil
-            notifier?.accountRemoved(id)
+            threadChanges.accountRemoved(id)
         }
-        if state != .checking {
-            notifier?.retainOnly(keptIDs)
+        if let retained = state.retainedAccountIDs {
+            threadChanges.retainOnly(retained)
             // 読み込みが終わっても一覧に無いか、トークンを取れない・無効のアカウントの既読化は捨てる
             let waitingIDs = Set(active.filter { $0.tokenState != .unavailable }.map(\.id))
             pendingReads = pendingReads.filter { waitingIDs.contains($0.key) }
+            onAccountsRetained?(retained)
         }
-        for account in statuses.filter({ $0.tokenState == .ready }).map(\.account) where pollers[account.id] == nil {
+        for account in active.filter({ $0.tokenState == .ready }).map(\.account) where pollers[account.id] == nil {
             startPolling(account)
         }
     }
@@ -106,7 +132,7 @@ final class NotificationStore {
         let initialPhase = feeds[id].flatMap { $0.phase.isStopped ? $0.phase : nil }
         carriedWaits[id] = carriedWait(of: id, startedWith: entry.carriedWait)
         feeds[id] = nil
-        notifier?.resetBaseline(id)
+        threadChanges.restarted(id)
         startPolling(entry.account, initialPhase: initialPhase)
     }
 
@@ -209,7 +235,7 @@ final class NotificationStore {
         if poller == nil, case .done = action { return }
         let threadID = action.threadID
         feeds[account]?.threads.removeAll { $0.id == threadID }
-        notifier?.threadRemoved(threadID, for: account)
+        threadChanges.threadRemoved(threadID, for: account)
         if let poller {
             Task { await poller.perform(action) }
         } else {
@@ -224,6 +250,7 @@ final class NotificationStore {
         }
         pollers.removeAll()
         feeds.removeAll()
+        threadChanges.stopAll()
     }
 
     private func apply(_ state: FeedState, for id: AccountID, generation: Int) {
@@ -231,7 +258,7 @@ final class NotificationStore {
         guard pollers[id]?.generation == generation, feeds[id] != state else { return }
         let old = feeds[id]
         feeds[id] = state
-        notifier?.feedChanged(for: id, from: old, to: state)
+        threadChanges.feedChanged(for: id, from: old, to: state)
     }
 }
 

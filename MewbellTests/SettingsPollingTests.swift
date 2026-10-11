@@ -59,29 +59,28 @@ struct ParticipatingPollerTests {
 @MainActor
 final class RecordingNotifier: ThreadNotifying {
     var events: [String] = []
-    /// `feedChanged` で届いたスレッドの ID（アカウントごと、届いた順）
+    /// `baselineSet` の `keeping`（並べ替えたもの）と `threadsChanged` の `posted` のスレッドの ID（アカウントごと、届いた順）
     var feeds: [AccountID: [[String]]] = [:]
+    /// `threadsChanged` に渡った値（アカウントごと、届いた順）
+    var changes: [AccountID: [(posted: [String], retracted: Set<String>)]] = [:]
 
-    func feedChanged(for account: AccountID, from old: FeedState?, to new: FeedState) {
-        if case .loaded = new.phase {
-            feeds[account, default: []].append(new.threads.map(\.id))
-        }
+    func baselineSet(for account: AccountID, keeping threadIDs: Set<String>) {
+        events.append("baselineSet \(account) \(threadIDs.sorted().joined(separator: ","))")
+        feeds[account, default: []].append(threadIDs.sorted())
+    }
+
+    func threadsChanged(for account: AccountID, posted: [NotificationThread], retracted: Set<String>) {
+        events.append("threadsChanged \(account)")
+        feeds[account, default: []].append(posted.map(\.id))
+        changes[account, default: []].append((posted.map(\.id), retracted))
     }
 
     func threadRemoved(_ threadID: String, for account: AccountID) {
         events.append("threadRemoved \(account) \(threadID)")
     }
 
-    func accountRemoved(_ account: AccountID) {
-        events.append("accountRemoved \(account)")
-    }
-
-    func resetBaseline(_ account: AccountID) {
-        events.append("resetBaseline \(account)")
-    }
-
-    func notificationsDisabled(_ account: AccountID) {
-        events.append("notificationsDisabled \(account)")
+    func retractAll(for account: AccountID) {
+        events.append("retractAll \(account)")
     }
 
     func retainOnly(_ accounts: Set<AccountID>) {
@@ -159,7 +158,7 @@ struct NotificationStoreSettingsTests {
         store.sync(with: .accounts([status(alice, .ready), status(bob, .disabled)]))
         #expect(store.feeds[bob] == nil)
         #expect(store.unreadCount == 3)
-        #expect(notifier.events == ["accountRemoved github.com/bob", "retainOnly github.com/alice"])
+        #expect(notifier.events == ["retractAll github.com/bob", "retainOnly github.com/alice"])
         let bobGets = gets("bob").count
         sleeper.advance()
         sleeper.advance()
@@ -189,9 +188,11 @@ struct NotificationStoreSettingsTests {
         let store = await loadedStore()
         let aliceGets = gets("alice").count
         settings.setParticipatingOnly(true, for: alice)
+        notifier.events = []
         store.restart(alice)
         #expect(store.feeds[alice] == .loading)
-        #expect(notifier.events.last == "resetBaseline github.com/alice")
+        // 出ている通知は取り下げず、次の基準の取得で今の一覧に無いものだけを取り下げる
+        #expect(notifier.events.isEmpty)
         #expect(made.value.last == "github.com/alice true")
         // 前の取得から再読み込みと同じ下限（10 秒）がたつまで、最初の取得を待つ
         await sleeper.waitForSleeps(3)
@@ -200,6 +201,8 @@ struct NotificationStoreSettingsTests {
         #expect(wait > .seconds(5) && wait <= .seconds(10))
         await advance(until: { store.feeds[alice]?.threads.map(\.id) == ["4", "5"] })
         #expect(store.feeds[alice]?.threads.map(\.id) == ["4", "5"])
+        // 作り直した後の最初の取得は基準
+        #expect(notifier.events.filter { $0.contains("alice") } == ["baselineSet github.com/alice 4,5"])
         // 作り直したポーラーの最初の取得は条件なしで、gh は呼ばない
         let first = gets("alice")[aliceGets]
         #expect(first.value(forHTTPHeaderField: "If-Modified-Since") == nil)

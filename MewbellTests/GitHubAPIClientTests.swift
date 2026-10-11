@@ -298,6 +298,50 @@ struct GitHubAPIClientTests {
     }
 }
 
+/// 一覧に出す番号を、取得したときに求めるテスト。
+struct NotificationSubjectNumberTests {
+    struct Case: Sendable {
+        let host: String
+        let type: String
+        let url: String
+        let repository: String
+        let expected: String?
+    }
+
+    @Test(arguments: [
+        Case(
+            host: "github.com", type: "PullRequest", url: "https://api.github.com/repos/octo/app/pulls/42",
+            repository: "octo/app", expected: "42"),
+        Case(
+            host: "ghe.example.com", type: "Issue", url: "https://ghe.example.com/api/v3/repos/team/svc/issues/7",
+            repository: "team/svc", expected: "7"),
+        Case(
+            host: "github.com", type: "PullRequest", url: "https://evil.example.com/repos/octo/app/pulls/42",
+            repository: "octo/app", expected: nil),
+        Case(
+            host: "github.com", type: "Release", url: "https://api.github.com/repos/octo/app/releases/42",
+            repository: "octo/app", expected: nil),
+    ])
+    func computesTheSubjectNumberWhenFetching(_ testCase: Case) async throws {
+        let endpoints = try #require(APIEndpoints(host: testCase.host))
+        let token = try #require(AccessToken(ghOutput: Data("test-token".utf8)))
+        let body = Data(
+            """
+            [{"id": "1", "unread": true, "reason": "subscribed", "updated_at": "2026-10-08T12:00:00Z",
+              "repository": {"full_name": "\(testCase.repository)"},
+              "subject": {"title": "Thread 1", "url": "\(testCase.url)", "type": "\(testCase.type)"}}]
+            """.utf8)
+        let transport = FakeHTTPTransport { _ in
+            HTTPResponse(statusCode: 200, headers: ["X-OAuth-Scopes": "repo"], body: body)
+        }
+        let result = await GitHubAPIClient(transport: transport).fetchNotifications(
+            endpoints: endpoints, token: token, ifModifiedSince: nil)
+        let threads: [NotificationThread]? = if case .updated(let threads, _, _, _, _) = result { threads } else { nil }
+        let thread = try #require(threads?.first)
+        #expect(thread.subjectNumber == testCase.expected)
+    }
+}
+
 /// 10 ページで打ち切ったかどうかのテスト。
 struct NotificationPagingTests {
     private let github: APIEndpoints

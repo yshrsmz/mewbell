@@ -8,10 +8,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let accountStore: AccountStore
     let notificationStore: NotificationStore
     let notificationPermission: NotificationPermission
+    /// 一覧の折りたたみ（起動している間だけ覚える）
+    let listExpansion: ListExpansion
     /// 通知センターの delegate（通知センターは delegate を弱く持つので、ここで持ち続ける）
     private let clickHandler: NotificationClickHandler?
 
     override init() {
+        let listExpansion = ListExpansion()
+        self.listExpansion = listExpansion
         if LaunchContext.isTestHostOrPreview {
             settings = AppSettings(storage: InMemorySettingsStorage())
             launchAtLogin = LaunchAtLogin(service: InertLoginItem())
@@ -27,10 +31,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let notifier = SystemNotifier(
                 center: center, notifies: { settings.preferences(for: $0).notifies },
                 playsSound: { settings.notificationSound })
-            let notificationStore = NotificationStore.live(tokens: discovery, notifier: notifier, settings: settings)
+            let notificationStore = NotificationStore.live(
+                tokens: discovery, notifier: notifier, settings: settings,
+                onNewThreads: { [listExpansion] in listExpansion.expand(account: $0, newThreads: $1) },
+                onAccountsRetained: { [listExpansion] in listExpansion.retain($0) })
             settings.onNotificationsChange = { id, notifies in
+                // 新着の判定（`NotificationStore`）は通知の設定にかかわらず続くので、オンに戻しても、オフの間に届いたものを
+                // まとめて通知しない
                 if !notifies {
-                    notifier.notificationsDisabled(id)
+                    notifier.retractAll(for: id)
                 }
             }
             self.settings = settings
@@ -45,6 +54,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         accountStore.onStateChange = { [notificationStore] state in
             notificationStore.sync(with: state)
         }
+        connectSettings()
+        // 終了中の通知のクリックで起動されたときに取りこぼさないよう、起動が終わる前に設定する
+        if let clickHandler {
+            UNUserNotificationCenter.current().delegate = clickHandler
+        }
+    }
+
+    /// 設定の変更を、アカウントの読み直しとポーラーに伝える。
+    private func connectSettings() {
         settings.onAccountEnabledChange = { [accountStore] id, enabled in
             accountStore.setEnabled(enabled, for: id)
         }
@@ -56,10 +74,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         settings.onGhConfigDirectoryChange = { [accountStore] in
             accountStore.ghConfigDirectoryChanged()
-        }
-        // 終了中の通知のクリックで起動されたときに取りこぼさないよう、起動が終わる前に設定する
-        if let clickHandler {
-            UNUserNotificationCenter.current().delegate = clickHandler
         }
     }
 

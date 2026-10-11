@@ -24,16 +24,21 @@ struct ThreadRow: View {
     var body: some View {
         // 操作のボタンは行のボタンの中に入れず、上に重ねる（行のクリックと奪い合わないように）
         Button(action: open) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: ListLayout.spacing) {
                 Image(systemName: symbol)
                     .foregroundStyle(.secondary)
-                    .frame(width: 16)
+                    .frame(width: ListLayout.chevronWidth)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(thread.title)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     HStack(spacing: 4) {
-                        Text(NotificationGrouping.reasonText(thread.reason))
+                        if let number = thread.subjectNumber {
+                            Text("#\(number)")
+                                .monospacedDigit()
+                            Text("·")
+                        }
+                        Text(ThreadReason.text(thread.reason))
                         Text("·")
                         RelativeTimeText(date: thread.updatedAt)
                     }
@@ -229,16 +234,19 @@ struct RelativeTimeText: View {
 }
 
 #Preview("Thread row hovered") {
-    let thread = RepositoryName(owner: "octo", name: "app").map { repository in
-        NotificationThread(
-            id: "1", reason: "review_requested", updatedAt: Date().addingTimeInterval(-300),
-            title: "Make the menu bar popover remember its scroll position across openings and restarts",
-            kind: .pullRequest, subjectURL: nil, repository: repository)
+    func thread(number: String?) -> NotificationThread? {
+        RepositoryName(owner: "octo", name: "app").map { repository in
+            NotificationThread(
+                id: "1", reason: "review_requested", updatedAt: Date().addingTimeInterval(-300),
+                title: "Make the menu bar popover remember its scroll position across openings and restarts",
+                kind: .pullRequest, subjectURL: nil, repository: repository, subjectNumber: number)
+        }
     }
     return VStack(alignment: .leading) {
-        if let thread {
-            ThreadRow(thread: thread, open: {}, markRead: {}, markDone: {})
-            ThreadRow(thread: thread, isHovering: true, open: {}, markRead: {}, markDone: {})
+        if let plain = thread(number: nil), let numbered = thread(number: "1234") {
+            ThreadRow(thread: plain, open: {}, markRead: {}, markDone: {})
+            ThreadRow(thread: numbered, open: {}, markRead: {}, markDone: {})
+            ThreadRow(thread: numbered, isHovering: true, open: {}, markRead: {}, markDone: {})
         }
     }
     .padding()

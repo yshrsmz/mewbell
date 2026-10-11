@@ -10,13 +10,13 @@ private func thread(
     NotificationThread(
         id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: updatedAt), title: "Thread \(id)",
         kind: kind, subjectURL: subjectURL.flatMap(URL.init(string:)),
-        repository: try #require(RepositoryName(fullName: repository))
+        repository: try #require(RepositoryName(fullName: repository)), subjectNumber: nil
     )
 }
 
-struct NotificationGroupingTests {
+struct RepositoryGroupTests {
     @Test func ordersRepositoriesAndThreadsByTheNewestUpdate() throws {
-        let groups = NotificationGrouping.groups(from: [
+        let groups = RepositoryGroup.groups(from: [
             try thread(id: "1", repository: "octo/app", updatedAt: 100),
             try thread(id: "2", repository: "octo/lib", updatedAt: 300),
             try thread(id: "3", repository: "octo/app", updatedAt: 200),
@@ -27,9 +27,11 @@ struct NotificationGroupingTests {
     }
 
     @Test func returnsNoGroupsForNoThreads() {
-        #expect(NotificationGrouping.groups(from: []).isEmpty)
+        #expect(RepositoryGroup.groups(from: []).isEmpty)
     }
+}
 
+struct ThreadReasonTests {
     @Test(arguments: [
         ("review_requested", "Review requested"),
         ("mention", "Mentioned"),
@@ -37,7 +39,7 @@ struct NotificationGroupingTests {
         ("", ""),
     ])
     func namesReasons(_ reason: String, _ text: String) {
-        #expect(NotificationGrouping.reasonText(reason) == text)
+        #expect(ThreadReason.text(reason) == text)
     }
 }
 
@@ -110,5 +112,64 @@ struct ThreadWebURLTests {
                 #expect(opened.host() == endpoints.host)
             }
         }
+    }
+}
+
+struct ThreadSubjectNumberTests {
+    private let github: APIEndpoints
+    private let gheCloud: APIEndpoints
+    private let ghes: APIEndpoints
+
+    init() throws {
+        github = try #require(APIEndpoints(host: "github.com"))
+        gheCloud = try #require(APIEndpoints(host: "acme.ghe.com"))
+        ghes = try #require(APIEndpoints(host: "ghe.example.com"))
+    }
+
+    /// スレッドの部品から番号を求める（スレッドを作る前に呼ぶ形）。
+    private func number(
+        repository: String = "octo/app", kind: SubjectKind = .pullRequest, subjectURL: String?,
+        endpoints: APIEndpoints
+    ) throws -> String? {
+        ThreadWebURL.subjectNumber(
+            kind: kind, subjectURL: subjectURL.flatMap(URL.init(string:)),
+            repository: try #require(RepositoryName(fullName: repository)), endpoints: endpoints)
+    }
+
+    @Test func readsPullRequestAndIssueNumbers() throws {
+        #expect(try number(subjectURL: "https://api.github.com/repos/octo/app/pulls/42", endpoints: github) == "42")
+        #expect(
+            try number(
+                repository: "team/svc", kind: .issue,
+                subjectURL: "https://ghe.example.com/api/v3/repos/team/svc/issues/7", endpoints: ghes) == "7")
+        #expect(
+            try number(
+                repository: "acme/web", subjectURL: "https://api.acme.ghe.com/repos/acme/web/pulls/3",
+                endpoints: gheCloud) == "3")
+    }
+
+    /// 番号は `subject.url` の形で決まり、`subject.type` には依らない（Release と Discussion を除く）。
+    @Test(arguments: [SubjectKind.issue, .commit, .checkSuite])
+    func readsTheNumberFromThePullRequestURLForOtherKinds(_ kind: SubjectKind) throws {
+        #expect(
+            try number(kind: kind, subjectURL: "https://api.github.com/repos/octo/app/pulls/42", endpoints: github)
+                == "42")
+    }
+
+    @Test(arguments: [
+        nil,
+        "https://evil.example.com/repos/octo/app/pulls/42",
+        "https://api.github.com/repos/other/app/pulls/42",
+        "https://api.github.com/repos/octo/app/pulls/abc",
+        "https://api.github.com/repos/octo/app/commits/0123abcdef",
+    ])
+    func readsNoNumberFromOtherSubjects(_ subjectURL: String?) throws {
+        #expect(try number(subjectURL: subjectURL, endpoints: github) == nil)
+    }
+
+    @Test(arguments: [SubjectKind.release, .discussion])
+    func readsNoNumberForOtherKinds(_ kind: SubjectKind) throws {
+        let subject = "https://api.github.com/repos/octo/app/pulls/42"
+        #expect(try number(kind: kind, subjectURL: subject, endpoints: github) == nil)
     }
 }
