@@ -73,7 +73,7 @@ struct ThreadNotificationContentTests {
         #expect(content.identifier == "github.com/alice/123")
         #expect(content.title == "Thread 123")
         #expect(content.subtitle == "octo/app")
-        #expect(content.body == "Review requested · alice@github.com")
+        #expect(content.body == "Review requested · alice (github.com)")
         #expect(content.threadIdentifier == "github.com/alice")
         #expect(
             content.userInfo == [

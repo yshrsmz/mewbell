@@ -99,14 +99,14 @@ struct AccountSectionView: View {
             switch status.tokenState {
             case .fetching where feed == nil:
                 Text("Checking gh…")
-                    .font(.caption)
                     .foregroundStyle(.secondary)
-                    .padding(.leading, ListLayout.contentIndent)
+                    .sectionNote()
             case .unavailable:
-                Text("Could not get a token from gh. Log in again with:")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                CommandRow(command: "gh auth login --hostname \(account.host)")
+                VStack(alignment: .leading, spacing: ListLayout.noteSpacing) {
+                    Text("Could not get a token from gh. Log in again with:")
+                    CommandRow(command: GhCommand.relogin(for: account.id))
+                }
+                .sectionNote()
             case .disabled:
                 // 無効のアカウントの区画は `NotificationListView` が出さない
                 EmptyView()
@@ -115,7 +115,7 @@ struct AccountSectionView: View {
                 if let feed {
                     FeedStatusView(account: account, phase: feed.phase, isTruncated: feed.isTruncated)
                     if let failure = feed.actionFailure {
-                        ActionFailureView(failure: failure, host: account.host)
+                        ActionFailureView(failure: failure, account: account)
                     }
                     // 折りたたんでも、取得の状態と操作の失敗は出し続ける
                     if disclosure.showsThreads && !disclosure.isCollapsed {
@@ -130,7 +130,7 @@ struct AccountSectionView: View {
         HStack(spacing: 6) {
             // 開閉のボタンと「すべて既読」は分ける（押し間違えて開閉しないように）
             DisclosureButton(
-                isCollapsed: disclosure.isCollapsed, name: "\(account.user) (\(account.host))",
+                isCollapsed: disclosure.isCollapsed, name: account.displayName,
                 isCollapsible: disclosure.showsThreads, count: feed?.threads.count ?? 0
             ) {
                 expansion.toggle()
@@ -158,22 +158,22 @@ struct AccountSectionView: View {
         HStack(spacing: ListLayout.spacing) {
             tokenIcon
                 .frame(width: ListLayout.chevronWidth)
-            Text(account.user)
-                .font(.subheadline.weight(.semibold))
+            // 幅が足りないときはホスト名から縮め、それでも足りなければユーザー名の末尾を省略する（active の印は省略しない）
+            OneLineText(text: account.user, truncation: .tail)
+                .font(.headline)
+                .layoutPriority(1)
             if account.isActive {
                 Text("active")
-                    .font(.caption)
+                    .font(.subheadline)
                     .capsuleBadge(.tint.opacity(0.15))
                     .help("The active account for this host in gh")
             }
-            Text("\(account.host) — \(account.hostKind.displayName)")
-                .font(.caption)
+            OneLineText(text: account.hostLabel, truncation: .middle)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
             if participatingOnly {
                 Image(systemName: "person.crop.circle.badge.checkmark")
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .help("Showing only threads you are participating in")
                     .accessibilityLabel("Participating only")
@@ -204,9 +204,8 @@ struct AccountSectionView: View {
     @ViewBuilder private func threads() -> some View {
         if repositories.isEmpty {
             Text("No unread notifications")
-                .font(.callout)
                 .foregroundStyle(.secondary)
-                .padding(.leading, ListLayout.contentIndent)
+                .sectionNote()
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(repositories) { group in
@@ -227,7 +226,7 @@ struct FeedStatusView: View {
     var isTruncated = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: ListLayout.noteSpacing) {
             switch phase {
             case .loading:
                 HStack(spacing: 6) {
@@ -243,10 +242,10 @@ struct FeedStatusView: View {
                 .foregroundStyle(.secondary)
             case .retrying(let nextAttempt, let rateLimited):
                 Label {
-                    HStack(spacing: 4) {
-                        Text(rateLimited ? "Rate limited. Retrying at" : "Could not fetch notifications. Retrying at")
-                        Text(nextAttempt, style: .time)
-                    }
+                    // 文ごとに 1 つの Text にして、時刻の途中で折り返さないようにする
+                    rateLimited
+                        ? Text("Rate limited. Retrying at \(nextAttempt, style: .time)")
+                        : Text("Could not fetch notifications. Retrying at \(nextAttempt, style: .time)")
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
                 }
@@ -255,24 +254,21 @@ struct FeedStatusView: View {
                     "The gh token for this account has neither the repo nor the notifications scope. Add it, then reload:"
                 )
                 if !account.isActive {
-                    CommandRow(command: "gh auth switch --hostname \(account.host) --user \(account.user)")
+                    CommandRow(command: GhCommand.switchUser(to: account.id))
                 }
-                CommandRow(command: "gh auth refresh --hostname \(account.host) --scopes repo")
+                CommandRow(command: GhCommand.refreshScopes(for: account.id))
             case .unauthorized:
                 Text("GitHub rejected the token from gh. Log in again, then reload:")
-                CommandRow(command: "gh auth login --hostname \(account.host)")
+                CommandRow(command: GhCommand.relogin(for: account.id))
             }
             if isTruncated, phase.showsThreads {
                 Label(
                     "Showing the newest \(GitHubAPIClient.threadLimit) unread notifications. Older unread ones are not shown.",
                     systemImage: "ellipsis.circle"
                 )
-                .foregroundStyle(.secondary)
             }
         }
-        .font(.caption)
-        .padding(.leading, ListLayout.contentIndent)
-        .fixedSize(horizontal: false, vertical: true)
+        .sectionNote()
     }
 }
 

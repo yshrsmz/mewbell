@@ -12,19 +12,16 @@ struct RepositoryGroupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                DisclosureButton(
-                    isCollapsed: isCollapsed, name: group.repository.description,
-                    count: group.threads.count
-                ) {
-                    expansion.toggleRepository(group.repository)
-                } label: {
-                    Text(group.repository.description)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
+            DisclosureButton(
+                isCollapsed: isCollapsed, name: group.repository.description,
+                count: group.threads.count
+            ) {
+                expansion.toggleRepository(group.repository)
+            } label: {
+                OneLineText(text: group.repository.description, truncation: .middle)
+                    .font(.subheadline.weight(.semibold))
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             if !isCollapsed {
                 ForEach(group.threads) { thread in
                     ThreadRow(
@@ -42,6 +39,9 @@ struct RepositoryGroupView: View {
     let alice = Account(id: AccountID(host: "github.com", user: "alice"), isActive: true)
     let bob = Account(id: AccountID(host: "github.com", user: "bob"), isActive: false)
     let dave = Account(id: AccountID(host: "acme.ghe.com", user: "dave"), isActive: true)
+    // 長いホスト名（見出しが 1 行に収まり、ホスト名が省略されるのを見る）
+    let grace = Account(
+        id: AccountID(host: "notifications.ghes.engineering.example.com", user: "grace"), isActive: true)
     let now = Date()
     func thread(_ id: Int, _ repo: String, number: Int?) -> NotificationThread? {
         RepositoryName(fullName: repo).map { repository in
@@ -71,15 +71,18 @@ struct RepositoryGroupView: View {
         dave.id: FeedState(
             phase: .retrying(nextAttempt: now.addingTimeInterval(240), rateLimited: true),
             threads: [thread(6, "acme/web", number: 7)].compactMap { $0 }),
+        grace.id: FeedState(
+            phase: .loaded(updatedAt: now), threads: [thread(7, "team/svc", number: 12)].compactMap { $0 }),
     ]
     return NotificationListView(
         statuses: [
             AccountStatus(account: alice, tokenState: .ready),
             AccountStatus(account: bob, tokenState: .ready),
             AccountStatus(account: dave, tokenState: .ready),
+            AccountStatus(account: grace, tokenState: .ready),
         ],
         feeds: feeds, repositories: feeds.mapValues { RepositoryGroup.groups(from: $0.threads) },
-        expansion: expansion, actions: .none
+        participatingOnly: { $0 == grace.id }, expansion: expansion, actions: .none
     )
     .padding()
     .frame(width: 380)

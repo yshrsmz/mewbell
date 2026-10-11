@@ -120,7 +120,7 @@ struct AccountSettingsSection: View {
         } header: {
             HStack(spacing: 6) {
                 Text(account.user)
-                Text("\(account.host) — \(account.hostKind.displayName)")
+                Text(account.hostLabel)
                     .foregroundStyle(.secondary)
             }
         }

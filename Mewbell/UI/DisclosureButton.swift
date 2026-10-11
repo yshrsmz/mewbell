@@ -84,23 +84,13 @@ struct DisclosureButton<Label: View>: View {
     }
 }
 
-/// 一覧の字下げ。見出しの山形の幅と、山形と中身の間隔から決まる。
-enum ListLayout {
-    /// 見出しの山形の幅
-    static let chevronWidth: CGFloat = 16
-    /// 山形と見出しの中身の間隔
-    static let spacing: CGFloat = 6
-    /// 見出しの下に置く中身の字下げ（山形の幅と間隔の分）
-    static let contentIndent = chevronWidth + spacing
-}
-
 /// 開閉を示す山形。開いているときは下を向く。幅はスレッドの行の種類のアイコンと揃える。
 private struct DisclosureChevron: View {
     let isCollapsed: Bool
 
     var body: some View {
         Image(systemName: "chevron.right")
-            .font(.caption2.weight(.semibold))
+            .font(.subheadline.weight(.semibold))
             .foregroundStyle(.secondary)
             .rotationEffect(.degrees(isCollapsed ? 0 : 90))
             .frame(width: ListLayout.chevronWidth)
@@ -114,18 +104,9 @@ private struct CollapsedCount: View {
 
     var body: some View {
         Text("\(count)")
-            .font(.caption.monospacedDigit())
+            .font(.subheadline.monospacedDigit())
             .foregroundStyle(.secondary)
             .capsuleBadge(.secondary.opacity(0.15))
             .accessibilityLabel("\(count) unread")
-    }
-}
-
-extension View {
-    /// 見出しに添える小さなカプセル型のバッジ（「active」、折りたたんだときの件数）。
-    func capsuleBadge(_ fill: some ShapeStyle) -> some View {
-        padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(fill, in: Capsule())
     }
 }

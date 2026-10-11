@@ -42,6 +42,9 @@ struct AccountID: Hashable, Sendable, CustomStringConvertible {
     }
 
     var description: String { "\(host)/\(user)" }
+
+    /// 画面と macOS の通知に出すアカウントの名前（`alice (github.com)`）
+    var displayName: String { "\(user) (\(host))" }
 }
 
 /// gh にログイン済みのアカウント。
@@ -52,6 +55,7 @@ struct Account: Hashable, Sendable, Identifiable {
 
     var host: String { id.host }
     var user: String { id.user }
+    var displayName: String { id.displayName }
     var hostKind: HostKind { HostKind(host: host) }
 
     /// `hosts.yml` から、表示する順に並べたアカウントを作る。

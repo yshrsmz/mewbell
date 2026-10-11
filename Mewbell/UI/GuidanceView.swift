@@ -28,7 +28,7 @@ struct GuidanceView: View {
             case .ghNotFound:
                 title("gh is not installed", systemImage: "exclamationmark.triangle")
                 Text("Mewbell uses the accounts you have logged in to with the GitHub CLI. Install it, then log in.")
-                CommandRow(command: "brew install gh")
+                CommandRow(command: GhCommand.install)
                 if let ghWebsite = Self.ghWebsite {
                     Button("Open cli.github.com") {
                         NSWorkspace.shared.open(ghWebsite)
@@ -39,15 +39,15 @@ struct GuidanceView: View {
                 Text(
                     "Found gh \(version.description). Mewbell needs gh \(GhVersion.minimumSupported.description) or later."
                 )
-                CommandRow(command: "brew upgrade gh")
+                CommandRow(command: GhCommand.upgrade)
             case .ghUnavailable:
                 title("Could not run gh", systemImage: "exclamationmark.triangle")
                 Text("gh did not respond as expected. Check that this command works, then reload.")
-                CommandRow(command: "gh --version")
+                CommandRow(command: GhCommand.version)
             case .hostsFileUnreadable(let path):
                 title("Cannot read gh's account list", systemImage: "exclamationmark.triangle")
                 Text("Could not read \(path). Check your gh login with:")
-                CommandRow(command: "gh auth status")
+                CommandRow(command: GhCommand.status)
                 if ghConfigDirectoryOverridden {
                     Text("This path comes from the gh config directory set in Settings.")
                     OpenSettingsButton(style: .text)
@@ -55,7 +55,7 @@ struct GuidanceView: View {
             case .notLoggedIn:
                 title("Not logged in to gh", systemImage: "person.crop.circle.badge.questionmark")
                 Text("Log in with the GitHub CLI. For GitHub Enterprise, add --hostname <host>.")
-                CommandRow(command: "gh auth login")
+                CommandRow(command: GhCommand.login)
             case .accounts:
                 EmptyView()
             }

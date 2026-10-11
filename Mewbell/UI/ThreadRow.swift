@@ -42,7 +42,7 @@ struct ThreadRow: View {
                         Text("·")
                         RelativeTimeText(date: thread.updatedAt)
                     }
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
@@ -173,7 +173,8 @@ struct MarkAllReadButton: View {
         } label: {
             if confirming {
                 Text(labels.confirmation)
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
+                    .fixedSize()
             } else {
                 Image(systemName: "checkmark.circle")
             }

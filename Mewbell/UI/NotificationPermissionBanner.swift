@@ -8,11 +8,14 @@ struct NotificationPermissionBanner: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "bell.slash.fill")
-                .foregroundStyle(.secondary)
-            Text("Notifications are turned off for Mewbell.")
-                .font(.caption)
-                .fixedSize(horizontal: false, vertical: true)
+            Label {
+                Text("Notifications are turned off for Mewbell.")
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "bell.slash.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.subheadline)
             Spacer(minLength: 0)
             Button("Open Settings") {
                 if let url = Self.settingsURL {
