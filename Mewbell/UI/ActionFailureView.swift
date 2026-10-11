@@ -26,11 +26,11 @@ enum ActionFailureMessage {
 
     /// 文に添えるコマンド（認証エラーのときだけ）。
     static func command(for failure: ActionFailure, host: String) -> String? {
-        failure.kind == .unauthorized ? "gh auth login --hostname \(host)" : nil
+        failure.kind == .unauthorized ? GhCommand.login(host: host) : nil
     }
 }
 
-/// アカウントの区画に出す、操作の失敗の 1 行。次の取得が成功すると `FeedState.actionFailure` ごと消える。
+/// アカウントの区画に出す、操作の失敗の知らせ（幅に合わせて折り返す）。次の取得が成功すると `FeedState.actionFailure` ごと消える。
 struct ActionFailureView: View {
     let failure: ActionFailure
     let host: String

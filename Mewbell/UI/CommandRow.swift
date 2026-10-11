@@ -42,3 +42,11 @@ struct CommandRow: View {
         .padding()
         .frame(width: 320)
 }
+
+/// 案内に出す gh のコマンド。
+enum GhCommand {
+    /// そのホストに gh でログインし直すコマンド
+    static func login(host: String) -> String {
+        "gh auth login --hostname \(host)"
+    }
+}

@@ -50,7 +50,7 @@
 | スレッドの件名 | `.body`（変えない） |
 | 「No unread notifications」 | 変更前 `.callout` + `.secondary`、変更後 `.subheadline` + `.secondary`（`sectionNote()`） |
 | スレッドの行の 2 行目 | `.subheadline` + `.secondary` |
-| リポジトリの見出し | `.subheadline.weight(.semibold)`、`.secondary` を外す、1 行、中央を省略、`.help` で全体 |
+| リポジトリの見出し | `.subheadline.weight(.semibold)`、`.secondary` を外す、1 行、中央を省略、最小幅 `ListLayout.ellipsisWidth`、`.help` で全体 |
 | アカウントのユーザー名 | `.headline`（13pt の太字）、1 行、`layoutPriority(1)`、`truncationMode(.tail)`、`.help` で全体 |
 | active の印・件数 | `.subheadline`（カプセルの塗りは変えない）、`capsuleBadge` の中の `fixedSize()`（省略しない） |
 | ホスト名とホスト種別、参加のみの印 | `.subheadline` + `.secondary`、ホスト名は `.help` で全体、最小幅 `ListLayout.ellipsisWidth`、表示とツールチップは `Account.hostLabel` |
@@ -60,7 +60,7 @@
 | 見出しの山形 | `.subheadline.weight(.semibold)` + `.secondary`、アカウントの見出しでもリポジトリの見出しでも 11pt（幅は `ListLayout.chevronWidth` で揃える） |
 | 折りたたんだときの件数 | `.subheadline.monospacedDigit()` + `.secondary`、`fixedSize()`（省略しない） |
 | すべて既読の確認の文 | `.subheadline.weight(.semibold)`、`fixedSize()`（省略しない）、色は既存のとおりアクセントカラー（`.tint`） |
-| 通知が切られているときの案内 | `.subheadline`、ベルも `.subheadline`（HStack に指定） |
+| 通知が切られているときの案内 | `.subheadline`、ベルと文字に `.subheadline`（ボタンには掛けない） |
 
 アカウントのユーザー名は、いまは件名（13pt）より小さい 11pt で、見出しなのに件名より目立たない。`.headline` にして件名と同じ大きさの太字にし、区画の区切りが分かるようにする。リポジトリの見出しは件名より 1 段小さい 11pt の太字に残し、色だけ標準に戻す（太さと大きさで件名と区別できるので、薄くする必要が無い）。
 
@@ -70,7 +70,7 @@
 
 システムの副次的な文字色（`.secondary`）は、白い背景の上でも 4.5 : 1 を下回る色で（ライトモードの `secondaryLabelColor` は黒の 50%）、ポップオーバーのマテリアルの上では後ろのウィンドウの色でさらに変わる。アプリの側から比を数値で保証することはできないので、次の方針にする。
 
-- 読めないと困る情報（件名、アカウントのユーザー名、リポジトリの見出し、操作の失敗）は標準の文字色にする
+- 読めないと困る情報（件名、アカウントのユーザー名、リポジトリの見出し、操作の失敗、トークンを取れないときやスコープ不足・認証エラーの案内、取得の失敗の文、打ち切りの知らせ）は標準の文字色にする。範囲は spec の Requirement を正とする
 - `.secondary` は補足の情報にだけ使い、その場合も 11pt 以上にする（いちばん小さい文字に薄い色を重ねない）
 - 文字の色はシステムの文字色（標準・副次的）と、すべて既読の確認の文のアクセントカラーだけにする。アイコンは状態を表すシステムの色（黄・緑）も使う。「コントラストを上げる」「透明度を下げる」はシステムの色とマテリアルに効くので、それで足りないユーザーはシステムの設定で補える
 
@@ -93,13 +93,19 @@
 
 区画の中の補足の文（取得の状態、操作の失敗、トークンを取れないときの案内）は、大きさ・字下げ・折り返しの 3 つの指定が 3 か所に写されていて、トークンを取れないときの案内だけ字下げが無かった。これは書体の型ではなく区画の体裁の規則なので、`View` の拡張 `sectionNote()`（`ListLayout` の隣）に 1 つだけまとめ、トークンを取れないときの案内とコマンドにも使って字下げを揃える。「No unread notifications」も、「Checking gh…」と同じく薄い色の `sectionNote()` にする。
 
+- 代替案: 中身を受け取るコンテナ（`SectionNote(kind:) { ... }`）にして、行の間隔と色（補足か案内か）も持たせる。SwiftUI では見た目は modifier で重ね、コンテナは並べ方や意味のまとまりに使うのが定石で、文字の階層（`.secondary`）も使う側が意味ごとに付ける。色を列挙で切り替える自前のコンテナは独自のデザインシステムに寄るので採らない（ユーザーの判断）。色と行の間隔は呼び出し側で付け、どの文字を薄くするかは spec の Requirement と D2 の表で確かめる
+
+### D7: gh のコマンドの文字列
+
+`gh auth login --hostname <host>` は、トークンを取れないとき・認証エラー・操作の失敗の 3 か所で組み立てていた（2 か所は main から）。文字の大きさを変える中で 3 か所を書き換えることになったので、`CommandRow.swift` の `GhCommand.login(host:)` にまとめる。ほかの gh のコマンド（`gh auth switch`・`gh auth refresh`）は 1 か所でしか使わないので、そのままにする。
+
 ### スレッドと actor の境界
 
 View の modifier を変えるだけで、`@MainActor` の View の中で完結する。actor とネットワーク、ポーリングには触れない。
 
 ### テストでの差し替え
 
-SwiftUI の書体はユニットテストから読めないので、ユニットテストは足さない。次で確かめる。
+SwiftUI の書体はユニットテストから読めないので、書体のユニットテストは足さない（文字列を作る `Account.hostLabel` と `GhCommand.login(host:)` にはテストを足す）。プレビューと一時的なテストで描く幅は、ポップオーバーの 380pt から `.padding()` を引いた中身の幅（348pt）にする。次で確かめる。
 
 - `grep` で、ポップオーバーの View のファイル全部（`Mewbell/UI/` のうち `SettingsView.swift`・`DiagnosticsSettingsView.swift`・`MenuBarLabel.swift` を除いたものと `Mewbell/App/MenuBarContentView.swift`）に 10pt のテキストスタイルが残っていないこと
 - プレビュー（Xcode の RenderPreview、使えなければ一時的な `ImageRenderer` のテスト。コミットしない）で、幅 380pt の中の配置、長いホスト名の省略、件名の 2 行の省略、ホバーのボタンの位置（件名の 1 行目に揃う）

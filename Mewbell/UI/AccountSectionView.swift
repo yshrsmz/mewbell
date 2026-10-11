@@ -104,7 +104,7 @@ struct AccountSectionView: View {
             case .unavailable:
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Could not get a token from gh. Log in again with:")
-                    CommandRow(command: "gh auth login --hostname \(account.host)")
+                    CommandRow(command: GhCommand.login(host: account.host))
                 }
                 .sectionNote()
             case .disabled:
@@ -267,7 +267,7 @@ struct FeedStatusView: View {
                 CommandRow(command: "gh auth refresh --hostname \(account.host) --scopes repo")
             case .unauthorized:
                 Text("GitHub rejected the token from gh. Log in again, then reload:")
-                CommandRow(command: "gh auth login --hostname \(account.host)")
+                CommandRow(command: GhCommand.login(host: account.host))
             }
             if isTruncated, phase.showsThreads {
                 Label(

@@ -23,6 +23,7 @@ struct RepositoryGroupView: View {
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                         .truncationMode(.middle)
+                        .frame(minWidth: ListLayout.ellipsisWidth, alignment: .leading)
                         .help(group.repository.description)
                 }
                 Spacer(minLength: 0)

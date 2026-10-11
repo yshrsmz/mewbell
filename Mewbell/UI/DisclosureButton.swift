@@ -97,8 +97,8 @@ enum ListLayout {
 }
 
 extension View {
-    /// 区画の中の補足の文（取得の状態、操作の失敗、トークンを取れないときの案内）の体裁。
-    /// 文字の大きさを揃え、見出しの中身の字下げに合わせ、幅に合わせて折り返す
+    /// 区画の中の補足の文（トークンと取得の状態、未読が無いこと、操作の失敗、案内とコマンドの行）の体裁。
+    /// 文字の大きさを揃え（コマンドの行は自分の等幅の書体のまま）、見出しの中身の字下げに合わせ、幅に合わせて折り返す
     func sectionNote() -> some View {
         font(.subheadline)
             .padding(.leading, ListLayout.contentIndent)
