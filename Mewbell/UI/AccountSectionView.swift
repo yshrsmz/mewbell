@@ -162,22 +162,23 @@ struct AccountSectionView: View {
             Text(account.user)
                 .font(.headline)
                 .lineLimit(1)
+                .truncationMode(.tail)
                 .layoutPriority(1)
+                .help(account.user)
             if account.isActive {
                 Text("active")
                     .font(.subheadline)
-                    .fixedSize()
                     .capsuleBadge(.tint.opacity(0.15))
                     .help("The active account for this host in gh")
             }
-            Text("\(account.host) — \(account.hostKind.displayName)")
+            Text(account.hostLabel)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 // 「…」も入らない幅まで縮むと、省略記号の無い切れた字が残るので、「…」の分だけは残す
-                .frame(minWidth: 16, alignment: .leading)
-                .help("\(account.host) — \(account.hostKind.displayName)")
+                .frame(minWidth: ListLayout.ellipsisWidth, alignment: .leading)
+                .help(account.hostLabel)
             if participatingOnly {
                 Image(systemName: "person.crop.circle.badge.checkmark")
                     .font(.subheadline)
@@ -211,9 +212,8 @@ struct AccountSectionView: View {
     @ViewBuilder private func threads() -> some View {
         if repositories.isEmpty {
             Text("No unread notifications")
-                .font(.callout)
                 .foregroundStyle(.secondary)
-                .padding(.leading, ListLayout.contentIndent)
+                .sectionNote()
         } else {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(repositories) { group in

@@ -92,6 +92,8 @@ enum ListLayout {
     static let spacing: CGFloat = 6
     /// 見出しの下に置く中身の字下げ（山形の幅と間隔の分）
     static let contentIndent = chevronWidth + spacing
+    /// 省略記号「…」が 1 つ入る幅（`.subheadline` の文字）。ここまで縮めると、省略記号の無い切れた字が残らない
+    static let ellipsisWidth: CGFloat = 16
 }
 
 extension View {
@@ -125,7 +127,6 @@ private struct CollapsedCount: View {
     var body: some View {
         Text("\(count)")
             .font(.subheadline.monospacedDigit())
-            .fixedSize()
             .foregroundStyle(.secondary)
             .capsuleBadge(.secondary.opacity(0.15))
             .accessibilityLabel("\(count) unread")
@@ -133,9 +134,10 @@ private struct CollapsedCount: View {
 }
 
 extension View {
-    /// 見出しに添える小さなカプセル型のバッジ（「active」、折りたたんだときの件数）。
+    /// 見出しに添える小さなカプセル型のバッジ（「active」、折りたたんだときの件数）。幅が足りなくても省略しない。
     func capsuleBadge(_ fill: some ShapeStyle) -> some View {
-        padding(.horizontal, 5)
+        fixedSize()
+            .padding(.horizontal, 5)
             .padding(.vertical, 1)
             .background(fill, in: Capsule())
     }

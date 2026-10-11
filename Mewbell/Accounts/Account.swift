@@ -53,6 +53,8 @@ struct Account: Hashable, Sendable, Identifiable {
     var host: String { id.host }
     var user: String { id.user }
     var hostKind: HostKind { HostKind(host: host) }
+    /// 一覧の見出しと設定画面に出すホスト名とホスト種別（`github.com — GitHub.com`）
+    var hostLabel: String { "\(host) — \(hostKind.displayName)" }
 
     /// `hosts.yml` から、表示する順に並べたアカウントを作る。
     /// `github.com` を先頭に残りのホストを名前順に、同じホストではアクティブなユーザーを先頭に残りを名前順に並べる。

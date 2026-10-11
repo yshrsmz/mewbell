@@ -11,7 +11,6 @@ struct NotificationPermissionBanner: View {
             Image(systemName: "bell.slash.fill")
                 .foregroundStyle(.secondary)
             Text("Notifications are turned off for Mewbell.")
-                .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button("Open Settings") {
@@ -21,6 +20,7 @@ struct NotificationPermissionBanner: View {
             }
             .controlSize(.small)
         }
+        .font(.subheadline)
         .padding(8)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
     }

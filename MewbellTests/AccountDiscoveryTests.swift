@@ -20,6 +20,11 @@ struct AccountTests {
         #expect(AccountID(host: "GHE.Example.com", user: "Dave").description == "ghe.example.com/Dave")
     }
 
+    @Test func labelsTheHostWithItsKind() {
+        let account = Account(id: AccountID(host: "acme.ghe.com", user: "dave"), isActive: false)
+        #expect(account.hostLabel == "acme.ghe.com — GHE Cloud")
+    }
+
     @Test func sortsGitHubDotComFirstAndTheActiveUserFirst() {
         let hostsFile = HostsFile(hosts: [
             .init(name: "ghe.example.com", users: ["dave"], activeUser: "dave"),
