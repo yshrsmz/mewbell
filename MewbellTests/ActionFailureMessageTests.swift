@@ -4,7 +4,8 @@ import Testing
 @testable import Mewbell
 
 struct ActionFailureMessageTests {
-    private let alice = AccountID(host: "github.com", user: "alice")
+    private let alice = Account(id: AccountID(host: "github.com", user: "alice"), isActive: true)
+    private let bob = Account(id: AccountID(host: "acme.ghe.com", user: "bob"), isActive: true)
 
     private func failure(_ action: ThreadActionKind, _ kind: FailureKind) -> ActionFailure {
         ActionFailure(action: action, kind: kind, occurredAt: Date(timeIntervalSince1970: 0))
@@ -30,7 +31,6 @@ struct ActionFailureMessageTests {
         let failure = failure(.markAllRead, .rateLimited)
         #expect(
             ActionFailureMessage.text(for: failure).hasPrefix("Could not mark all as read because of the rate limit."))
-        let bob = AccountID(host: "acme.ghe.com", user: "bob")
         #expect(ActionFailureMessage.command(for: failure, account: bob) == nil)
     }
 

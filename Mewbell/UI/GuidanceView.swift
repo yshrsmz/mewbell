@@ -55,7 +55,7 @@ struct GuidanceView: View {
             case .notLoggedIn:
                 title("Not logged in to gh", systemImage: "person.crop.circle.badge.questionmark")
                 Text("Log in with the GitHub CLI. For GitHub Enterprise, add --hostname <host>.")
-                CommandRow(command: GhCommand.login())
+                CommandRow(command: GhCommand.login)
             case .accounts:
                 EmptyView()
             }

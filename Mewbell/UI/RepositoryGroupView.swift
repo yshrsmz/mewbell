@@ -12,18 +12,16 @@ struct RepositoryGroupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: ListLayout.spacing) {
-                DisclosureButton(
-                    isCollapsed: isCollapsed, name: group.repository.description,
-                    count: group.threads.count
-                ) {
-                    expansion.toggleRepository(group.repository)
-                } label: {
-                    OneLineText(text: group.repository.description, truncation: .middle)
-                        .font(.subheadline.weight(.semibold))
-                }
-                Spacer(minLength: 0)
+            DisclosureButton(
+                isCollapsed: isCollapsed, name: group.repository.description,
+                count: group.threads.count
+            ) {
+                expansion.toggleRepository(group.repository)
+            } label: {
+                OneLineText(text: group.repository.description, truncation: .middle)
+                    .font(.subheadline.weight(.semibold))
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             if !isCollapsed {
                 ForEach(group.threads) { thread in
                     ThreadRow(

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 一覧の字下げ。見出しの山形の幅と、山形と中身の間隔から決まる。
+/// 一覧の寸法（見出しの字下げと、区画の中の文の行の間隔）。
 enum ListLayout {
     /// 見出しの山形の幅
     static let chevronWidth: CGFloat = 16
@@ -15,7 +15,8 @@ enum ListLayout {
 extension View {
     /// 区画の中の文（取得とトークンの状態、未読が無いこと、操作の失敗、案内とコマンドの行）の体裁。
     /// 薄い色にしてよい「補足の情報」とは別で、色はここでは決めない。
-    /// 文字の大きさを揃え（コマンドの行は自分の等幅の書体のまま）、見出しの中身の字下げに合わせ、幅に合わせて折り返す
+    /// 文字の大きさを揃え（コマンドの行は自分の等幅の書体のまま）、見出しの中身の字下げに合わせ、幅に合わせて折り返す。
+    /// 行の間隔は付けない。複数の行を並べるときは、呼び出し側で `ListLayout.noteSpacing` の `VStack` に入れる
     func sectionNote() -> some View {
         font(.subheadline)
             .padding(.leading, ListLayout.contentIndent)

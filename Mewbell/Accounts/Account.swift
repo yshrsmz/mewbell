@@ -55,6 +55,7 @@ struct Account: Hashable, Sendable, Identifiable {
 
     var host: String { id.host }
     var user: String { id.user }
+    var displayName: String { id.displayName }
     var hostKind: HostKind { HostKind(host: host) }
 
     /// `hosts.yml` から、表示する順に並べたアカウントを作る。

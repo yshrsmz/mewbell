@@ -104,7 +104,7 @@ struct AccountSectionView: View {
             case .unavailable:
                 VStack(alignment: .leading, spacing: ListLayout.noteSpacing) {
                     Text("Could not get a token from gh. Log in again with:")
-                    CommandRow(command: GhCommand.login(host: account.host))
+                    CommandRow(command: GhCommand.relogin(for: account.id))
                 }
                 .sectionNote()
             case .disabled:
@@ -115,7 +115,7 @@ struct AccountSectionView: View {
                 if let feed {
                     FeedStatusView(account: account, phase: feed.phase, isTruncated: feed.isTruncated)
                     if let failure = feed.actionFailure {
-                        ActionFailureView(failure: failure, account: account.id)
+                        ActionFailureView(failure: failure, account: account)
                     }
                     // 折りたたんでも、取得の状態と操作の失敗は出し続ける
                     if disclosure.showsThreads && !disclosure.isCollapsed {
@@ -127,10 +127,10 @@ struct AccountSectionView: View {
     }
 
     private func header(_ disclosure: AccountDisclosure) -> some View {
-        HStack(spacing: ListLayout.spacing) {
+        HStack(spacing: 6) {
             // 開閉のボタンと「すべて既読」は分ける（押し間違えて開閉しないように）
             DisclosureButton(
-                isCollapsed: disclosure.isCollapsed, name: account.id.displayName,
+                isCollapsed: disclosure.isCollapsed, name: account.displayName,
                 isCollapsible: disclosure.showsThreads, count: feed?.threads.count ?? 0
             ) {
                 expansion.toggle()
@@ -259,7 +259,7 @@ struct FeedStatusView: View {
                 CommandRow(command: GhCommand.refreshScopes(for: account.id))
             case .unauthorized:
                 Text("GitHub rejected the token from gh. Log in again, then reload:")
-                CommandRow(command: GhCommand.login(host: account.host))
+                CommandRow(command: GhCommand.relogin(for: account.id))
             }
             if isTruncated, phase.showsThreads {
                 Label(

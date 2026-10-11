@@ -25,15 +25,15 @@ enum ActionFailureMessage {
     }
 
     /// 文に添えるコマンド（認証エラーのときだけ）。
-    static func command(for failure: ActionFailure, account: AccountID) -> String? {
-        failure.kind == .unauthorized ? GhCommand.login(host: account.host) : nil
+    static func command(for failure: ActionFailure, account: Account) -> String? {
+        failure.kind == .unauthorized ? GhCommand.relogin(for: account.id) : nil
     }
 }
 
 /// アカウントの区画に出す、操作の失敗の知らせ（幅に合わせて折り返す）。次の取得が成功すると `FeedState.actionFailure` ごと消える。
 struct ActionFailureView: View {
     let failure: ActionFailure
-    let account: AccountID
+    let account: Account
 
     var body: some View {
         VStack(alignment: .leading, spacing: ListLayout.noteSpacing) {
@@ -51,7 +51,7 @@ struct ActionFailureView: View {
 }
 
 #Preview {
-    let alice = AccountID(host: "github.com", user: "alice")
+    let alice = Account(id: AccountID(host: "github.com", user: "alice"), isActive: true)
     VStack(alignment: .leading, spacing: 12) {
         ActionFailureView(
             failure: ActionFailure(action: .done, kind: .httpStatus(500), occurredAt: .now), account: alice)
@@ -59,7 +59,7 @@ struct ActionFailureView: View {
             failure: ActionFailure(action: .read, kind: .unauthorized, occurredAt: .now), account: alice)
         ActionFailureView(
             failure: ActionFailure(action: .markAllRead, kind: .rateLimited, occurredAt: .now),
-            account: AccountID(host: "acme.ghe.com", user: "bob"))
+            account: Account(id: AccountID(host: "acme.ghe.com", user: "bob"), isActive: true))
     }
     .padding()
     .frame(width: 380)

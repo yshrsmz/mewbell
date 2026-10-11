@@ -8,10 +8,11 @@ enum GhCommand {
     static let version = "gh --version"
     /// gh のログインの状態を確かめるコマンド
     static let status = "gh auth status"
-    /// gh にログインするコマンド。ホストを渡すとそのホストにログインし直す
-    static func login(host: String? = nil) -> String {
-        guard let host else { return "gh auth login" }
-        return "gh auth login --hostname \(host)"
+    /// gh にログインするコマンド
+    static let login = "gh auth login"
+    /// そのアカウントのホストに gh でログインし直すコマンド
+    static func relogin(for account: AccountID) -> String {
+        "gh auth login --hostname \(account.host)"
     }
     /// そのアカウントをホストのアクティブなアカウントにするコマンド
     static func switchUser(to account: AccountID) -> String {

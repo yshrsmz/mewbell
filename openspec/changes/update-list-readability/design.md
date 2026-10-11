@@ -99,15 +99,15 @@
 
 ### D7: gh のコマンドの文字列
 
-案内に出すコマンド（gh と、gh を入れる・新しくする Homebrew のコマンド）は、`Mewbell/UI/GhCommand.swift` の `GhCommand`（`install`・`upgrade`・`version`・`status`・`login`・`switchUser`・`refreshScopes`）ですべて作る。ホスト名とユーザー名は `AccountID` から埋め込み、取り違えを型で防ぐ（`AccountID` は検証を通った値から作る。security.md）。`login` はホスト単位でログインし直すので、ホスト名を受け取る既定引数 `host: String? = nil` の 1 つにまとめる。`ActionFailureView` も `host: String` ではなく `AccountID` を受け取り、兄弟の `FeedStatusView`（`Account` を受け取る）と揃える。`gh auth login --hostname <host>` が 3 か所で組み立てられていたのがきっかけで、使う回数ではなく役割（区画と案内画面に出すコマンド）でまとめる。
+案内に出すコマンド（gh と、gh を入れる・新しくする Homebrew のコマンド）は、`Mewbell/UI/GhCommand.swift` の `GhCommand`（`install`・`upgrade`・`version`・`status`・`login`・`switchUser`・`refreshScopes`）ですべて作る。ホスト名とユーザー名は `AccountID` から埋め込み、取り違えを型で防ぐ（`AccountID` は検証を通った値から作る。security.md）。ホストを決めないログインは定数 `login`（`gh auth login`）、ログインし直すのは `relogin(for: AccountID)`、`switchUser(to:)` と `refreshScopes(for:)` も `AccountID` を受け取る。ホスト名・ユーザー名を埋め込むコマンドはすべて `AccountID` を受け取る。`ActionFailureView` と `ActionFailureMessage.command(for:account:)` は `Account` を受け取り、兄弟の `FeedStatusView` と揃える。`gh auth login --hostname <host>` が 3 か所で組み立てられていたのがきっかけで、使う回数ではなく役割（区画と案内画面に出すコマンド）でまとめる。
 
 ### D8: 表示用の名前と体裁の部品の置き場所
 
-`hostLabel` はモデルではなく UI 層の `Account` の拡張（`Mewbell/UI/Account+Display.swift`）に置く。モデルは自分を表示する画面を知らない。アカウントの名前 `alice (github.com)` は、ポップオーバーと macOS の通知の両方が使うので、表示する層ではなく `AccountID.displayName`（`HostKind.displayName` と同じく識別子の側）に置く。通知の本文の書き方も、これに揃える（ユーザーの判断。notifications の spec を MODIFIED で直す）。`ListLayout`・`sectionNote()`・`capsuleBadge`・`OneLineText` は一覧の体裁の部品なので、開閉のボタンのファイルではなく `Mewbell/UI/ListLayout.swift` に置く。
+`hostLabel` はモデルではなく UI 層の `Account` の拡張（`Mewbell/UI/Account+Display.swift`）に置く。モデルは自分を表示する画面を知らない。アカウントの名前 `alice (github.com)` は、ポップオーバーと macOS の通知の両方が使うので、表示する層ではなく `AccountID.displayName`（`HostKind.displayName` と同じく識別子の側）に置く。`Account` は `host`・`user` と同じく `displayName` も `id` から転送する。通知の本文の書き方も、これに揃える（ユーザーの判断。notifications の spec を MODIFIED で直す）。`ListLayout`・`sectionNote()`・`capsuleBadge`・`OneLineText` は一覧の体裁の部品なので、開閉のボタンのファイルではなく `Mewbell/UI/ListLayout.swift` に置く。
 
 ### スレッドと actor の境界
 
-View の modifier を変えるだけで、`@MainActor` の View の中で完結する。actor とネットワーク、ポーリングには触れない。
+View の modifier と、表示用の文字列（`GhCommand`、`Account` の表示用の名前、macOS の通知の本文）を変えるだけで、`@MainActor` の View の中で完結する。actor とネットワーク、ポーリングには触れない。
 
 ### テストでの差し替え
 
@@ -123,10 +123,10 @@ SwiftUI の書体はユニットテストから読めないので、書体のユ
 
 ## セキュリティ
 
-トークン・gh サブプロセス・ネットワーク・URL を開く処理のいずれにも触れない。表示する内容も変えないので、トークンや API の URL を表示しないこと（ui「アカウント一覧の表示」）はそのまま保たれる。`.claude/rules/security.md` の項目で、この change で新しく満たすものは無い。
+トークン・gh サブプロセス・ネットワーク・URL を開く処理のいずれにも触れない。ポップオーバーに表示する項目は変えない。macOS の通知の本文はアカウントの書き方だけを `<user> (<host>)` に変え、入れる情報（理由とアカウント）は変えない。トークンや API の URL を表示しないこと（ui「アカウント一覧の表示」、notifications の「トークンや API の URL を入れない」）はそのまま保たれる。`.claude/rules/security.md` の項目で、この change で新しく満たすものは無い。
 
 ## Risks / Trade-offs
 
 - [行の高さが増え、一度に見えるスレッドが減る] → 主に増えるのは 2 行目とリポジトリの見出しの 1pt ずつ、アカウントのユーザー名の 2pt（ほかに取得の状態の文と山形も 1pt 増え、「No unread notifications」は 1pt 減る）で、一覧はいまも 480pt でスクロールする。未読が少なく、見えるスレッドの数は比べられなかった（tasks.md 1.1・3.3）。行の高さが増えることは、手元のポップオーバーのスクリーンショットで見た（tasks.md 3.3 (a)）
 - [見出しの行が横にあふれる] → D4 の順（ホスト名 → ユーザー名の末尾）で縮め、active の印・件数・確認の文は省略しない。長いホスト名・長いユーザー名を一時的なテストの画像で確かめる（tasks.md 5.2・5.8）
-- [ホバーのボタンと件名の重なり] → 件名の大きさは変えないので、ボタンの位置と件名を消す範囲（`ThreadActionButtons.titleFade`）は変えずに済む。ホバーのプレビューで確かめる
+- [ホバーのボタンと件名の重なり] → 件名の大きさは変えないので、ボタンの位置と件名を消す範囲（`ThreadActionButtons.titleFade`）は変えずに済む。手元のポップオーバーでホバーして確かめる（tasks.md 2.1）

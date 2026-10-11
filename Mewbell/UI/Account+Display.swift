@@ -1,4 +1,5 @@
-/// 画面に出すホストの名前（モデルは自分を表示する画面を知らないので、UI の側に置く）。
+/// UI だけが使うホスト名の表示（モデルは自分を表示する画面を知らないので、UI の側に置く）。
+/// ポップオーバーと macOS の通知の両方が使うアカウントの名前は `AccountID.displayName` にある。
 extension Account {
     /// 見出しと設定画面に出すホスト名とホスト種別（`github.com — GitHub.com`）
     var hostLabel: String { "\(host) — \(hostKind.displayName)" }
