@@ -58,6 +58,15 @@ struct ThreadWebURLTests {
         ThreadWebURL.make(for: thread, endpoints: endpoints)?.absoluteString
     }
 
+    @Test func opensTheWebNotificationsPageOfTheHost() {
+        #expect(ThreadWebURL.notificationsPage(endpoints: github)?.absoluteString == "https://github.com/notifications")
+        #expect(
+            ThreadWebURL.notificationsPage(endpoints: gheCloud)?.absoluteString
+                == "https://acme.ghe.com/notifications")
+        #expect(
+            ThreadWebURL.notificationsPage(endpoints: ghes)?.absoluteString == "https://ghe.example.com/notifications")
+    }
+
     @Test func opensPullRequestsIssuesAndCommits() throws {
         #expect(
             url(try thread(subjectURL: "https://api.github.com/repos/octo/app/pulls/42"), github)

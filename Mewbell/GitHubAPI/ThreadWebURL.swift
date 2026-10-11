@@ -38,6 +38,12 @@ enum ThreadWebURL {
         return isOpenable(url, host: endpoints.host) ? url : nil
     }
 
+    /// アカウントのホストの Web の通知一覧（`https://<host>/notifications`、絞り込みなし）。開けなければ nil。
+    static func notificationsPage(endpoints: APIEndpoints) -> URL? {
+        let url = endpoints.webBaseURL.appending(path: "notifications")
+        return isOpenable(url, host: endpoints.host) ? url : nil
+    }
+
     private static func repositoryBase(_ repository: RepositoryName, endpoints: APIEndpoints) -> URL {
         endpoints.webBaseURL.appending(path: repository.owner).appending(path: repository.name)
     }
