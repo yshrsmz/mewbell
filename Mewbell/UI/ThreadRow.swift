@@ -52,6 +52,16 @@ struct ThreadRow: View {
         }
         .buttonStyle(.plain)
         .help("Open in browser and mark as read")
+        // ホバーのボタンの下に件名が透けないよう、ボタンの範囲と手前を消す（折り返しは変えないので行の高さは動かない）
+        .mask {
+            Rectangle()
+                .overlay(alignment: .topTrailing) {
+                    if isHovering {
+                        ThreadActionButtons.titleFade
+                    }
+                }
+                .compositingGroup()
+        }
         // 上端に揃えて件名の 1 行目の高さに置く（件名が 2 行の行でも位置が変わらず、Done で繰り上がった行でもカーソルの下に来るように）
         .overlay(alignment: .topTrailing) {
             if isHovering {
@@ -81,10 +91,28 @@ struct ThreadRow: View {
     }
 }
 
-/// 行に重ねる「既読にする」「Done にする」のボタン。件名の上に重なるので、背景で下の文字を隠す。
+/// 行に重ねる「既読にする」「Done にする」のボタン。件名の上に重なるので、行は `titleFade` でボタンの下の文字を消す。
+/// （背景で隠すと、ポップオーバーの半透明の背景では下の文字が透けて見える）
 private struct ThreadActionButtons: View {
     let markRead: () -> Void
     let markDone: () -> Void
+
+    /// ボタンの大きさ（22 × 2、間隔 2、左右の余白 2 × 2）
+    private static let size = CGSize(width: 22 * 2 + 2 + 2 * 2, height: 22)
+    /// ボタンの手前で件名を薄くしていく幅
+    private static let fadeWidth: CGFloat = 16
+
+    /// 行のマスクから抜く形。ボタンの範囲を消し、その手前をだんだん薄くする
+    static var titleFade: some View {
+        HStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                .frame(width: fadeWidth)
+            Color.black
+                .frame(width: size.width)
+        }
+        .frame(height: size.height)
+        .blendMode(.destinationOut)
+    }
 
     var body: some View {
         HStack(spacing: 2) {
@@ -105,7 +133,6 @@ private struct ThreadActionButtons: View {
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, 2)
-        .background(.background, in: RoundedRectangle(cornerRadius: 5))
     }
 }
 
