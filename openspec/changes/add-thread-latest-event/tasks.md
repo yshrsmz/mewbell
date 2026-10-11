@@ -35,5 +35,5 @@
 
 ## 6. 別コンテキストでのレビュー
 
-- [ ] 6.1 新しいコンテキストの opus サブエージェントで `simplify` スキルを実行し、作業ツリーに入った変更を確かめる。確認: `bash scripts/lint.sh` と `xcodebuild test` が引き続き通る
+- [x] 6.1 新しいコンテキストの opus サブエージェントで `simplify` スキルを実行し、作業ツリーに入った変更を確かめる。確認: `bash scripts/lint.sh` と `xcodebuild test` が引き続き通る 結果: 6 件を直した（挙動は変えない）: 配列の寛容なデコードを `APIJSON` にまとめる、`subjectState` の `if let`、使わない `Equatable` を外す、`pending` の書き方、通知の本文の組み立てを行と揃える、`ThreadIcon.stateIcon` を専用の構造体にする。直さなかった候補（イベント名の `switch` は swiftlint の複雑さの上限を超える、一時的な失敗の取り直しの間隔は spec の変更になる、`AccountPoller` の `private` を外したのはユーザーの判断、既存の状態コードの分類の共通化は差分の外、など 11 件）は PR 本文に理由を書く。lint・テスト 499 件・警告をエラー扱いにした Debug と Release のビルドが通った
 - [ ] 6.2 別の新しいコンテキストの opus サブエージェントで `code-review` スキルを effort `medium` で実行し、指摘ごとに「直した / 直さない（理由）」を決めて対応する。ロジックに手を入れたら 6.2 をやり直す。確認: 指摘の件数と対応結果を PR 本文に書いた

@@ -78,19 +78,30 @@ extension NotificationThread {
     /// `GET /notifications` のレスポンスボディを読む。形の崩れたスレッドは 1 件ずつ読み飛ばす。
     /// ボディ全体が JSON の配列でなければ nil。番号（`subjectNumber`）は `endpoints` で求める。
     static func decodeList(from data: Data, endpoints: APIEndpoints) -> [NotificationThread]? {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        guard let items = try? decoder.decode([LenientThread].self, from: data) else { return nil }
-        return items.compactMap { $0.value?.thread(endpoints: endpoints) }
+        APIJSON.decodeArray(ThreadDTO.self, from: data)?.compactMap { $0.thread(endpoints: endpoints) }
     }
 }
 
-/// 1 件のデコードに失敗しても配列全体を失敗させないための入れ物。
-private struct LenientThread: Decodable {
-    let value: ThreadDTO?
+/// API のレスポンスボディ（JSON、キーは snake_case）の読み方。
+enum APIJSON {
+    static func decoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return decoder
+    }
 
-    init(from decoder: any Decoder) throws {
-        value = try? ThreadDTO(from: decoder)
+    /// JSON の配列を読む。形の崩れた要素は 1 件ずつ読み飛ばす。ボディ全体が JSON の配列でなければ nil。
+    static func decodeArray<Element: Decodable>(_: Element.Type, from data: Data) -> [Element]? {
+        (try? decoder().decode([Lenient<Element>].self, from: data))?.compactMap(\.value)
+    }
+
+    /// 1 件のデコードに失敗しても配列全体を失敗させないための入れ物。
+    private struct Lenient<Value: Decodable>: Decodable {
+        let value: Value?
+
+        init(from decoder: any Decoder) throws {
+            value = try? Value(from: decoder)
+        }
     }
 }
 

@@ -30,31 +30,32 @@ struct ThreadIcon: Equatable {
 
     init(kind: SubjectKind, state: SubjectState?) {
         let kindName = Self.kindName(kind)
-        guard let state, let icon = Self.stateIcon(kind: kind, state: state) else {
-            self.init(symbol: Self.kindSymbol(kind), color: nil, label: kindName)
-            return
+        if let state, let icon = Self.stateIcon(kind: kind, state: state) {
+            (symbol, color, label) = (icon.symbol, icon.color, "\(kindName), \(icon.stateName)")
+        } else {
+            (symbol, color, label) = (Self.kindSymbol(kind), nil, kindName)
         }
-        self.init(symbol: icon.symbol, color: icon.color, label: "\(kindName), \(icon.label)")
     }
 
-    private init(symbol: String, color: Color?, label: String) {
-        self.symbol = symbol
-        self.color = color
-        self.label = label
+    /// 状態ごとの記号・色・状態の名前
+    private struct StateIcon {
+        let symbol: String
+        let color: Color?
+        let stateName: String
     }
 
-    /// 状態ごとの記号・色・状態の名前。種類に合わない状態なら nil（種類のアイコンを出す）。
-    private static func stateIcon(kind: SubjectKind, state: SubjectState) -> ThreadIcon? {
+    /// 状態ごとのアイコン。種類に合わない状態なら nil（種類のアイコンを出す）。
+    private static func stateIcon(kind: SubjectKind, state: SubjectState) -> StateIcon? {
         switch (kind, state) {
-        case (.pullRequest, .open): ThreadIcon(symbol: "arrow.triangle.pull", color: .green, label: "open")
-        case (.pullRequest, .draft): ThreadIcon(symbol: "circle.dashed", color: nil, label: "draft")
-        case (.pullRequest, .merged): ThreadIcon(symbol: "arrow.triangle.merge", color: .purple, label: "merged")
-        case (.pullRequest, .closed): ThreadIcon(symbol: "xmark.circle", color: .red, label: "closed")
-        case (.issue, .open): ThreadIcon(symbol: "smallcircle.filled.circle", color: .green, label: "open")
+        case (.pullRequest, .open): StateIcon(symbol: "arrow.triangle.pull", color: .green, stateName: "open")
+        case (.pullRequest, .draft): StateIcon(symbol: "circle.dashed", color: nil, stateName: "draft")
+        case (.pullRequest, .merged): StateIcon(symbol: "arrow.triangle.merge", color: .purple, stateName: "merged")
+        case (.pullRequest, .closed): StateIcon(symbol: "xmark.circle", color: .red, stateName: "closed")
+        case (.issue, .open): StateIcon(symbol: "smallcircle.filled.circle", color: .green, stateName: "open")
         case (.issue, .closedCompleted):
-            ThreadIcon(symbol: "checkmark.circle", color: .purple, label: "closed as completed")
+            StateIcon(symbol: "checkmark.circle", color: .purple, stateName: "closed as completed")
         case (.issue, .closedNotPlanned):
-            ThreadIcon(symbol: "slash.circle", color: nil, label: "closed as not planned")
+            StateIcon(symbol: "slash.circle", color: nil, stateName: "closed as not planned")
         default: nil
         }
     }

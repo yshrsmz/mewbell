@@ -29,18 +29,14 @@ struct ThreadDetailsCache {
     func pending(in threads: [NotificationThread], newOnly: Bool, limit: Int, now: Date) -> [NotificationThread] {
         if let pausedUntil, now < pausedUntil { return [] }
         if newOnly && previous == nil { return [] }
-        return
-            threads
-            .filter { thread in
-                guard thread.subjectNumber != nil, entries[thread.id]?.updatedAt != thread.updatedAt else {
-                    return false
-                }
-                guard newOnly, let previous else { return true }
-                return previous[thread.id].map { $0 < thread.updatedAt } ?? true
+        let waiting = threads.filter { thread in
+            guard thread.subjectNumber != nil, entries[thread.id]?.updatedAt != thread.updatedAt else {
+                return false
             }
-            .sorted { $0.updatedAt > $1.updatedAt }
-            .prefix(limit)
-            .map { $0 }
+            guard newOnly, let previous else { return true }
+            return previous[thread.id].map { $0 < thread.updatedAt } ?? true
+        }
+        return Array(waiting.sorted { $0.updatedAt > $1.updatedAt }.prefix(limit))
     }
 
     /// 取得の結果をまとめて記録する。1 つでも記録したら true（一覧に付け直す必要がある）。

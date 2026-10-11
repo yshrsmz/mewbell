@@ -1,12 +1,12 @@
 import Foundation
 
 /// `GET /repos/{owner}/{repo}/issues/{number}` のうち、状態とイベントを決めるのに使う値だけ。本文などは型に載せない。
-struct IssueSummary: Decodable, Sendable, Equatable {
-    struct Login: Decodable, Sendable, Equatable {
+struct IssueSummary: Decodable, Sendable {
+    struct Login: Decodable, Sendable {
         let login: String?
     }
 
-    struct PullRequest: Decodable, Sendable, Equatable {
+    struct PullRequest: Decodable, Sendable {
         let mergedAt: String?
     }
 
@@ -19,13 +19,13 @@ struct IssueSummary: Decodable, Sendable, Equatable {
 
     /// レスポンスボディを読む。形が崩れていれば nil。
     static func decode(from data: Data) -> IssueSummary? {
-        try? TimelineItem.decoder.decode(IssueSummary.self, from: data)
+        try? APIJSON.decoder().decode(IssueSummary.self, from: data)
     }
 
     /// 件名の今の状態。知らない値なら nil。
     var subjectState: SubjectState? {
-        if pullRequest != nil {
-            if pullRequest?.mergedAt != nil { return .merged }
+        if let pullRequest {
+            if pullRequest.mergedAt != nil { return .merged }
             switch state {
             case "closed": return .closed
             case "open": return draft == true ? .draft : .open
@@ -41,8 +41,8 @@ struct IssueSummary: Decodable, Sendable, Equatable {
 }
 
 /// Timeline の 1 項目のうち、イベントを決めるのに使う値だけ。コメントの本文などは型に載せない。
-struct TimelineItem: Decodable, Sendable, Equatable {
-    struct Committer: Decodable, Sendable, Equatable {
+struct TimelineItem: Decodable, Sendable {
+    struct Committer: Decodable, Sendable {
         let date: String?
     }
 
@@ -54,25 +54,9 @@ struct TimelineItem: Decodable, Sendable, Equatable {
     let user: IssueSummary.Login?
     let committer: Committer?
 
-    static var decoder: JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return decoder
-    }
-
     /// Timeline の 1 ページを読む。形の崩れた項目は 1 件ずつ読み飛ばす。ボディ全体が JSON の配列でなければ nil。
     static func decodePage(from data: Data) -> [TimelineItem]? {
-        guard let items = try? decoder.decode([Lenient].self, from: data) else { return nil }
-        return items.compactMap(\.value)
-    }
-
-    /// 1 件のデコードに失敗しても配列全体を失敗させないための入れ物。
-    private struct Lenient: Decodable {
-        let value: TimelineItem?
-
-        init(from decoder: any Decoder) throws {
-            value = try? TimelineItem(from: decoder)
-        }
+        APIJSON.decodeArray(TimelineItem.self, from: data)
     }
 }
 
@@ -87,7 +71,7 @@ enum ThreadEventResolver {
     /// `closed` をマージとみなす、`closed` の前の `merged` の幅
     static let mergeMargin: TimeInterval = 60
 
-    struct Candidate: Equatable {
+    struct Candidate {
         let kind: ThreadEvent.Kind
         let date: Date
         let actor: String?
