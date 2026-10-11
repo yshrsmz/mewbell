@@ -6,11 +6,12 @@ struct OpenWebNotificationsButton: View {
     let action: () -> Void
 
     var body: some View {
+        let label = "Open notifications on \(host)"
         Button(action: action) {
             Image(systemName: "arrow.up.forward.square")
         }
         .buttonStyle(.borderless)
-        .help("Open notifications on \(host)")
-        .accessibilityLabel("Open notifications on \(host)")
+        .help(label)
+        .accessibilityLabel(label)
     }
 }

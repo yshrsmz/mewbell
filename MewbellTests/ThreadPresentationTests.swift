@@ -65,11 +65,6 @@ struct ThreadWebURLTests {
                 == "https://acme.ghe.com/notifications")
         #expect(
             ThreadWebURL.notificationsPage(endpoints: ghes)?.absoluteString == "https://ghe.example.com/notifications")
-        for endpoints in [github, gheCloud, ghes] {
-            let url = ThreadWebURL.notificationsPage(endpoints: endpoints)
-            #expect(url?.query == nil)
-            #expect(url?.host == endpoints.host)
-        }
     }
 
     @Test func opensPullRequestsIssuesAndCommits() throws {
