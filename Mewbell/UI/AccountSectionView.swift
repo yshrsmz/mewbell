@@ -102,7 +102,7 @@ struct AccountSectionView: View {
                     .foregroundStyle(.secondary)
                     .sectionNote()
             case .unavailable:
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: ListLayout.noteSpacing) {
                     Text("Could not get a token from gh. Log in again with:")
                     CommandRow(command: GhCommand.login(host: account.host))
                 }
@@ -130,7 +130,7 @@ struct AccountSectionView: View {
         HStack(spacing: 6) {
             // 開閉のボタンと「すべて既読」は分ける（押し間違えて開閉しないように）
             DisclosureButton(
-                isCollapsed: disclosure.isCollapsed, name: "\(account.user) (\(account.host))",
+                isCollapsed: disclosure.isCollapsed, name: account.accessibilityName,
                 isCollapsible: disclosure.showsThreads, count: feed?.threads.count ?? 0
             ) {
                 expansion.toggle()
@@ -161,10 +161,8 @@ struct AccountSectionView: View {
             // 幅が足りないときはホスト名から縮め、それでも足りなければユーザー名の末尾を省略する（active の印は省略しない）
             Text(account.user)
                 .font(.headline)
-                .lineLimit(1)
-                .truncationMode(.tail)
+                .truncatedToOneLine(account.user, mode: .tail)
                 .layoutPriority(1)
-                .help(account.user)
             if account.isActive {
                 Text("active")
                     .font(.subheadline)
@@ -174,11 +172,7 @@ struct AccountSectionView: View {
             Text(account.hostLabel)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                // 「…」も入らない幅まで縮むと、省略記号の無い切れた字が残るので、「…」の分だけは残す
-                .frame(minWidth: ListLayout.ellipsisWidth, alignment: .leading)
-                .help(account.hostLabel)
+                .truncatedToOneLine(account.hostLabel, mode: .middle)
             if participatingOnly {
                 Image(systemName: "person.crop.circle.badge.checkmark")
                     .font(.subheadline)
@@ -234,7 +228,7 @@ struct FeedStatusView: View {
     var isTruncated = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: ListLayout.noteSpacing) {
             switch phase {
             case .loading:
                 HStack(spacing: 6) {
@@ -262,9 +256,9 @@ struct FeedStatusView: View {
                     "The gh token for this account has neither the repo nor the notifications scope. Add it, then reload:"
                 )
                 if !account.isActive {
-                    CommandRow(command: "gh auth switch --hostname \(account.host) --user \(account.user)")
+                    CommandRow(command: GhCommand.switchUser(host: account.host, user: account.user))
                 }
-                CommandRow(command: "gh auth refresh --hostname \(account.host) --scopes repo")
+                CommandRow(command: GhCommand.refreshScopes(host: account.host))
             case .unauthorized:
                 Text("GitHub rejected the token from gh. Log in again, then reload:")
                 CommandRow(command: GhCommand.login(host: account.host))

@@ -84,28 +84,6 @@ struct DisclosureButton<Label: View>: View {
     }
 }
 
-/// 一覧の字下げ。見出しの山形の幅と、山形と中身の間隔から決まる。
-enum ListLayout {
-    /// 見出しの山形の幅
-    static let chevronWidth: CGFloat = 16
-    /// 山形と見出しの中身の間隔
-    static let spacing: CGFloat = 6
-    /// 見出しの下に置く中身の字下げ（山形の幅と間隔の分）
-    static let contentIndent = chevronWidth + spacing
-    /// 省略記号「…」が 1 つ入る幅（`.subheadline` の文字）。ここまで縮めると、省略記号の無い切れた字が残らない
-    static let ellipsisWidth: CGFloat = 16
-}
-
-extension View {
-    /// 区画の中の補足の文（トークンと取得の状態、未読が無いこと、操作の失敗、案内とコマンドの行）の体裁。
-    /// 文字の大きさを揃え（コマンドの行は自分の等幅の書体のまま）、見出しの中身の字下げに合わせ、幅に合わせて折り返す
-    func sectionNote() -> some View {
-        font(.subheadline)
-            .padding(.leading, ListLayout.contentIndent)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
 /// 開閉を示す山形。開いているときは下を向く。幅はスレッドの行の種類のアイコンと揃える。
 private struct DisclosureChevron: View {
     let isCollapsed: Bool
@@ -130,15 +108,5 @@ private struct CollapsedCount: View {
             .foregroundStyle(.secondary)
             .capsuleBadge(.secondary.opacity(0.15))
             .accessibilityLabel("\(count) unread")
-    }
-}
-
-extension View {
-    /// 見出しに添える小さなカプセル型のバッジ（「active」、折りたたんだときの件数）。幅が足りなくても省略しない。
-    func capsuleBadge(_ fill: some ShapeStyle) -> some View {
-        fixedSize()
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(fill, in: Capsule())
     }
 }

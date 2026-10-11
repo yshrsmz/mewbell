@@ -36,7 +36,7 @@ struct ActionFailureView: View {
     let host: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: ListLayout.noteSpacing) {
             Label {
                 Text(ActionFailureMessage.text(for: failure))
             } icon: {

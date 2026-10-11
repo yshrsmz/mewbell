@@ -21,10 +21,7 @@ struct RepositoryGroupView: View {
                 } label: {
                     Text(group.repository.description)
                         .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(minWidth: ListLayout.ellipsisWidth, alignment: .leading)
-                        .help(group.repository.description)
+                        .truncatedToOneLine(group.repository.description, mode: .middle)
                 }
                 Spacer(minLength: 0)
             }

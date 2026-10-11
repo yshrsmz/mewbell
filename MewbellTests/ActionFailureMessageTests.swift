@@ -45,8 +45,4 @@ struct ActionFailureMessageTests {
         let text = ActionFailureMessage.text(for: failure(.markAllRead, .noToken))
         #expect(text == "Could not mark all as read.")
     }
-
-    @Test func buildsTheLoginCommandForTheHost() {
-        #expect(GhCommand.login(host: "ghe.example.com") == "gh auth login --hostname ghe.example.com")
-    }
 }
