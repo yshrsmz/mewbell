@@ -53,12 +53,21 @@ struct NotificationListView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            // 開閉のアニメーションの間はスクロールバーを出さない
-            .scrollIndicators(animations.running > 0 ? .never : .automatic)
+            .modifier(HidesScrollIndicatorsWhileAnimating(animations: animations))
             .environment(animations)
             .frame(maxHeight: 480)
             .fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+/// 開閉のアニメーションの間はスクロールバーを出さない。
+/// 数を読むのをこの modifier に閉じ込め、開閉のたびに一覧全体が描き直されないようにする
+private struct HidesScrollIndicatorsWhileAnimating: ViewModifier {
+    let animations: DisclosureAnimations
+
+    func body(content: Content) -> some View {
+        content.scrollIndicators(animations.running > 0 ? .never : .automatic)
     }
 }
 
