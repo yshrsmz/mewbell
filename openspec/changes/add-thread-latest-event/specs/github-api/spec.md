@@ -4,7 +4,7 @@
 
 Mewbell は、番号を持つスレッド（ui「アカウント一覧の表示」の条件を満たして `#<番号>` を出すスレッド。Issue と Pull request）についてだけ、イベントを求めるために次のリクエストを送らなければならない（SHALL）。番号を持たないスレッド（Commit・Release・Discussion・CheckSuite、`subject.url` が検証を通らないものなど）には、これらのリクエストを送ってはならない（MUST NOT）。
 
-- `GET <API ベース URL>/repos/{owner}/{name}/issues/{番号}`（件名の作成日時と作成者を得る）
+- `GET <API ベース URL>/repos/{owner}/{name}/issues/{番号}`（件名の作成日時・作成者・状態を得る）
 - `GET <API ベース URL>/repos/{owner}/{name}/issues/{番号}/timeline?per_page=100`（1 ページ目）
 
 リクエストの URL は、`subject.url` をそのまま使わず、検証済みのリポジトリの `owner/name` と番号から組み立てなければならない（MUST）。Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、それが 2 ページ目以降を指すときは、その最後のページを取得しなければならない（MUST）。最後のページにイベントの候補（「スレッドのイベントの決定」）が無く、その前のページが 2 ページ目以降のときは、その前のページも取得しなければならない（MUST）。1 つのスレッドについて Timeline を 3 ページより多く取得してはならない（MUST NOT）。`Link` ヘッダーの URL にも、「トークンを送る相手の制限」の確認をしなければならない（MUST）。これらのリクエストにも、「トークンをリクエストごとに付ける」「リダイレクトとキャッシュ」「通信の内容をログに出さない」を同じく適用しなければならない（MUST）。Timeline のレスポンスにはコメントの本文が含まれるので、本文を保持・表示・ログ出力してはならない（MUST NOT）。
@@ -62,9 +62,35 @@ Mewbell は、番号を持つスレッド（ui「アカウント一覧の表示�
 - **WHEN** Mewbell がレスポンスを受け取る
 - **THEN** そのスレッドの結果は「レート制限」になり、10 分後の時刻が得られる
 
+### Requirement: スレッドの状態の決定
+
+Mewbell は、イベントを取るときに得た Issue のレスポンスから、スレッドの件名の今の状態を次の規則で決めなければならない（MUST）。Issue のレスポンスを得られなかったスレッドの状態は「分からない」にしなければならない（MUST）。
+
+- Pull request（`pull_request` がある）: `pull_request.merged_at` があれば Merged、`state` が `closed` なら Closed、`draft` が `true` なら Draft、それ以外の `open` なら Open
+- Issue: `state` が `open` なら Open、`closed` で `state_reason` が `not_planned` なら Closed as not planned、それ以外の `closed` なら Closed as completed
+- 上のどれにも当たらない値（知らない `state` など）は「分からない」
+
+#### Scenario: マージした Pull request
+
+- **GIVEN** `GET /repos/cli/cli/issues/14634` が `state: closed`、`pull_request.merged_at: 2026-10-09T14:47:45Z` を返す
+- **WHEN** Mewbell が状態を決める
+- **THEN** 状態は Merged になる
+
+#### Scenario: 対応しないで閉じた Issue
+
+- **GIVEN** Issue のレスポンスが `state: closed`、`state_reason: not_planned` で、`pull_request` が無い
+- **WHEN** Mewbell が状態を決める
+- **THEN** 状態は Closed as not planned になる
+
+#### Scenario: 下書きの Pull request
+
+- **GIVEN** Issue のレスポンスが `state: open`、`draft: true` で、`pull_request.merged_at` が `null`
+- **WHEN** Mewbell が状態を決める
+- **THEN** 状態は Draft になる
+
 ### Requirement: スレッドのイベントの決定
 
-Mewbell は、Issue と Timeline のレスポンスから、スレッドの `updated_at` の時点で最後に起きたイベントを次の規則で 1 つ決めなければならない（MUST）。
+Mewbell は、Issue と Timeline のレスポンスから、スレッドの `updated_at` を更新したイベントを次の規則で 1 つ決めなければならない（MUST）。スレッドの `updated_at` は、きっかけになったイベントの時刻より数十秒遅れることがあるので、その分の幅を取る。
 
 Timeline の項目のうち、次の `event` だけを候補にしなければならない（MUST）。ほかの `event`（`labeled`、`cross-referenced`、`referenced`、`mentioned`、`subscribed`、知らない値など）は候補にしてはならない（MUST NOT）。
 
@@ -84,16 +110,16 @@ Timeline の項目のうち、次の `event` だけを候補にしなければ�
 | `committed` | Pushed commits | `committer.date` | なし |
 | `head_ref_force_pushed` | Force-pushed | `created_at` | `actor.login` |
 
-- 候補は、時刻が「件名の作成日時 + 60 秒」より後で、「スレッドの `updated_at` + 60 秒」以前のものに限らなければならない（MUST）（作成と同時に起きる `review_requested` や、作成前のコミットを除くため）。時刻を読めない項目は候補にしてはならない（MUST NOT）
-- 候補があれば、取得したページを古い順につなげたときの最後の候補をイベントにしなければならない（MUST）。それが `closed` で、その 60 秒以内前に `merged` があるときは、`merged` の実行者で Merged にしなければならない（MUST）
-- 候補が無く、スレッドの `updated_at` が件名の作成日時 + 60 秒以前であるか、Timeline のすべてのページを取得しているときは、件名の作成者（Issue の `user.login`）で Opened にしなければならない（MUST）
+- 候補は、時刻が「件名の作成日時 + 60 秒」より後で（作成と同時に起きる `review_requested` や、作成前のコミットを除くため）、かつ「スレッドの `updated_at` − 180 秒」から「スレッドの `updated_at` + 60 秒」までの幅（以下「近さの幅」）に入るものに限らなければならない（MUST）。時刻を読めない項目は候補にしてはならない（MUST NOT）。近さの幅に入らない候補を、近いものが無いからといって代わりに使ってはならない（MUST NOT）（作成から時間がたってから push したコミットのように、時刻が `updated_at` を表さない項目で、古い別のイベントを拾わないため）
+- 候補があれば、時刻がスレッドの `updated_at` にいちばん近い候補をイベントにしなければならない（MUST）。近さが同じ候補が複数あれば、取得したページを古い順につなげたときに後ろにあるものにしなければならない（MUST）。それが `closed` で、その時刻の 60 秒前からその時刻までに `merged` があるときは、`merged` の実行者で Merged にしなければならない（MUST）
+- 候補が無く、件名の作成日時が近さの幅に入るときは、件名の作成者（Issue の `user.login`）で Opened にしなければならない（MUST）
 - それ以外のときは、イベントは「無い」にしなければならない（MUST）
 
 実行者のログイン名は、GitHub のログイン名として妥当な値（gh-cli のユーザー名の検証と同じ規則）か、それに `[bot]` を付けた値のときだけ使わなければならない（MUST）。ログイン名が無い（`null`、削除されたユーザーなど）か妥当でないときは、イベントは実行者なしにしなければならない（MUST）。
 
 #### Scenario: コメント
 
-- **GIVEN** Issue `octo/app#7` の作成日時が 10:00、スレッドの `updated_at` が 12:00 で、Timeline の最後の候補が 12:00 の `commented`（`actor.login: bob`）
+- **GIVEN** Issue `octo/app#7` の作成日時が 10:00、スレッドの `updated_at` が 12:00:30 で、Timeline の作成より後の候補が 11:30 の `labeled`（候補にしない）と 12:00 の `commented`（`actor.login: bob`）
 - **WHEN** Mewbell がイベントを決める
 - **THEN** イベントは Commented、実行者は `bob` になる
 
@@ -115,11 +141,23 @@ Timeline の項目のうち、次の `event` だけを候補にしなければ�
 - **WHEN** Mewbell がイベントを決める
 - **THEN** イベントは Opened、実行者は `BagToad` になる
 
+#### Scenario: いちばん近い候補を選ぶ
+
+- **GIVEN** Pull request の作成日時が 16:12:06、スレッドの `updated_at` が 16:18:08 で、Timeline に 16:17:15 の `commented`（`github-actions[bot]`）、16:17:32 の `merged` と `closed`（`yshrsmz`）、16:17:46 の `commented`（`sincetimer-android-app[bot]`）がある
+- **WHEN** Mewbell がイベントを決める
+- **THEN** イベントは Commented、実行者は `sincetimer-android-app[bot]` になる
+
+#### Scenario: 遠い候補は使わない
+
+- **GIVEN** Pull request の作成日時が 09:00、スレッドの `updated_at` が 12:00 で、Timeline の作成より後の候補は 10:00 の `commented`（`bob`）と、`committer.date` が 11:00 の `committed`（12:00 に push された）だけ
+- **WHEN** Mewbell がイベントを決める
+- **THEN** イベントは「無い」になる（Commented by `bob` も Pushed commits も出さない）
+
 #### Scenario: 候補にしないイベントだけ
 
-- **GIVEN** Issue の作成日時が 10:00、スレッドの `updated_at` が 12:00 で、Timeline の 10:00 より後の項目は `labeled` と `cross-referenced` だけで、Timeline は 1 ページだけ
+- **GIVEN** Issue の作成日時が 10:00、スレッドの `updated_at` が 12:00 で、Timeline の 10:00 より後の項目は 12:00 の `labeled` と `cross-referenced` だけ
 - **WHEN** Mewbell がイベントを決める
-- **THEN** イベントは Opened になる（`labeled` や `cross-referenced` は出さない）
+- **THEN** イベントは「無い」になる（`labeled` や `cross-referenced` は出さない）
 
 #### Scenario: ボットの実行者
 

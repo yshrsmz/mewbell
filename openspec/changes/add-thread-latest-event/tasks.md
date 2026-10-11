@@ -3,8 +3,9 @@
 ## 1. イベントのモデルと決定の規則（GitHubAPI）
 
 - [ ] 1.1 `ThreadEvent`（`Kind` の 14 種類と実行者）と、Timeline の項目の最小限の DTO（`event`・`created_at`・`submitted_at`・`state`・`actor.login`・`user.login`・`committer.date` だけ。`body` は載せない）を足す。`GhIdentifier.isValidActor`（`isValidUser`、または `[bot]` を除いた値が `isValidUser`）を足す。確認: ユニットテストで `dependabot[bot]`・`Copilot` を受け入れ、`-x`・`a[bot]x`・`[bot]`・空文字を拒否する。形の崩れた項目は 1 件ずつ読み飛ばし、知らない `event` は DTO には残るが候補にならない
-- [ ] 1.2 `ThreadEventResolver` で spec「スレッドのイベントの決定」を実装する（候補の表、作成日時 + 60 秒より後かつ `updated_at` + 60 秒以前、最後の候補、`closed` の 60 秒以内前の `merged` で Merged、Opened の条件、「無い」、実行者の検証）。確認: spec の Scenario（コメント、マージ、updated_at の後の出来事、開かれた Pull request、候補にしないイベントだけ、ボット、`actor: null`）と、すべてのページを読んでいない・作成直後でもないときに「無い」になることをユニットテストで確かめる。テストの JSON は `cli/cli` で確かめた形（design「Context」）に合わせる
-- [ ] 1.3 `LinkHeader.lastURL(in:)` を足す（`nextURL` と同じ読み方）。確認: `rel="next"` と `rel="last"` が並ぶヘッダー、`rel="last"` だけ、無いときのユニットテスト
+- [ ] 1.2 `ThreadEventResolver` で spec「スレッドのイベントの決定」を実装する（候補の表、作成日時 + 60 秒より後かつ近さの幅（`updated_at` の −180 秒〜+60 秒）、いちばん近い候補と同じ近さのときは後ろのもの、`closed` の 60 秒前までの `merged` で Merged、Opened の条件、「無い」、実行者の検証）。確認: spec の Scenario（コメント、マージ、いちばん近い候補を選ぶ、遠い候補は使わない、updated_at の後の出来事、開かれた Pull request、候補にしないイベントだけ、ボット、`actor: null`）をユニットテストで確かめる。テストの JSON は `cli/cli` と `yshrsmz/since-android` で確かめた形（design「Context」）に合わせる
+- [ ] 1.3 `SubjectState` と Issue のレスポンスの DTO で spec「スレッドの状態の決定」を実装する。確認: Scenario（マージした Pull request、対応しないで閉じた Issue、下書きの Pull request）に加え、閉じた Pull request・開いた Issue・`state_reason: completed` と `null`・知らない `state` のユニットテスト
+- [ ] 1.4 `LinkHeader.lastURL(in:)` を足す（`nextURL` と同じ読み方）。確認: `rel="next"` と `rel="last"` が並ぶヘッダー、`rel="last"` だけ、無いときのユニットテスト
 
 ## 2. イベントの取得のリクエスト（GitHubAPIClient）
 
@@ -22,13 +23,14 @@
 ## 4. 表示（UI と macOS の通知）
 
 - [ ] 4.1 `ThreadEventText`（イベント名と ` by <ログイン名>`）を足し、`ThreadRow` の 2 行目の番号と理由の間に出す。プレビューにイベントの付いた行・実行者の無い行を足す。確認: 文言のユニットテスト（14 種類と実行者なし）と、プレビューで `#42 · Closed by alice · Watching · 3m` の並びを見る
-- [ ] 4.2 `ThreadNotificationContent` の本文を、イベントがあれば `<イベント> · <理由> · <アカウント>` にする。確認: Scenario「イベントが付いたスレッド」「Pull request のレビュー依頼」のテストと、本文・`userInfo` にトークン・API の URL が入らないことのテスト
+- [ ] 4.2 `ThreadRow` の種類のアイコンを種類と状態で決める（design「型と置き場所」の記号と色の案。macOS 26 の SF Symbols にあるかを確かめる）。`accessibilityLabel` に種類と状態を入れる。確認: 記号・色・ラベルを決める関数のユニットテスト（状態ごとに記号が違うこと、状態が無いときは今の記号）と、プレビューにすべての状態の行を並べてライトとダークで見る
+- [ ] 4.3 `ThreadNotificationContent` の本文を、イベントがあれば `<イベント> · <理由> · <アカウント>` にする。確認: Scenario「イベントが付いたスレッド」「Pull request のレビュー依頼」のテストと、本文・`userInfo` にトークン・API の URL が入らないことのテスト
 
 ## 5. 仕上げ
 
 - [ ] 5.1 ビルドが通る: `MEWBELL_WARNINGS_AS_ERRORS=YES` を付けた Debug と Release の `xcodebuild build` が成功する
 - [ ] 5.2 テストが通る: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` と `bash scripts/lint.sh` が成功し、`npx openspec validate --all --strict` も通る
-- [ ] 5.3 手元で起動して確認した: (a) `bash scripts/run.sh` で起動し、一覧の Issue と Pull request の行にイベントが出る（Web の Timeline と見比べる）、(b) Release などの行は今までどおり、(c) 自分のリポジトリの Issue にもう 1 つのアカウントか Web でコメントし、届いた macOS の通知の本文に `Commented by <ログイン名>` が入る、(d) ログ（PID で絞る）にトークンと Timeline のボディが出ていない。結果をここに書く
+- [ ] 5.3 手元で起動して確認した: (a) `bash scripts/run.sh` で起動し、一覧の Issue と Pull request の行にイベントと状態のアイコンが出る（Web の Timeline と見比べる）、(b) Release などの行は今までどおり、(c) 自分のリポジトリの Issue にもう 1 つのアカウントか Web でコメントし、届いた macOS の通知の本文に `Commented by <ログイン名>` が入る、(d) ログ（PID で絞る）にトークンと Timeline のボディが出ていない。結果をここに書く
 - [ ] 5.4 README に一覧の行や通知の本文の説明があれば、変更に合わせて直す。確認: 差分を読み、spec と食い違いが無い（直すものが無ければそう書く）
 
 ## 6. 別コンテキストでのレビュー
