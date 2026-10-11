@@ -32,7 +32,7 @@
 
 ### D3: 見出しのボタン
 
-`ThreadListActions` に `openWebNotifications: (AccountID) -> Void` を足し、`AccountSectionView.header` の `Spacer` の後、「すべて既読」の前にアイコンのボタン（`.plain`、SF Symbols の `arrow.up.forward.square`、`MarkAllReadButton` と同じ大きさと色）を置く。ツールチップとアクセシビリティのラベルは `Open notifications on <host>`。ボタンはトークンの状態や取得の状態で条件を付けずに出す（spec のとおり、止まっているアカウントでも Web では通知を見られる）。無効のアカウントの区画は `NotificationListView` が出さないので、ここでは条件を足さない。
+`ThreadListActions` に `openWebNotifications: (AccountID) -> Void` を足し、`AccountSectionView.header` の `Spacer` の後、「すべて既読」の前にアイコンのボタン（`UI/OpenWebNotificationsButton.swift`。`MarkAllReadButton` と同じ `.borderless`、SF Symbols の `arrow.up.forward.square`）を置く。ツールチップとアクセシビリティのラベルは `Open notifications on <host>`。ボタンはトークンの状態や取得の状態で条件を付けずに出す（spec のとおり、止まっているアカウントでも Web では通知を見られる）。無効のアカウントの区画は `NotificationListView` が出さないので、ここでは条件を足さない。
 
 - 代替案: 見出しの右クリックのメニューに入れる。見つけにくいので採らない
 

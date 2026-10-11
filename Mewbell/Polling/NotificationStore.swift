@@ -203,6 +203,14 @@ final class NotificationStore {
         perform(.read(threadID: thread.id), in: account)
     }
 
+    /// アカウントのホストの Web の通知一覧をブラウザで開く。既読にはしない。URL を組み立てられなければ開かない。
+    func openWebNotifications(for account: AccountID) {
+        guard let endpoints = APIEndpoints(host: account.host),
+            let url = ThreadWebURL.notificationsPage(endpoints: endpoints)
+        else { return }
+        openURL(url)
+    }
+
     /// macOS の通知のクリックから、検証済みの URL を開いて既読にする。
     func openFromNotification(_ request: ThreadOpenRequest) {
         openURL(request.url)

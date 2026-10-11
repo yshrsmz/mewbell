@@ -9,10 +9,14 @@ struct ThreadListActions {
     var markRead: (NotificationThread, AccountID) -> Void
     var markDone: (NotificationThread, AccountID) -> Void
     var markAllRead: (AccountID) -> Void
+    /// アカウントのホストの Web の通知一覧をブラウザで開く（既読にはしない）
+    var openWebNotifications: (AccountID) -> Void
 
     /// 何もしない（プレビュー用）。
     static var none: ThreadListActions {
-        ThreadListActions(open: { _, _ in }, markRead: { _, _ in }, markDone: { _, _ in }, markAllRead: { _ in })
+        ThreadListActions(
+            open: { _, _ in }, markRead: { _, _ in }, markDone: { _, _ in }, markAllRead: { _ in },
+            openWebNotifications: { _ in })
     }
 }
 
@@ -134,6 +138,10 @@ struct AccountSectionView: View {
                 title
             }
             Spacer(minLength: 0)
+            // トークンや取得の状態にかかわらず出す（止まっていても Web では通知を見られる）
+            OpenWebNotificationsButton(host: account.host) {
+                actions.openWebNotifications(account.id)
+            }
             if status.tokenState == .ready, let feed, !feed.phase.isStopped {
                 MarkAllReadButton(
                     count: feed.threads.count, newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead,
