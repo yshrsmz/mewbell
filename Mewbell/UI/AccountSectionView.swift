@@ -99,13 +99,14 @@ struct AccountSectionView: View {
             switch status.tokenState {
             case .fetching where feed == nil:
                 Text("Checking gh…")
-                    .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .padding(.leading, ListLayout.contentIndent)
+                    .sectionNote()
             case .unavailable:
-                Text("Could not get a token from gh. Log in again with:")
-                    .font(.subheadline)
-                CommandRow(command: "gh auth login --hostname \(account.host)")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Could not get a token from gh. Log in again with:")
+                    CommandRow(command: "gh auth login --hostname \(account.host)")
+                }
+                .sectionNote()
             case .disabled:
                 // 無効のアカウントの区画は `NotificationListView` が出さない
                 EmptyView()
@@ -157,9 +158,10 @@ struct AccountSectionView: View {
         HStack(spacing: ListLayout.spacing) {
             tokenIcon
                 .frame(width: ListLayout.chevronWidth)
-            // 幅が足りないときはホスト名から縮める（ユーザー名と active の印は省略しない）
+            // 幅が足りないときはホスト名から縮め、それでも足りなければユーザー名の末尾を省略する（active の印は省略しない）
             Text(account.user)
                 .font(.headline)
+                .lineLimit(1)
                 .layoutPriority(1)
             if account.isActive {
                 Text("active")
@@ -173,6 +175,9 @@ struct AccountSectionView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                // 「…」も入らない幅まで縮むと、省略記号の無い切れた字が残るので、「…」の分だけは残す
+                .frame(minWidth: 16, alignment: .leading)
+                .help("\(account.host) — \(account.hostKind.displayName)")
             if participatingOnly {
                 Image(systemName: "person.crop.circle.badge.checkmark")
                     .font(.subheadline)
@@ -245,10 +250,10 @@ struct FeedStatusView: View {
                 .foregroundStyle(.secondary)
             case .retrying(let nextAttempt, let rateLimited):
                 Label {
-                    // 1 つの文にして、時刻の途中で折り返さないようにする
-                    Text(
-                        "\(rateLimited ? "Rate limited." : "Could not fetch notifications.") Retrying at \(nextAttempt, style: .time)"
-                    )
+                    // 文ごとに 1 つの Text にして、時刻の途中で折り返さないようにする
+                    rateLimited
+                        ? Text("Rate limited. Retrying at \(nextAttempt, style: .time)")
+                        : Text("Could not fetch notifications. Retrying at \(nextAttempt, style: .time)")
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
                 }
@@ -271,9 +276,7 @@ struct FeedStatusView: View {
                 )
             }
         }
-        .font(.subheadline)
-        .padding(.leading, ListLayout.contentIndent)
-        .fixedSize(horizontal: false, vertical: true)
+        .sectionNote()
     }
 }
 

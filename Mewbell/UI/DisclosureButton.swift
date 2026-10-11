@@ -94,6 +94,16 @@ enum ListLayout {
     static let contentIndent = chevronWidth + spacing
 }
 
+extension View {
+    /// 区画の中の補足の文（取得の状態、操作の失敗、トークンを取れないときの案内）の体裁。
+    /// 文字の大きさを揃え、見出しの中身の字下げに合わせ、幅に合わせて折り返す
+    func sectionNote() -> some View {
+        font(.subheadline)
+            .padding(.leading, ListLayout.contentIndent)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 /// 開閉を示す山形。開いているときは下を向く。幅はスレッドの行の種類のアイコンと揃える。
 private struct DisclosureChevron: View {
     let isCollapsed: Bool
@@ -115,6 +125,7 @@ private struct CollapsedCount: View {
     var body: some View {
         Text("\(count)")
             .font(.subheadline.monospacedDigit())
+            .fixedSize()
             .foregroundStyle(.secondary)
             .capsuleBadge(.secondary.opacity(0.15))
             .accessibilityLabel("\(count) unread")

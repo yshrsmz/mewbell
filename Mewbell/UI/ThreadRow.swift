@@ -174,6 +174,7 @@ struct MarkAllReadButton: View {
             if confirming {
                 Text(labels.confirmation)
                     .font(.subheadline.weight(.semibold))
+                    .fixedSize()
             } else {
                 Image(systemName: "checkmark.circle")
             }

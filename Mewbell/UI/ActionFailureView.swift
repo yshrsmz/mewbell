@@ -46,9 +46,7 @@ struct ActionFailureView: View {
                 CommandRow(command: command)
             }
         }
-        .font(.subheadline)
-        .padding(.leading, ListLayout.contentIndent)
-        .fixedSize(horizontal: false, vertical: true)
+        .sectionNote()
     }
 }
 
