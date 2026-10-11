@@ -15,12 +15,20 @@ struct DisclosureButton<Label: View>: View {
     @ViewBuilder let label: Label
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(DisclosureAnimations.self) private var animations: DisclosureAnimations?
 
     var body: some View {
         if isCollapsible {
             let hint = isCollapsed ? "Expand \(name)" : "Collapse \(name)"
             Button {
-                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2), toggle)
+                if reduceMotion {
+                    toggle()
+                } else {
+                    animations?.running += 1
+                    withAnimation(.snappy(duration: 0.2), completionCriteria: .removed, toggle) {
+                        animations?.running -= 1
+                    }
+                }
             } label: {
                 HStack(spacing: ListLayout.spacing) {
                     DisclosureChevron(isCollapsed: isCollapsed)
@@ -53,6 +61,12 @@ struct DisclosureButton<Label: View>: View {
     static func shownCount(isCollapsed: Bool, count: Int) -> Int? {
         isCollapsed && count > 0 ? count : nil
     }
+}
+
+/// 動いている開閉のアニメーションの数。`DisclosureButton` が数え、一覧はアニメーションの間だけスクロールバーを隠す
+/// （高さが毎フレーム変わり、そのたびにスクロールバーが出てちらつくため）。続けて押すとアニメーションが重なるので数で持つ
+@MainActor @Observable final class DisclosureAnimations {
+    var running = 0
 }
 
 /// 一覧の字下げ。見出しの山形の幅と、山形と中身の間隔から決まる。

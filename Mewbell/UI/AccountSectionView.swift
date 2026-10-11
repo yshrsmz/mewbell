@@ -29,6 +29,8 @@ struct NotificationListView: View {
     let expansion: ListExpansion
     let actions: ThreadListActions
 
+    @State private var animations = DisclosureAnimations()
+
     var body: some View {
         let shown = statuses.enabled
         if shown.isEmpty && !statuses.isEmpty {
@@ -51,6 +53,9 @@ struct NotificationListView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // 開閉のアニメーションの間はスクロールバーを出さない
+            .scrollIndicators(animations.running > 0 ? .never : .automatic)
+            .environment(animations)
             .frame(maxHeight: 480)
             .fixedSize(horizontal: false, vertical: true)
         }
