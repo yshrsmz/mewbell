@@ -359,6 +359,25 @@ extension ThreadDetailsPollingTests {
         #expect(detailsRequests(fixture).count == 2)
         fixture.poller.stop()
     }
+
+    @Test func refreshInterruptsThePrefetch() async throws {
+        let fixture = try PollerFixture()
+        respond(fixture, notifications: [Self.list([1]), Self.list([1, 2]), Self.list([1, 2])])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        fixture.transport.pausedWhere.value = { Self.isDetails($0) }
+        fixture.advance(by: 60)
+        await waitUntil { detailsRequests(fixture).count >= 3 }
+        let refreshed = Task { await fixture.poller.refreshNow() }
+        await fixture.sleeper.waitForSleeps(2)
+        // 新着の 2 は、止めた取得の分を付けずに知らせる
+        #expect(firstUpdate(containing: "2", fixture)?.threads.first { $0.id == "2" }?.details == nil)
+        fixture.advance(by: 10)
+        await refreshed.value
+        #expect(fixture.transport.requests.filter { !Self.isDetails($0) }.count == 3)
+        fixture.transport.pausedWhere.value = nil
+        fixture.poller.stop()
+    }
 }
 
 /// 最初の 1 回だけトークンを返す `TokenProviding`（通知を取った後にトークンが無くなったことにする）。

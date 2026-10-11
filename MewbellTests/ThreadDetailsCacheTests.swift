@@ -118,3 +118,31 @@ struct ThreadDetailsCacheTests {
         #expect(cache.pending(in: [one], newOnly: true, limit: 10, now: now).isEmpty)
     }
 }
+
+struct ThreadDetailsFetcherTests {
+    @Test func doesNotReportCancelledFetchesAsFailures() async throws {
+        let transport = FakeHTTPTransport { _ in HTTPResponse(statusCode: 200, body: Data("[]".utf8)) }
+        transport.pausedWhere.value = { _ in true }
+        let endpoints = try #require(APIEndpoints(host: "github.com"))
+        let token = try #require(AccessToken(ghOutput: Data("test-token-alice".utf8)))
+        let json = FakeHTTPTransport.threadJSON(id: "1", subjectURL: "https://api.github.com/repos/octo/app/issues/1")
+        let threads = try #require(NotificationThread.decodeList(from: Data("[\(json)]".utf8), endpoints: endpoints))
+        let fetcher = ThreadDetailsFetcher(client: GitHubAPIClient(transport: transport), endpoints: endpoints)
+        let task = Task { await fetcher.fetch(threads, token: token, timeout: .seconds(20)) }
+        await waitUntil { !transport.requests.isEmpty }
+        task.cancel()
+        #expect(await task.value.isEmpty)
+    }
+
+    @Test func reportsTimedOutFetchesAsFailures() async throws {
+        let transport = FakeHTTPTransport { _ in HTTPResponse(statusCode: 200, body: Data("[]".utf8)) }
+        transport.pausedWhere.value = { _ in true }
+        let endpoints = try #require(APIEndpoints(host: "github.com"))
+        let token = try #require(AccessToken(ghOutput: Data("test-token-alice".utf8)))
+        let json = FakeHTTPTransport.threadJSON(id: "1", subjectURL: "https://api.github.com/repos/octo/app/issues/1")
+        let threads = try #require(NotificationThread.decodeList(from: Data("[\(json)]".utf8), endpoints: endpoints))
+        let fetcher = ThreadDetailsFetcher(client: GitHubAPIClient(transport: transport), endpoints: endpoints)
+        let results = await fetcher.fetch(threads, token: token, timeout: .milliseconds(50))
+        #expect(results.map(\.1) == [.failed(.network(code: URLError.Code.timedOut.rawValue))])
+    }
+}

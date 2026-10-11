@@ -12,16 +12,20 @@ struct ThreadDetailsFetcher: Sendable {
     static let concurrency = 4
     private static let logger = Logger(category: "Polling")
 
+    typealias Results = [(NotificationThread, ThreadDetailsFetchResult)]
+
     let client: GitHubAPIClient
     let endpoints: APIEndpoints
 
     private enum Outcome: Sendable {
         case fetched(NotificationThread, ThreadDetailsFetchResult)
         case timedOut
+        /// 取得ごと止められた（再読み込みなど）
+        case cancelled
     }
 
     /// `threads` を順に取り、結果を返す。`timeout` を過ぎたら残りを止め、始めていて終わらなかった分は一時的な失敗として返す
-    /// （始めていない分は返さない）。レート制限が返ったら、まだ始めていない分は取らない。
+    /// （始めていない分は返さない）。呼び出し元のタスクごと止められたら、それまでに終わった分だけを返す。レート制限が返ったら、まだ始めていない分は取らない。
     func fetch(
         _ threads: [NotificationThread], token: AccessToken, timeout: Duration
     ) async -> [(NotificationThread, ThreadDetailsFetchResult)] {
@@ -29,8 +33,8 @@ struct ThreadDetailsFetcher: Sendable {
         let endpoints = endpoints
         return await withTaskGroup(of: Outcome.self) { group in
             group.addTask {
-                try? await Task.sleep(for: timeout)
-                return .timedOut
+                // 止められたときは、打ち切りと区別する（始めた分を一時的な失敗にしない）
+                (try? await Task.sleep(for: timeout)) == nil ? .cancelled : .timedOut
             }
             var queue = threads[...]
             // 始めて、まだ終わっていないスレッド
@@ -53,6 +57,13 @@ struct ThreadDetailsFetcher: Sendable {
                     group.cancelAll()
                     let timedOut = FetchFailure.network(code: URLError.Code.timedOut.rawValue)
                     return results + running.values.map { ($0, .failed(timedOut)) }
+                case .cancelled:
+                    group.cancelAll()
+                    return results
+                // 止められた後に終わった取得は、止めたことで失敗したものなので返さない
+                case .fetched where Task.isCancelled:
+                    group.cancelAll()
+                    return results
                 case .fetched(let thread, let result):
                     running[thread.id] = nil
                     results.append((thread, result))

@@ -71,7 +71,7 @@ enum ThreadEventResolver {
     /// `closed` をマージとみなす、`closed` の前の `merged` の幅
     static let mergeMargin: TimeInterval = 60
 
-    struct Candidate {
+    private struct Candidate {
         let kind: ThreadEvent.Kind
         let date: Date
         let actor: String?
@@ -96,11 +96,13 @@ enum ThreadEventResolver {
     }
 
     /// `items` に、時刻が近さの幅の始まり（`updated_at` − `windowBefore`）以前の項目があるか。あれば、それより前のページの
-    /// 項目は近さの幅に入らない（Timeline は古い順に並ぶ）。
+    /// 項目は近さの幅に入らない（Timeline は古い順に並ぶ）。コミットの時刻（`committer.date`）は Timeline の並びと
+    /// 合わない（古い日付のまま後から push される）ので使わない。
     static func reachesBeforeWindow(_ items: [TimelineItem], updatedAt: Date) -> Bool {
         items.contains { item in
-            [item.createdAt, item.submittedAt, item.committer?.date].compactMap { $0.flatMap(date) }
-                .contains { $0 <= updatedAt - windowBefore }
+            [item.createdAt, item.submittedAt].compactMap { $0.flatMap(date) }.contains {
+                $0 <= updatedAt - windowBefore
+            }
         }
     }
 
@@ -110,10 +112,6 @@ enum ThreadEventResolver {
     }
 
     /// 近さの幅に入る候補のうち `updated_at` にいちばん近いもの（同じ近さなら後ろのもの）。無ければ nil。
-    static func closestCandidate(in timeline: [TimelineItem], createdAt: Date, updatedAt: Date) -> Candidate? {
-        closest(in: timeline.compactMap(candidate(from:)), createdAt: createdAt, updatedAt: updatedAt)
-    }
-
     private static func closest(in candidates: [Candidate], createdAt: Date, updatedAt: Date) -> Candidate? {
         candidates
             .filter { $0.date > createdAt + creationMargin && isNear($0.date, to: updatedAt) }

@@ -154,6 +154,22 @@ struct ThreadDetailsRequestTests {
         #expect(transport.requests.count == 4)
     }
 
+    @Test func doesNotTrustOldCommitDatesOnTheLastPage() async throws {
+        let (thread, endpoints) = try thread(subjectURL: "https://api.github.com/repos/octo/app/issues/7")
+        let last = #"<https://api.github.com/repositories/1/issues/7/timeline?per_page=100&page=5>; rel="last""#
+        let transport = transport(issue: Self.ok(issue)) { page in
+            switch page {
+            case 1: Self.ok(TimelineJSON.page([]), link: last)
+            case 4: Self.ok(TimelineJSON.page([TimelineJSON.commented(at: "2026-10-08T11:59:30Z", by: "bob")]))
+            // 古い日付のまま後から push したコミットだけ
+            default: Self.ok(TimelineJSON.page([TimelineJSON.committed(at: "2026-10-01T09:00:00Z")]))
+            }
+        }
+        let result = await fetch(thread, endpoints, transport)
+        #expect(result == .found(ThreadDetails(state: .open, event: ThreadEvent(kind: .commented, actor: "bob"))))
+        #expect(transport.requests.count == 4)
+    }
+
     @Test func doesNotRefetchTheFirstPage() async throws {
         let (thread, endpoints) = try thread(subjectURL: "https://api.github.com/repos/octo/app/issues/7")
         let last = #"<https://api.github.com/repositories/1/issues/7/timeline?per_page=100&page=2>; rel="last""#

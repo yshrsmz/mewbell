@@ -50,7 +50,7 @@ actor AccountPoller {
     /// スレッドの件名の状態とイベント
     var details = ThreadDetailsCache()
     /// この回の、一覧を知らせる前に状態とイベントを取ったスレッド
-    var prefetchedIDs: Set<String> = []
+    var prefetched: (fetchNumber: Int, ids: Set<String>)?
     /// 打ち切り・Diagnostics の値・知らせる操作の失敗の記録
     var recorder = FeedRecorder()
     /// 走っているループの番号（止めたループが後から終わったときに、新しいループの状態を消さないため）
@@ -59,7 +59,7 @@ actor AccountPoller {
     /// 次の取得までの待ち。再読み込みで止めて起こす
     private var sleepTask: Task<Void, any Error>?
     /// 待ち始める前の状態とイベントの取得。再読み込みで止める
-    var fillTask: Task<Bool, Never>?
+    var detailsTask: Task<ThreadDetailsFetcher.Results?, Never>?
     private var refreshWaiters = RefreshWaiters()
     var pendingRefreshCount: Int { refreshWaiters.count }  // テスト用
 
@@ -121,7 +121,7 @@ actor AccountPoller {
             refreshWaiters.add(continuation)
             guard stopped else {
                 sleepTask?.cancel()
-                fillTask?.cancel()
+                detailsTask?.cancel()
                 return
             }
             // 止めたループがまだ終わっていなくても、その終わりで新しい待ちを起こさないように、先に外す
@@ -168,7 +168,7 @@ actor AccountPoller {
                 await announceNextFetch(after: delay)
                 refreshWaiters.finish()
                 // 取ったら、次の取得の予定時刻を実際に待ち始める時刻から出し直す
-                if await fillDetailsUnlessRefreshed() { await announceNextFetch(after: delay) }
+                if await fillDetails() { await announceNextFetch(after: delay) }
                 guard !Task.isCancelled, await pause(for: delay) else { return }
             }
         }
@@ -228,7 +228,7 @@ actor AccountPoller {
             // 取った後に同じ番号と開始時刻でもう一度除く
             var threads = HiddenThreads.revealOrHide(
                 fetched, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt)
-            await prefetchNewDetails(in: threads, token: token)
+            await prefetchNewDetails(in: threads, token: token, fetchNumber: number)
             guard !Task.isCancelled else { return (result, number) }
             threads = HiddenThreads.revealOrHide(
                 threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt)
