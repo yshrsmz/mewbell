@@ -105,7 +105,6 @@ struct AccountSectionView: View {
             case .unavailable:
                 Text("Could not get a token from gh. Log in again with:")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
                 CommandRow(command: "gh auth login --hostname \(account.host)")
             case .disabled:
                 // 無効のアカウントの区画は `NotificationListView` が出さない
@@ -158,11 +157,14 @@ struct AccountSectionView: View {
         HStack(spacing: ListLayout.spacing) {
             tokenIcon
                 .frame(width: ListLayout.chevronWidth)
+            // 幅が足りないときはホスト名から縮める（ユーザー名と active の印は省略しない）
             Text(account.user)
                 .font(.headline)
+                .layoutPriority(1)
             if account.isActive {
                 Text("active")
                     .font(.subheadline)
+                    .fixedSize()
                     .capsuleBadge(.tint.opacity(0.15))
                     .help("The active account for this host in gh")
             }
@@ -243,10 +245,10 @@ struct FeedStatusView: View {
                 .foregroundStyle(.secondary)
             case .retrying(let nextAttempt, let rateLimited):
                 Label {
-                    HStack(spacing: 4) {
-                        Text(rateLimited ? "Rate limited. Retrying at" : "Could not fetch notifications. Retrying at")
-                        Text(nextAttempt, style: .time)
-                    }
+                    // 1 つの文にして、時刻の途中で折り返さないようにする
+                    Text(
+                        "\(rateLimited ? "Rate limited." : "Could not fetch notifications.") Retrying at \(nextAttempt, style: .time)"
+                    )
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
                 }
@@ -267,7 +269,6 @@ struct FeedStatusView: View {
                     "Showing the newest \(GitHubAPIClient.threadLimit) unread notifications. Older unread ones are not shown.",
                     systemImage: "ellipsis.circle"
                 )
-                .foregroundStyle(.secondary)
             }
         }
         .font(.subheadline)
