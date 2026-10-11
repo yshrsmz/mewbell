@@ -47,7 +47,7 @@ extension GitHubAPIClient {
 
         let timeline: [TimelineItem]
         switch await fetchTimeline(
-            path: issuePath + "/timeline", issue: issue, updatedAt: thread.updatedAt, endpoints: endpoints, token: token
+            path: issuePath + "/timeline", updatedAt: thread.updatedAt, endpoints: endpoints, token: token
         )
         {
         case .success(let items): timeline = items
@@ -64,7 +64,7 @@ extension GitHubAPIClient {
     /// Timeline の 1 ページ目と、`rel="last"` があれば最後のページ、そこに候補が無ければその前のページを取り、古い順につなげる。
     /// その前のページが 1 ページ目なら取り直さない（取るのは最大 3 ページ）。
     private func fetchTimeline(
-        path: String, issue: IssueSummary, updatedAt: Date, endpoints: APIEndpoints, token: AccessToken
+        path: String, updatedAt: Date, endpoints: APIEndpoints, token: AccessToken
     ) async -> Result<[TimelineItem], DetailsStop> {
         guard let firstURL = Self.timelineURL(endpoints.apiURL(path: path), page: nil) else {
             return .failure(DetailsStop(.failed(.rejectedURL)))
@@ -77,9 +77,10 @@ extension GitHubAPIClient {
         // 最後のページの URL は API が返したものなので、`send` のオリジン検査を通るものだけに送る
         let last = await getPage(lastURL, endpoints: endpoints, token: token)
         guard case .success(let (lastItems, _)) = last else { return last.map(\.items) }
-        guard let createdAt = ThreadEventResolver.date(issue.createdAt),
-            ThreadEventResolver.closestCandidate(in: lastItems, createdAt: createdAt, updatedAt: updatedAt) == nil
-        else { return .success(lastItems) }
+        // 最後のページが近さの幅の始まりより前まで届いていれば、前のページに近い候補は無い
+        guard !ThreadEventResolver.reachesBeforeWindow(lastItems, updatedAt: updatedAt) else {
+            return .success(lastItems)
+        }
         // その前のページが 1 ページ目なら、取ってある 1 ページ目を使う
         guard lastPage - 1 > 1 else { return .success(firstItems + lastItems) }
         guard let previousURL = Self.timelineURL(firstURL, page: lastPage - 1) else { return .success(lastItems) }

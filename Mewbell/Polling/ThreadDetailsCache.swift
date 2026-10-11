@@ -44,10 +44,16 @@ struct ThreadDetailsCache {
         return Array(waiting.sorted { $0.updatedAt > $1.updatedAt }.prefix(limit))
     }
 
+    /// レート制限で止める最短の時間（429 に待ち時間のヘッダーが無いときに、すぐ取り直さないため）
+    static let minimumPause: TimeInterval = 60
+
     /// 取得の結果をまとめて記録する。1 つでも記録したら true（一覧に付け直す必要がある）。
     @discardableResult
-    mutating func record(_ results: [(NotificationThread, ThreadDetailsFetchResult)]) -> Bool {
-        results.map { record($0.1, for: $0.0) }.contains(true)
+    mutating func record(_ results: [(NotificationThread, ThreadDetailsFetchResult)], now: Date) -> Bool {
+        results.map { thread, result in
+            guard case .rateLimited(let retryAt) = result else { return record(result, for: thread) }
+            return record(.rateLimited(retryAt: max(retryAt, now + Self.minimumPause)), for: thread)
+        }.contains(true)
     }
 
     /// 取得の結果を記録する。記録したら true。

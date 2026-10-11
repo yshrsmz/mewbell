@@ -100,6 +100,14 @@ struct ThreadDetailsCacheTests {
             cache.pending(in: [one], newOnly: false, limit: 10, now: now.addingTimeInterval(600)).map(\.id) == ["1"])
     }
 
+    @Test func pausesAtLeastAMinuteOnRateLimits() throws {
+        var cache = ThreadDetailsCache()
+        let one = try thread("1")
+        cache.record([(one, .rateLimited(retryAt: now))], now: now)
+        #expect(cache.pending(in: [one], newOnly: false, limit: 10, now: now.addingTimeInterval(59)).isEmpty)
+        #expect(cache.pending(in: [one], newOnly: false, limit: 10, now: now.addingTimeInterval(60)).map(\.id) == ["1"])
+    }
+
     @Test func resetForgetsEverything() throws {
         var cache = ThreadDetailsCache()
         let one = try thread("1")

@@ -313,6 +313,52 @@ extension ThreadDetailsPollingTests {
         #expect(detailsRequests(fixture).filter { $0.url?.path().contains("/issues/2") == true }.count == 1)
         fixture.poller.stop()
     }
+
+    @Test func refreshDoesNotWaitForDetails() async throws {
+        let fixture = try PollerFixture()
+        respond(fixture, notifications: [Self.list([1, 2]), Self.list([1, 2])])
+        fixture.transport.pausedWhere.value = { Self.isDetails($0) }
+        fixture.poller.start()
+        await waitUntil { detailsRequests(fixture).count >= 2 }
+        let refreshed = Task { await fixture.poller.refreshNow() }
+        // 取得の下限（前の取得の開始から 10 秒）までの待ちに入る
+        await fixture.sleeper.waitForSleeps(1)
+        fixture.advance(by: 10)
+        await refreshed.value
+        #expect(fixture.transport.requests.filter { !Self.isDetails($0) }.count == 2)
+        fixture.transport.pausedWhere.value = nil
+        fixture.poller.stop()
+    }
+
+    @Test func keepsDetailsOfThreadsHiddenForAWhile() async throws {
+        let fixture = try PollerFixture()
+        let queue = LockedValue([Self.list([1]), Self.list([1]), Self.list([1])])
+        fixture.transport.setHandler { request throws(TransportError) in
+            if request.httpMethod != "GET" { return HTTPResponse(statusCode: 500) }
+            if Self.isDetails(request) { return Self.details(request) }
+            guard let next = queue.withLock({ $0.isEmpty ? nil : $0.removeFirst() }) else {
+                throw .network(code: URLError.Code.notConnectedToInternet.rawValue)
+            }
+            return next
+        }
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        // 既読にするリクエストの途中の取得では 1 を隠し、既読にできずに 1 が一覧に戻る
+        fixture.transport.pausedMethod.value = "PATCH"
+        let read = Task { await fixture.poller.perform(.read(threadID: "1")) }
+        await waitUntil { !fixture.requests("PATCH").isEmpty }
+        fixture.advance(by: 60)
+        await fixture.sleeper.waitForSleeps(2)
+        #expect(fixture.lastIDs.isEmpty)
+        fixture.transport.pausedMethod.value = nil
+        await read.value
+        fixture.advance(by: 60)
+        await fixture.sleeper.waitForSleeps(3)
+        #expect(fixture.lastIDs == ["1"])
+        #expect(fixture.last?.threads.first?.details == Self.commented)
+        #expect(detailsRequests(fixture).count == 2)
+        fixture.poller.stop()
+    }
 }
 
 /// 最初の 1 回だけトークンを返す `TokenProviding`（通知を取った後にトークンが無くなったことにする）。

@@ -104,8 +104,13 @@ struct ThreadDetailsRequestTests {
     @Test func fetchesTheLastPage() async throws {
         let (thread, endpoints) = try thread(subjectURL: "https://api.github.com/repos/octo/app/issues/7")
         let last = #"<https://api.github.com/repositories/1/issues/7/timeline?per_page=100&page=5>; rel="last""#
+        // 最後のページが近さの幅の始まりより前（11:00）まで届いているので、前のページは取らない
+        let lastPage = TimelineJSON.page([
+            TimelineJSON.event("labeled", at: "2026-10-08T11:00:00Z"),
+            TimelineJSON.commented(at: "2026-10-08T11:59:40Z", by: "bob"),
+        ])
         let transport = transport(issue: Self.ok(issue)) { page in
-            page == 1 ? Self.ok(TimelineJSON.page([]), link: last) : Self.ok(comment)
+            page == 1 ? Self.ok(TimelineJSON.page([]), link: last) : Self.ok(lastPage)
         }
         let result = await fetch(thread, endpoints, transport)
         #expect(result == .found(ThreadDetails(state: .open, event: ThreadEvent(kind: .commented, actor: "bob"))))
@@ -130,6 +135,22 @@ struct ThreadDetailsRequestTests {
         #expect(
             transport.requests.map { $0.url?.absoluteString }.last
                 == "https://api.github.com/repos/octo/app/issues/7/timeline?per_page=100&page=4")
+        #expect(transport.requests.count == 4)
+    }
+
+    @Test func looksForACloserEventOnThePageBeforeTheLast() async throws {
+        let (thread, endpoints) = try thread(subjectURL: "https://api.github.com/repos/octo/app/issues/7")
+        let last = #"<https://api.github.com/repositories/1/issues/7/timeline?per_page=100&page=5>; rel="last""#
+        let transport = transport(issue: Self.ok(issue)) { page in
+            switch page {
+            case 1: Self.ok(TimelineJSON.page([]), link: last)
+            case 4:
+                Self.ok(TimelineJSON.page([TimelineJSON.reviewed("approved", at: "2026-10-08T11:59:59Z", by: "carol")]))
+            default: Self.ok(TimelineJSON.page([TimelineJSON.commented(at: "2026-10-08T11:57:10Z", by: "bob")]))
+            }
+        }
+        let result = await fetch(thread, endpoints, transport)
+        #expect(result == .found(ThreadDetails(state: .open, event: ThreadEvent(kind: .approved, actor: "carol"))))
         #expect(transport.requests.count == 4)
     }
 
