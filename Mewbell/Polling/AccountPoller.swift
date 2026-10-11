@@ -19,7 +19,7 @@ actor AccountPoller {
     let tokens: any TokenProviding
     private let participating: Bool  // `participating=true` で取得する（切り替えたらポーラーを作り直す）
     private let firstFetchNotBefore: Date?  // 最初の取得をこの時刻まで待つ（`CarriedWait.until`）
-    private let detailsTimeout: Duration  // 知らせる前に状態とイベントを取るのにかける時間の上限
+    private let detailsTimeout: Duration  // 1 回にまとめて状態とイベントを取るのにかける時間の上限
     private let sleep: Sleep
     let now: @Sendable () -> Date
     private let onUpdate: @Sendable (FeedState) async -> Void
@@ -48,6 +48,8 @@ actor AccountPoller {
     var readThroughCount = 0
     /// スレッドの件名の状態とイベント
     private var details = ThreadDetailsCache()
+    /// この回の、一覧を知らせる前に状態とイベントを取ったスレッド
+    private var prefetchedIDs: Set<String> = []
     /// 打ち切り・Diagnostics の値・知らせる操作の失敗の記録
     var recorder = FeedRecorder()
     /// 走っているループの番号（止めたループが後から終わったときに、新しいループの状態を消さないため）
@@ -161,9 +163,8 @@ actor AccountPoller {
                 }
                 await announceNextFetch(after: delay)
                 refreshWaiters.finish()
-                // 取り終えたら、次の取得の予定時刻を実際に待ち始める時刻から出し直す（変わらなければ UI には届かない）
-                await fillDetails()
-                await announceNextFetch(after: delay)
+                // 取ったら、次の取得の予定時刻を実際に待ち始める時刻から出し直す
+                if await fillDetails() { await announceNextFetch(after: delay) }
                 guard !Task.isCancelled, await pause(for: delay) else { return }
             }
         }
@@ -218,14 +219,19 @@ actor AccountPoller {
             endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince, participating: participating)
         // 止められた（再開で新しいループに替わった）後に返った結果では、状態を書き換えない
         guard !Task.isCancelled else { return (result, number) }
-        if case .updated(let threads, let lastModified, let pollInterval, let scopes, let truncated) = result {
-            // 隠すスレッドは取った後で除く（取っている間に既読・Done にしたスレッドを一覧に戻さないため）
-            await prefetchNewDetails(in: threads, token: token)
-            guard !Task.isCancelled else { return (result, number) }
+        if case .updated(var threads, let lastModified, let pollInterval, let scopes, let truncated) = result {
+            // 隠すのは取る前と後の 2 回（隠すスレッドは取らず、取っている間に既読・Done・すべて既読にしたスレッドも
+            // 一覧に戻さないため。同じ番号と開始時刻で除き直すだけなので、2 回目は増えた分を除く）
+            for pass in 0..<2 {
+                threads = HiddenThreads.revealOrHide(
+                    threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt)
+                guard pass == 0 else { break }
+                await prefetchNewDetails(in: threads, token: token)
+                guard !Task.isCancelled else { return (result, number) }
+            }
             result = .updated(
-                threads: HiddenThreads.revealOrHide(
-                    threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt),
-                lastModified: lastModified, pollInterval: pollInterval, scopes: scopes, truncated: truncated)
+                threads: threads, lastModified: lastModified, pollInterval: pollInterval, scopes: scopes,
+                truncated: truncated)
         }
         if case .updated = result {
             // 条件付きでも 200 なら全ページを取り直しているので、条件なしと同じく一覧は最新になる
@@ -355,26 +361,34 @@ extension AccountPoller {
     /// 新着（前に知らせた一覧から増えたか `updated_at` が進んだスレッド）の状態とイベントを、一覧を知らせる前に取る。
     /// 最初の一覧と、スコープを確かめていないとき（トークンを取り直した直後）は取らない。
     fileprivate func prefetchNewDetails(in threads: [NotificationThread], token: AccessToken) async {
+        prefetchedIDs = []
         guard scopesVerified else { return }
         let targets = details.pending(in: threads, newOnly: true, limit: ThreadDetailsFetcher.prefetchLimit, now: now())
         guard !targets.isEmpty else { return }
+        prefetchedIDs = Set(targets.map(\.id))
         let results = await ThreadDetailsFetcher(client: client, endpoints: endpoints)
             .fetch(targets, token: token, timeout: detailsTimeout)
         guard !Task.isCancelled else { return }
         details.record(results)
     }
 
-    /// 一覧のスレッドのうち、まだ状態とイベントを取っていないものを取り、取れたものを付けて知らせ直す。
-    /// 取っている間に一覧から外したスレッドは戻さない（今の一覧に付ける）。
-    fileprivate func fillDetails() async {
-        guard case .loaded = state.phase else { return }
+    /// 一覧のスレッドのうち、まだ状態とイベントを取っていないものを取り、取れたものを付けて知らせ直す。取ったら true。
+    /// 取っている間に一覧から外したスレッドは戻さない（今の一覧に付ける）。同じ回の知らせる前に取ったスレッドは、
+    /// 失敗していても取り直さない（失敗の回数を 1 回の取得で 2 回数えないため）。
+    fileprivate func fillDetails() async -> Bool {
+        defer { prefetchedIDs = [] }
+        guard case .loaded = state.phase else { return false }
         let targets = details.pending(
-            in: state.threads, newOnly: false, limit: ThreadDetailsFetcher.fillLimit, now: now())
-        guard !targets.isEmpty, let token = await tokens.currentToken(for: accountID) else { return }
+            in: state.threads.filter { !prefetchedIDs.contains($0.id) }, newOnly: false,
+            limit: ThreadDetailsFetcher.fillLimit, now: now())
+        guard !targets.isEmpty, let token = await tokens.currentToken(for: accountID) else { return false }
         let results = await ThreadDetailsFetcher(client: client, endpoints: endpoints)
-            .fetch(targets, token: token, timeout: nil)
-        guard !Task.isCancelled, !state.phase.isStopped, details.record(results) else { return }
-        state.threads = details.attach(to: state.threads)
-        await publish(state)
+            .fetch(targets, token: token, timeout: detailsTimeout)
+        guard !Task.isCancelled, !state.phase.isStopped else { return true }
+        if details.record(results) {
+            state.threads = details.attach(to: state.threads)
+            await publish(state)
+        }
+        return true
     }
 }

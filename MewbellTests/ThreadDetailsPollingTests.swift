@@ -221,7 +221,12 @@ struct ThreadDetailsPollingTests {
         let published = try #require(firstUpdate(containing: "2", fixture))
         #expect(published.threads.first { $0.id == "2" }?.details == nil)
         fixture.transport.pausedWhere.value = nil
+        // 打ち切った分は一時的な失敗として扱い、同じ回には取り直さず、次の回に取る
         await fixture.sleeper.waitForSleeps(2)
+        #expect(fixture.last?.threads.first { $0.id == "2" }?.details == nil)
+        respond(fixture, notifications: [Self.list([1, 2])])
+        fixture.advance(by: 60)
+        await fixture.sleeper.waitForSleeps(3)
         #expect(fixture.last?.threads.first { $0.id == "2" }?.details == Self.commented)
         fixture.poller.stop()
     }
@@ -259,7 +264,10 @@ struct ThreadDetailsPollingTests {
         #expect(requests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice" })
         fixture.poller.stop()
     }
+}
 
+// 隠しているスレッド・トークン・失敗の扱い
+extension ThreadDetailsPollingTests {
     @Test func sendsNothingWithoutAToken() async throws {
         let fixture = try PollerFixture()
         let tokens = FirstCallTokens()
@@ -274,6 +282,36 @@ struct ThreadDetailsPollingTests {
         #expect(updates.value.last?.threads.count == 1)
         #expect(detailsRequests(fixture).isEmpty)
         poller.stop()
+    }
+    @Test func skipsHiddenThreads() async throws {
+        let fixture = try PollerFixture()
+        let both = Self.list([(1, 0), (2, 30)])
+        respond(fixture, notifications: [Self.list([1]), Self.list([1]), both, both])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        let newest = try #require(fixture.last?.threads.first?.updatedAt)
+        await fixture.poller.markAllRead(through: newest)
+        for cycle in 2...4 {
+            fixture.advance(by: 60)
+            await fixture.sleeper.waitForSleeps(cycle)
+        }
+        // すべて既読で隠している 1 は、一覧に出さず、状態とイベントも取り直さない
+        #expect(fixture.lastIDs == ["2"])
+        #expect(detailsRequests(fixture).filter { $0.url?.path().contains("/issues/1") == true }.count == 2)
+        fixture.poller.stop()
+    }
+
+    @Test func doesNotRetryAPrefetchFailureInTheSameCycle() async throws {
+        let fixture = try PollerFixture()
+        respond(fixture, notifications: [Self.list([1]), Self.list([1, 2])]) { request in
+            request.url?.path().contains("/issues/2") == true ? HTTPResponse(statusCode: 502) : Self.details(request)
+        }
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        fixture.advance(by: 60)
+        await fixture.sleeper.waitForSleeps(2)
+        #expect(detailsRequests(fixture).filter { $0.url?.path().contains("/issues/2") == true }.count == 1)
+        fixture.poller.stop()
     }
 }
 

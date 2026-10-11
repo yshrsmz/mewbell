@@ -20,41 +20,41 @@ struct ThreadDetailsFetcher: Sendable {
         case timedOut
     }
 
-    /// `threads` を順に取り、終わった分の結果を返す。`timeout` を過ぎたら残りを止める（止めた分は返さない）。
-    /// レート制限が返ったら、まだ始めていない分は取らない。
+    /// `threads` を順に取り、結果を返す。`timeout` を過ぎたら残りを止め、始めていて終わらなかった分は一時的な失敗として返す
+    /// （始めていない分は返さない）。レート制限が返ったら、まだ始めていない分は取らない。
     func fetch(
-        _ threads: [NotificationThread], token: AccessToken, timeout: Duration?
+        _ threads: [NotificationThread], token: AccessToken, timeout: Duration
     ) async -> [(NotificationThread, ThreadDetailsFetchResult)] {
         let client = client
         let endpoints = endpoints
         return await withTaskGroup(of: Outcome.self) { group in
-            if let timeout {
-                group.addTask {
-                    try? await Task.sleep(for: timeout)
-                    return .timedOut
-                }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return .timedOut
             }
             var queue = threads[...]
-            var inFlight = 0
+            // 始めて、まだ終わっていないスレッド
+            var running: [String: NotificationThread] = [:]
             func startNext() {
                 guard let thread = queue.popFirst() else { return }
                 group.addTask {
                     .fetched(thread, await client.fetchDetails(for: thread, endpoints: endpoints, token: token))
                 }
-                inFlight += 1
+                running[thread.id] = thread
             }
             for _ in 0..<Self.concurrency {
                 startNext()
             }
             var results: [(NotificationThread, ThreadDetailsFetchResult)] = []
-            while inFlight > 0, let outcome = await group.next() {
+            while !running.isEmpty, let outcome = await group.next() {
                 switch outcome {
                 case .timedOut:
                     Self.logger.info("Stopped fetching thread details on \(endpoints.host) at the time limit")
                     group.cancelAll()
-                    return results
+                    let timedOut = FetchFailure.network(code: URLError.Code.timedOut.rawValue)
+                    return results + running.values.map { ($0, .failed(timedOut)) }
                 case .fetched(let thread, let result):
-                    inFlight -= 1
+                    running[thread.id] = nil
                     results.append((thread, result))
                     if case .rateLimited = result {
                         Self.logger.info("Fetching thread details on \(endpoints.host) was rate limited")
