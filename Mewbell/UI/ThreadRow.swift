@@ -24,10 +24,10 @@ struct ThreadRow: View {
     var body: some View {
         // 操作のボタンは行のボタンの中に入れず、上に重ねる（行のクリックと奪い合わないように）
         Button(action: open) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: ListLayout.spacing) {
                 Image(systemName: symbol)
                     .foregroundStyle(.secondary)
-                    .frame(width: 16)
+                    .frame(width: ListLayout.chevronWidth)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(thread.title)
                         .lineLimit(2)

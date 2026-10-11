@@ -90,3 +90,27 @@ struct DisclosureButtonCountTests {
         #expect(shownCount(isCollapsed: false, count: 3) == nil)
     }
 }
+
+@MainActor
+struct DisclosureAnimationsTests {
+    @Test func countsOverlappingAnimations() {
+        let animations = DisclosureAnimations()
+        animations.begin()
+        animations.begin()
+        animations.end()
+        #expect(animations.running == 1)
+        animations.end()
+        #expect(animations.running == 0)
+    }
+
+    /// 開き直しで捨てた後に、前のアニメーションの終わりが届いても 0 より下がらない。
+    @Test func staysAtZeroWhenAnEndArrivesAfterReset() {
+        let animations = DisclosureAnimations()
+        animations.begin()
+        animations.reset()
+        animations.end()
+        #expect(animations.running == 0)
+        animations.begin()
+        #expect(animations.running == 1)
+    }
+}

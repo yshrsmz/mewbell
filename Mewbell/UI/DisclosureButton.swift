@@ -24,9 +24,9 @@ struct DisclosureButton<Label: View>: View {
                 if reduceMotion {
                     toggle()
                 } else {
-                    animations?.running += 1
+                    animations?.begin()
                     withAnimation(.snappy(duration: 0.2), completionCriteria: .removed, toggle) {
-                        animations?.running -= 1
+                        animations?.end()
                     }
                 }
             } label: {
@@ -66,7 +66,22 @@ struct DisclosureButton<Label: View>: View {
 /// 動いている開閉のアニメーションの数。`DisclosureButton` が数え、一覧はアニメーションの間だけスクロールバーを隠す
 /// （高さが毎フレーム変わり、そのたびにスクロールバーが出てちらつくため）。続けて押すとアニメーションが重なるので数で持つ
 @MainActor @Observable final class DisclosureAnimations {
-    var running = 0
+    private(set) var running = 0
+
+    func begin() {
+        running += 1
+    }
+
+    /// 0 より下げない（`reset` の後に、前のアニメーションの終わりが届いても崩れないように）
+    func end() {
+        running = max(0, running - 1)
+    }
+
+    /// 終わりが届かないまま残った数を捨てる（アニメーションの途中でポップオーバーを閉じたときなど）。
+    /// 残るとスクロールバーが隠れたままになる
+    func reset() {
+        running = 0
+    }
 }
 
 /// 一覧の字下げ。見出しの山形の幅と、山形と中身の間隔から決まる。

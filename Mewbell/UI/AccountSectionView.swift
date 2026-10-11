@@ -67,7 +67,10 @@ private struct HidesScrollIndicatorsWhileAnimating: ViewModifier {
     let animations: DisclosureAnimations
 
     func body(content: Content) -> some View {
-        content.scrollIndicators(animations.running > 0 ? .never : .automatic)
+        content
+            .scrollIndicators(animations.running > 0 ? .never : .automatic)
+            // ポップオーバーを開くたびに、終わりが届かずに残った数を捨てる
+            .onAppear { animations.reset() }
     }
 }
 
@@ -144,9 +147,9 @@ struct AccountSectionView: View {
 
     /// 見出しのうち、開閉のボタンになる部分（山形は `DisclosureButton` が付ける）。
     private var title: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: ListLayout.spacing) {
             tokenIcon
-                .frame(width: 16)
+                .frame(width: ListLayout.chevronWidth)
             Text(account.user)
                 .font(.subheadline.weight(.semibold))
             if account.isActive {
