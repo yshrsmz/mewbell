@@ -1,0 +1,163 @@
+import Foundation
+
+/// `GET /repos/{owner}/{repo}/issues/{number}` のうち、状態とイベントを決めるのに使う値だけ。本文などは型に載せない。
+struct IssueSummary: Decodable, Sendable, Equatable {
+    struct Login: Decodable, Sendable, Equatable {
+        let login: String?
+    }
+
+    struct PullRequest: Decodable, Sendable, Equatable {
+        let mergedAt: String?
+    }
+
+    let createdAt: String
+    let user: Login?
+    let state: String
+    let stateReason: String?
+    let draft: Bool?
+    let pullRequest: PullRequest?
+
+    /// レスポンスボディを読む。形が崩れていれば nil。
+    static func decode(from data: Data) -> IssueSummary? {
+        try? TimelineItem.decoder.decode(IssueSummary.self, from: data)
+    }
+
+    /// 件名の今の状態。知らない値なら nil。
+    var subjectState: SubjectState? {
+        if pullRequest != nil {
+            if pullRequest?.mergedAt != nil { return .merged }
+            switch state {
+            case "closed": return .closed
+            case "open": return draft == true ? .draft : .open
+            default: return nil
+            }
+        }
+        switch state {
+        case "open": return .open
+        case "closed": return stateReason == "not_planned" ? .closedNotPlanned : .closedCompleted
+        default: return nil
+        }
+    }
+}
+
+/// Timeline の 1 項目のうち、イベントを決めるのに使う値だけ。コメントの本文などは型に載せない。
+struct TimelineItem: Decodable, Sendable, Equatable {
+    struct Committer: Decodable, Sendable, Equatable {
+        let date: String?
+    }
+
+    let event: String?
+    let createdAt: String?
+    let submittedAt: String?
+    let state: String?
+    let actor: IssueSummary.Login?
+    let user: IssueSummary.Login?
+    let committer: Committer?
+
+    static var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return decoder
+    }
+
+    /// Timeline の 1 ページを読む。形の崩れた項目は 1 件ずつ読み飛ばす。ボディ全体が JSON の配列でなければ nil。
+    static func decodePage(from data: Data) -> [TimelineItem]? {
+        guard let items = try? decoder.decode([Lenient].self, from: data) else { return nil }
+        return items.compactMap(\.value)
+    }
+
+    /// 1 件のデコードに失敗しても配列全体を失敗させないための入れ物。
+    private struct Lenient: Decodable {
+        let value: TimelineItem?
+
+        init(from decoder: any Decoder) throws {
+            value = try? TimelineItem(from: decoder)
+        }
+    }
+}
+
+/// Issue と Timeline から、スレッドの `updated_at` を更新したイベントを決める（github-api「スレッドのイベントの決定」）。
+enum ThreadEventResolver {
+    /// 作成と同時に起きる出来事を除く幅（作成日時からこの秒数以内は候補にしない）
+    static let creationMargin: TimeInterval = 60
+    /// 近さの幅: `updated_at` のこの秒数前から
+    static let windowBefore: TimeInterval = 180
+    /// 近さの幅: `updated_at` のこの秒数後まで
+    static let windowAfter: TimeInterval = 60
+    /// `closed` をマージとみなす、`closed` の前の `merged` の幅
+    static let mergeMargin: TimeInterval = 60
+
+    struct Candidate: Equatable {
+        let kind: ThreadEvent.Kind
+        let date: Date
+        let actor: String?
+    }
+
+    /// イベント。決められなければ nil。`timeline` は取得したページを古い順につなげたもの。
+    static func event(issue: IssueSummary, timeline: [TimelineItem], updatedAt: Date) -> ThreadEvent? {
+        guard let createdAt = date(issue.createdAt) else { return nil }
+        guard let chosen = closestCandidate(in: timeline, createdAt: createdAt, updatedAt: updatedAt) else {
+            return isNear(createdAt, to: updatedAt) ? ThreadEvent(kind: .opened, actor: issue.user?.login) : nil
+        }
+        if chosen.kind == .closed,
+            let merge = timeline.compactMap(candidate(from:)).last(where: {
+                $0.kind == .merged && $0.date <= chosen.date && $0.date >= chosen.date - mergeMargin
+            })
+        {
+            return ThreadEvent(kind: .merged, actor: merge.actor)
+        }
+        return ThreadEvent(kind: chosen.kind, actor: chosen.actor)
+    }
+
+    /// 近さの幅に入る候補のうち `updated_at` にいちばん近いもの（同じ近さなら後ろのもの）。無ければ nil。
+    static func closestCandidate(in timeline: [TimelineItem], createdAt: Date, updatedAt: Date) -> Candidate? {
+        timeline.compactMap(candidate(from:))
+            .filter { $0.date > createdAt + creationMargin && isNear($0.date, to: updatedAt) }
+            .reduce(nil) { closest, next -> Candidate? in
+                guard let closest else { return next }
+                return distance(next, updatedAt) <= distance(closest, updatedAt) ? next : closest
+            }
+    }
+
+    private static func distance(_ candidate: Candidate, _ updatedAt: Date) -> TimeInterval {
+        abs(candidate.date.timeIntervalSince(updatedAt))
+    }
+
+    private static func isNear(_ date: Date, to updatedAt: Date) -> Bool {
+        date >= updatedAt - windowBefore && date <= updatedAt + windowAfter
+    }
+
+    /// `created_at` を時刻に、`actor.login` を実行者にするイベント
+    private static let actorEvents: [String: ThreadEvent.Kind] = [
+        "commented": .commented, "closed": .closed, "reopened": .reopened, "merged": .merged,
+        "ready_for_review": .readyForReview, "convert_to_draft": .convertedToDraft,
+        "review_requested": .reviewRequested, "assigned": .assigned, "head_ref_force_pushed": .forcePushed,
+    ]
+
+    /// `reviewed` の `state` ごとのイベント
+    private static let reviewStates: [String: ThreadEvent.Kind] = [
+        "approved": .approved, "changes_requested": .changesRequested, "commented": .reviewed,
+    ]
+
+    /// 候補にする項目なら、そのイベントと時刻と実行者。候補にしない・時刻を読めない項目は nil。
+    private static func candidate(from item: TimelineItem) -> Candidate? {
+        switch item.event {
+        case "reviewed":
+            guard let kind = item.state.flatMap({ reviewStates[$0] }) else { return nil }
+            return candidate(kind, at: item.submittedAt, by: item.user?.login)
+        case "committed":
+            return candidate(.pushedCommits, at: item.committer?.date, by: nil)
+        default:
+            guard let kind = item.event.flatMap({ actorEvents[$0] }) else { return nil }
+            return candidate(kind, at: item.createdAt, by: item.actor?.login)
+        }
+    }
+
+    private static func candidate(_ kind: ThreadEvent.Kind, at time: String?, by actor: String?) -> Candidate? {
+        time.flatMap(date).map { Candidate(kind: kind, date: $0, actor: actor) }
+    }
+
+    static func date(_ text: String) -> Date? {
+        try? Date(text, strategy: .iso8601)
+    }
+}

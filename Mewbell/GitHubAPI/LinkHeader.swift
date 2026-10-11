@@ -1,22 +1,31 @@
 import Foundation
 
-/// `Link` ヘッダー（RFC 8288）のうち、ページネーションに使う `rel="next"` だけを読む。
+/// `Link` ヘッダー（RFC 8288）のうち、ページネーションに使う `rel="next"` と `rel="last"` だけを読む。
 enum LinkHeader {
     /// `<https://...>; rel="next", <https://...>; rel="last"` から `next` の URL を返す。無ければ nil。
     static func nextURL(in header: String?) -> URL? {
+        url(relation: "next", in: header)
+    }
+
+    /// `last` の URL を返す。無ければ nil。
+    static func lastURL(in header: String?) -> URL? {
+        url(relation: "last", in: header)
+    }
+
+    private static func url(relation: String, in header: String?) -> URL? {
         guard let header else { return nil }
         for link in header.split(separator: ",") {
             let parts = link.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
             guard let target = parts.first, target.hasPrefix("<"), target.hasSuffix(">") else { continue }
-            let isNext = parts.dropFirst().contains { parameter in
+            let matches = parts.dropFirst().contains { parameter in
                 let pair = parameter.split(separator: "=", maxSplits: 1).map {
                     $0.trimmingCharacters(in: .whitespaces)
                 }
                 guard pair.count == 2, pair[0].lowercased() == "rel" else { return false }
                 let relations = pair[1].trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-                return relations.split(separator: " ").contains { $0.lowercased() == "next" }
+                return relations.split(separator: " ").contains { $0.lowercased() == relation }
             }
-            if isNext {
+            if matches {
                 return URL(string: String(target.dropFirst().dropLast()))
             }
         }

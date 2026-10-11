@@ -105,13 +105,14 @@ final class PollerFixture: Sendable {
     let clock = LockedValue(now)
     let poller: AccountPoller
 
-    init() throws {
+    init(detailsTimeout: Duration = .seconds(20)) throws {
         let updates = updates
         let clock = clock
         poller = AccountPoller(
             accountID: Self.alice, endpoints: try #require(APIEndpoints(host: "github.com")),
             client: GitHubAPIClient(transport: transport, now: { clock.value }), tokens: tokens,
-            sleep: sleeper.sleep, now: { clock.value }, onUpdate: { state in updates.withLock { $0.append(state) } })
+            detailsTimeout: detailsTimeout, sleep: sleeper.sleep, now: { clock.value },
+            onUpdate: { state in updates.withLock { $0.append(state) } })
     }
 
     /// 時刻だけを進める（待っているポーラーは起こさない）。

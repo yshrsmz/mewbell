@@ -93,6 +93,16 @@ struct GhIdentifierTests {
     func rejectsInvalidUsers(_ user: String) {
         #expect(!GhIdentifier.isValidUser(user))
     }
+
+    @Test(arguments: ["alice", "dependabot[bot]", "github-actions[bot]", "Copilot"])
+    func acceptsValidActors(_ login: String) {
+        #expect(GhIdentifier.isValidActor(login))
+    }
+
+    @Test(arguments: ["", "-x", "[bot]", "a[bot]x", "a[bot][bot]", "-x[bot]", "a b[bot]"])
+    func rejectsInvalidActors(_ login: String) {
+        #expect(!GhIdentifier.isValidActor(login))
+    }
 }
 
 struct HostsFileTests {

@@ -49,10 +49,11 @@
 - `GitHubAPI/SubjectState.swift`: `enum SubjectState { case open, draft, merged, closed, closedCompleted, closedNotPlanned }`（Pull request は open / draft / merged / closed、Issue は open / closedCompleted / closedNotPlanned を使う）。Issue のレスポンスの DTO（`created_at`・`user.login`・`state`・`state_reason`・`draft`・`pull_request.merged_at` だけ。`body` は載せない）から決める
 - `ThreadDetails: Hashable, Sendable { let state: SubjectState?; let event: ThreadEvent? }`。キャッシュと `NotificationThread` にはこの組を持たせる
 - `GitHubAPI/ThreadEventResolver.swift`: Issue の DTO と Timeline のページ（デコード済みの最小限の DTO の配列）と `updated_at` から `ThreadEvent?` を決める純粋関数。DTO は `event`、`created_at`、`submitted_at`、`state`、`actor.login`、`user.login`、`committer.date` だけを持ち、`body` などは型に載せない（コメントの本文をメモリに残さない）
-- `GitHubAPIClient.fetchEvent(for:endpoints:token:) async -> ThreadEventFetchResult`。結果は `.found(ThreadDetails)`、`.none`（404 / 410 など。状態もイベントも無い）、`.unauthorized`、`.rateLimited(retryAt:)`、`.failed(FetchFailure)`。URL は `thread.repository` と `thread.subjectNumber`（検証済み）から `apiURL(path:)` で組み立て、`subjectNumber == nil` なら送らずに `.none` を返す。レート制限の判定は既存の `isRateLimited` / `retryAfterSeconds` / `X-RateLimit-Reset` の読み方を共通にして使う
+- `GitHubAPIClient.fetchDetails(for:endpoints:token:) async -> ThreadDetailsFetchResult`（`GitHubAPIClient+ThreadDetails.swift` の extension。`GitHubAPIClient.swift` が lint の行数の上限を超えるため分けた。`send` は extension から呼べるように private を外したが、`Authorization` を付けるのは引き続き `send` だけ）。結果は `.found(ThreadDetails)`、`.unavailable`（404 / 410 など。状態もイベントも無い。`Optional.none` と紛れないよう `none` にはしない）、`.unauthorized`、`.rateLimited(retryAt:)`、`.failed(FetchFailure)`。URL は `thread.repository` と `thread.subjectNumber`（検証済み）から `apiURL(path:)` で組み立て、`subjectNumber == nil` なら送らずに `.none` を返す。レート制限の判定は既存の `isRateLimited` / `retryAfterSeconds` / `X-RateLimit-Reset` の読み方を共通にして使う
 - `LinkHeader` に `lastURL(in:)` を足す（`nextURL` と同じ読み方を `rel` の値で切り替える）
 - ログイン名の検証は `GhIdentifier.isValidActor`（`isValidUser`、または末尾の `[bot]` を除いた値が `isValidUser`）を足す
 - `NotificationThread` に `var details: ThreadDetails?` を足す（API のデコードでは常に nil）。`Hashable` なので、イベントを付けて知らせ直すと `old?.threads != new.threads` になるが、`NotificationTracker` は `updated_at` が進んでいないスレッドを新着にしないので、通知は出し直されない（テストで確かめる）
+- 行の 2 行目は、番号・イベント・理由・更新日時を ` · ` でつないだ 1 つの文にする（`RelativeTimeText` の `prefix`）。部分ごとの `Text` を `HStack` に並べると、狭いときに「Review / requested」のように部分の中で折り返して崩れたため。部分の中の空白は改行しない空白にして、折り返すのは ` · ` の後だけにする
 - 表示の文言は `UI/ThreadEventText.swift`（`ThreadReason` と同じ形の enum）に置き、`ThreadRow` と `ThreadNotificationContent` の両方が使う
 - 行のアイコンは `ThreadRow.symbol` を種類と状態から決める形に変える。記号は形で区別できるものを選ぶ（案: Pull request は open が `arrow.triangle.pull`、draft が `circle.dashed`、merged が `arrow.triangle.merge`、closed が `xmark.circle`。Issue は open が今の `smallcircle.filled.circle`、completed が `checkmark.circle`、not planned が `slash.circle`）。色は GitHub に合わせて open を緑、merged と completed を紫、closed（Pull request）を赤、draft と not planned を灰色にする。macOS 26 にその記号があるかは実装のときに SF Symbols で確かめ、無ければ形の違う別の記号にする。`accessibilityLabel` に種類と状態を入れる
 
@@ -66,12 +67,16 @@
 - `attach(to threads:) -> [NotificationThread]`: ID と `updated_at` が一致する分を付ける
 - `pending(in threads:, newOnly:, limit:)`: 番号を持ち、キャッシュに無いスレッドを更新日時の新しい順に選ぶ
 
+複数のスレッドを同時 4 件まで取り、打ち切りの時間を過ぎたら残りを止める処理は、状態を持たない `Polling/ThreadDetailsFetcher.swift` に置く（`prefetchLimit`・`fillLimit`・`concurrency` の定数もここ）。
+
+`AccountPoller.swift` は main の時点で lint のファイルの行数の上限（400 行）ちょうどだったので、既存のスレッドへの操作（`perform`・`markAllRead`・`recordActionFailure`）を `AccountPoller+ThreadActions.swift` に移し、それが使うプロパティとメソッド（`state`・`hidden`・`readThroughs`・`readThroughCount`・`recorder`・`fetchCount`・`unconditionalRequested`・`client`・`endpoints`・`tokens`・`now`・`logger`・`publish`）の `private` を外した（ユーザーの判断）。actor の中に閉じているので、外から書き換えることはできない。型の本体の行数の上限（250 行）は、`refreshToken`・`succeeded`・`stop(as:)` を同じファイルの extension に移して収めた。
+
 ループの流れ（`run` の中）:
 
-1. `fetch(with:)` が `.updated` を返したら、`handle` の前に `prefetchNewThreadEvents(threads, token:)` を呼ぶ。`previous` があるときだけ、新着のうち待っている最大 10 件を取る。`withTaskGroup` で同時 4 件まで、全体を 20 秒で打ち切る（打ち切りは `Task.sleep` の子タスクと競わせ、終わらなかった分は結果を捨てる）。`Task.isCancelled` なら結果を捨てる
+1. `fetch(with:)` の中で、`.updated` の一覧から隠すスレッドを除いた後に `prefetchNewDetails(in:token:)` を呼ぶ（`run` の分岐を増やさないため）。スコープを確かめる前（トークンを取り直した直後）は取らない。`previous` があるときだけ、新着のうち待っている最大 10 件を取る。`withTaskGroup` で同時 4 件まで、全体を 20 秒で打ち切る（打ち切りは `Task.sleep` の子タスクと競わせ、終わらなかった分は結果を捨てる）。`Task.isCancelled` なら結果を捨てる
 2. `handle` が `state.threads` に一覧を入れるところで、キャッシュを付け、`previous` を更新し、一覧に無い ID をキャッシュから捨てる
-3. `.wait` で待ち始める前（`announceNextFetch` の前）に `fillEvents(token:)` で、待っているものを最大 30 件取り、取れたものがあれば今の `state.threads` に `attach` して `publish` する。今の `state.threads` に付けるので、取っている間に `perform` / `markAllRead` で外したスレッドは戻らない
-4. `stop(as:)` でキャッシュを空にする。`resume` で作り直したループでは `previous` も捨てる（次の一覧を最初の一覧として扱う）
+3. `.wait` で待ち始める前（`announceNextFetch` と再読み込みの待ちを起こした後。再読み込みのボタンがイベントの取得まで待たないように）に `fillDetails()` で、待っているものを最大 30 件取り、取れたものがあれば今の `state.threads` に `attach` して `publish` する。今の `state.threads` に付けるので、取っている間に `perform` / `markAllRead` で外したスレッドは戻らない
+4. `stop(as:)` でキャッシュを空にする（`previous` も捨てるので、`resume` の後の次の一覧は最初の一覧として扱う）
 
 レート制限が返ったら `pausedUntil` を立て、残りのスレッドは送らずに待っているまま残す。`state.phase`、`consecutiveFailures`、`recorder` には触れない。
 

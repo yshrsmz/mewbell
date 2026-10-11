@@ -26,7 +26,10 @@ struct ThreadNotificationContent: Sendable, Equatable {
         identifier = Self.identifier(threadID: thread.id, account: account)
         title = thread.title
         subtitle = thread.repository.description
-        body = "\(ThreadReason.text(thread.reason)) · \(account.displayName)"
+        body =
+            ([thread.details?.event.map(ThreadEventText.text)].compactMap { $0 } + [
+                ThreadReason.text(thread.reason), account.displayName,
+            ]).joined(separator: " · ")
         threadIdentifier = account.description
         var userInfo = [
             Key.host: account.host, Key.user: account.user, Key.threadID: thread.id,

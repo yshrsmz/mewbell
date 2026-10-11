@@ -201,8 +201,9 @@ struct GitHubAPIClient: Sendable {
     }
 
     /// リクエストを組み立てて送る。送り先がアカウントの API ベースの下でなければ送らない。
+    /// `Authorization` を付けるのはこの関数だけ（ほかのファイルの extension もこれを通して送る）。
     /// `body` があるときだけ JSON のボディとして付ける（ボディはログに出さない）。
-    private func send(
+    func send(
         _ url: URL, method: String, endpoints: APIEndpoints, token: AccessToken, ifModifiedSince: String?,
         body: Data? = nil
     ) async -> Result<HTTPResponse, FetchFailure> {
@@ -247,23 +248,28 @@ struct GitHubAPIClient: Sendable {
         case 401:
             return .unauthorized
         case 403, 429:
-            guard Self.isRateLimited(response) else {
-                return response.statusCode == 429
-                    ? .rateLimited(retryAt: now())
-                    : .forbidden(scopes: OAuthScopes(header: response.header("X-OAuth-Scopes")))
+            guard let retryAt = rateLimitedUntil(response) else {
+                return .forbidden(scopes: OAuthScopes(header: response.header("X-OAuth-Scopes")))
             }
-            if let seconds = Self.retryAfterSeconds(response) {
-                return .rateLimited(retryAt: now().addingTimeInterval(TimeInterval(max(seconds, 0))))
-            }
-            let reset = response.header("X-RateLimit-Reset")
-                .flatMap { TimeInterval($0) }
-                .map(Date.init(timeIntervalSince1970:))
-            return .rateLimited(retryAt: reset ?? now())
+            return .rateLimited(retryAt: retryAt)
         case 422:
             return .invalidRequest
         default:
             return .failed(.unexpectedStatus(response.statusCode))
         }
+    }
+
+    /// 403 / 429 のレスポンスがレート制限なら、制限が解ける時刻（`Retry-After` の秒数、`X-RateLimit-Reset`、どちらも無ければ今）。
+    /// 429 は常にレート制限として扱う（ヘッダーで示されていなければ今）。レート制限でない 403 なら nil。
+    func rateLimitedUntil(_ response: HTTPResponse) -> Date? {
+        guard Self.isRateLimited(response) else { return response.statusCode == 429 ? now() : nil }
+        if let seconds = Self.retryAfterSeconds(response) {
+            return now().addingTimeInterval(TimeInterval(max(seconds, 0)))
+        }
+        let reset = response.header("X-RateLimit-Reset")
+            .flatMap { TimeInterval($0) }
+            .map(Date.init(timeIntervalSince1970:))
+        return reset ?? now()
     }
 
     /// 403 / 429 がレート制限を示すか（`X-RateLimit-Remaining: 0`、または `Retry-After` が秒数として読める）。

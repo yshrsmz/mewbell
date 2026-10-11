@@ -70,6 +70,8 @@ struct NotificationThread: Hashable, Sendable, Identifiable {
     let repository: RepositoryName
     /// Issue・Pull request の番号。読み取るときに `ThreadWebURL.subjectNumber` で求める（開く URL と同じ検証を通らなければ nil）
     let subjectNumber: String?
+    /// 件名の状態とイベント。API のデコードでは nil で、ポーラーが取得した後に付ける
+    var details: ThreadDetails?
 }
 
 extension NotificationThread {
