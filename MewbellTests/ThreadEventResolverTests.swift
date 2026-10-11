@@ -180,6 +180,20 @@ struct ThreadEventResolverTests {
         #expect(event == ThreadEvent(kind: .pushedCommits, actor: nil))
     }
 
+    @Test func mergeOnAnEarlierPage() throws {
+        let issue = try #require(
+            IssueSummary.decode(
+                from: TimelineJSON.issue(
+                    createdAt: "2026-10-08T10:00:00Z", state: "closed", pullRequest: true,
+                    mergedAt: "2026-10-08T12:00:00Z")))
+        let timeline = try #require(
+            TimelineItem.decodePage(
+                from: TimelineJSON.page([TimelineJSON.event("closed", at: "2026-10-08T12:00:00Z", actor: "alice")])))
+        let event = ThreadEventResolver.event(
+            issue: issue, timeline: timeline, updatedAt: try #require(ThreadEventResolver.date("2026-10-08T12:00:20Z")))
+        #expect(event == ThreadEvent(kind: .merged, actor: "alice"))
+    }
+
     @Test func closedWithoutMergeStaysClosed() throws {
         let event = try resolve(
             created: "2026-10-08T10:00:00Z", updated: "2026-10-08T12:00:00Z",

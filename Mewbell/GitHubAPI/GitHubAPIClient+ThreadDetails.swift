@@ -77,10 +77,12 @@ extension GitHubAPIClient {
         // 最後のページの URL は API が返したものなので、`send` のオリジン検査を通るものだけに送る
         let last = await getPage(lastURL, endpoints: endpoints, token: token)
         guard case .success(let (lastItems, _)) = last else { return last.map(\.items) }
-        guard lastPage - 1 > 1, let createdAt = ThreadEventResolver.date(issue.createdAt),
-            ThreadEventResolver.closestCandidate(in: lastItems, createdAt: createdAt, updatedAt: updatedAt) == nil,
-            let previousURL = Self.timelineURL(firstURL, page: lastPage - 1)
+        guard let createdAt = ThreadEventResolver.date(issue.createdAt),
+            ThreadEventResolver.closestCandidate(in: lastItems, createdAt: createdAt, updatedAt: updatedAt) == nil
         else { return .success(lastItems) }
+        // その前のページが 1 ページ目なら、取ってある 1 ページ目を使う
+        guard lastPage - 1 > 1 else { return .success(firstItems + lastItems) }
+        guard let previousURL = Self.timelineURL(firstURL, page: lastPage - 1) else { return .success(lastItems) }
         return await getPage(previousURL, endpoints: endpoints, token: token).map { $0.items + lastItems }
     }
 

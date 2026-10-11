@@ -43,6 +43,29 @@ struct ThreadDetailsCacheTests {
         #expect(cache.pending(in: [one], newOnly: false, limit: 10, now: now).map(\.id) == ["1"])
     }
 
+    @Test func givesUpAfterRepeatedFailures() throws {
+        var cache = ThreadDetailsCache()
+        let one = try thread("1", updatedAt: 10)
+        cache.record(.failed(.redirect), for: one)
+        cache.record(.unauthorized, for: one)
+        #expect(cache.pending(in: [one], newOnly: false, limit: 10, now: now).map(\.id) == ["1"])
+        cache.record(.failed(.redirect), for: one)
+        #expect(cache.pending(in: [one], newOnly: false, limit: 10, now: now).isEmpty)
+        #expect(cache.attach(to: [one]).first?.details == nil)
+        let advanced = try thread("1", updatedAt: 20)
+        #expect(cache.pending(in: [advanced], newOnly: false, limit: 10, now: now).map(\.id) == ["1"])
+    }
+
+    @Test func countsFailuresPerUpdate() throws {
+        var cache = ThreadDetailsCache()
+        cache.record(.failed(.redirect), for: try thread("1", updatedAt: 10))
+        cache.record(.failed(.redirect), for: try thread("1", updatedAt: 10))
+        // updated_at が進んだら数え直す
+        cache.record(.failed(.redirect), for: try thread("1", updatedAt: 20))
+        let advanced = try thread("1", updatedAt: 20)
+        #expect(cache.pending(in: [advanced], newOnly: false, limit: 10, now: now).map(\.id) == ["1"])
+    }
+
     @Test func refetchesWhenTheUpdateAdvances() throws {
         var cache = ThreadDetailsCache()
         cache.record(.found(open), for: try thread("1", updatedAt: 10))

@@ -136,11 +136,12 @@ struct ThreadDetailsRequestTests {
     @Test func doesNotRefetchTheFirstPage() async throws {
         let (thread, endpoints) = try thread(subjectURL: "https://api.github.com/repos/octo/app/issues/7")
         let last = #"<https://api.github.com/repositories/1/issues/7/timeline?per_page=100&page=2>; rel="last""#
-        let transport = transport(issue: Self.ok(issue)) { page in
-            page == 1 ? Self.ok(TimelineJSON.page([]), link: last) : Self.ok(TimelineJSON.page([]))
+        let transport = transport(issue: Self.ok(issue)) { [comment] page in
+            page == 1 ? Self.ok(comment, link: last) : Self.ok(TimelineJSON.page([]))
         }
         let result = await fetch(thread, endpoints, transport)
-        #expect(result == .found(ThreadDetails(state: .open, event: nil)))
+        // 最後のページに候補が無いので、取ってある 1 ページ目の候補を使う
+        #expect(result == .found(ThreadDetails(state: .open, event: ThreadEvent(kind: .commented, actor: "bob"))))
         #expect(transport.requests.count == 3)
     }
 

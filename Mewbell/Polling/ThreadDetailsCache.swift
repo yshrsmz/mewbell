@@ -9,7 +9,12 @@ struct ThreadDetailsCache {
         let details: ThreadDetails?
     }
 
+    /// 同じ `updated_at` で一時的な失敗が続いたら、取り直すのをやめる回数
+    static let failureLimit = 3
+
     private var entries: [String: Entry] = [:]
+    /// 一時的な失敗・認証の失敗が続いた回数（`updated_at` ごと）
+    private var failures: [String: (updatedAt: Date, count: Int)] = [:]
     /// 前に知らせた一覧のスレッドの `updated_at`（新着の判定に使う）。最初の一覧の前は nil
     private var previous: [String: Date]?
     /// レート制限が解ける時刻。それまでは取らない
@@ -50,16 +55,26 @@ struct ThreadDetailsCache {
     mutating func record(_ result: ThreadDetailsFetchResult, for thread: NotificationThread) -> Bool {
         switch result {
         case .found(let details):
+            failures[thread.id] = nil
             entries[thread.id] = Entry(updatedAt: thread.updatedAt, details: details)
             return true
         case .unavailable:
+            failures[thread.id] = nil
             entries[thread.id] = Entry(updatedAt: thread.updatedAt, details: nil)
             return true
         case .rateLimited(let retryAt):
             pausedUntil = max(pausedUntil ?? retryAt, retryAt)
             return false
         case .unauthorized, .failed:
-            return false
+            // 移したリポジトリのリダイレクトなど、続けて失敗するスレッドを取り直し続けないように、回数で打ち切る
+            let previous = failures[thread.id].flatMap { $0.updatedAt == thread.updatedAt ? $0.count : nil } ?? 0
+            guard previous + 1 >= Self.failureLimit else {
+                failures[thread.id] = (thread.updatedAt, previous + 1)
+                return false
+            }
+            failures[thread.id] = nil
+            entries[thread.id] = Entry(updatedAt: thread.updatedAt, details: nil)
+            return true
         }
     }
 
@@ -67,6 +82,7 @@ struct ThreadDetailsCache {
     mutating func listed(_ threads: [NotificationThread]) {
         previous = Dictionary(threads.map { ($0.id, $0.updatedAt) }, uniquingKeysWith: max)
         entries = entries.filter { previous?[$0.key] != nil }
+        failures = failures.filter { previous?[$0.key] != nil }
     }
 
     /// すべて捨てる（アカウントが止まったとき）。次の一覧は最初の一覧として扱う。

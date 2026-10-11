@@ -161,7 +161,9 @@ actor AccountPoller {
                 }
                 await announceNextFetch(after: delay)
                 refreshWaiters.finish()
+                // 取り終えたら、次の取得の予定時刻を実際に待ち始める時刻から出し直す（変わらなければ UI には届かない）
                 await fillDetails()
+                await announceNextFetch(after: delay)
                 guard !Task.isCancelled, await pause(for: delay) else { return }
             }
         }
@@ -217,13 +219,13 @@ actor AccountPoller {
         // 止められた（再開で新しいループに替わった）後に返った結果では、状態を書き換えない
         guard !Task.isCancelled else { return (result, number) }
         if case .updated(let threads, let lastModified, let pollInterval, let scopes, let truncated) = result {
-            let threads = HiddenThreads.revealOrHide(
-                threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt)
-            result = .updated(
-                threads: threads, lastModified: lastModified,
-                pollInterval: pollInterval, scopes: scopes, truncated: truncated)
+            // 隠すスレッドは取った後で除く（取っている間に既読・Done にしたスレッドを一覧に戻さないため）
             await prefetchNewDetails(in: threads, token: token)
             guard !Task.isCancelled else { return (result, number) }
+            result = .updated(
+                threads: HiddenThreads.revealOrHide(
+                    threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt),
+                lastModified: lastModified, pollInterval: pollInterval, scopes: scopes, truncated: truncated)
         }
         if case .updated = result {
             // 条件付きでも 200 なら全ページを取り直しているので、条件なしと同じく一覧は最新になる

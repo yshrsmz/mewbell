@@ -80,22 +80,33 @@ enum ThreadEventResolver {
     /// イベント。決められなければ nil。`timeline` は取得したページを古い順につなげたもの。
     static func event(issue: IssueSummary, timeline: [TimelineItem], updatedAt: Date) -> ThreadEvent? {
         guard let createdAt = date(issue.createdAt) else { return nil }
-        guard let chosen = closestCandidate(in: timeline, createdAt: createdAt, updatedAt: updatedAt) else {
+        let candidates = timeline.compactMap(candidate(from:))
+        guard let chosen = closest(in: candidates, createdAt: createdAt, updatedAt: updatedAt) else {
             return isNear(createdAt, to: updatedAt) ? ThreadEvent(kind: .opened, actor: issue.user?.login) : nil
         }
-        if chosen.kind == .closed,
-            let merge = timeline.compactMap(candidate(from:)).last(where: {
-                $0.kind == .merged && $0.date <= chosen.date && $0.date >= chosen.date - mergeMargin
-            })
-        {
+        guard chosen.kind == .closed else { return ThreadEvent(kind: chosen.kind, actor: chosen.actor) }
+        if let merge = candidates.last(where: { $0.kind == .merged && isJustBefore($0.date, chosen.date) }) {
             return ThreadEvent(kind: .merged, actor: merge.actor)
         }
-        return ThreadEvent(kind: chosen.kind, actor: chosen.actor)
+        // `merged` が取っていない前のページにあっても、Pull request の `merged_at` で分かる（実行者は `closed` のもの）
+        if let mergedAt = issue.pullRequest?.mergedAt.flatMap(date), isJustBefore(mergedAt, chosen.date) {
+            return ThreadEvent(kind: .merged, actor: chosen.actor)
+        }
+        return ThreadEvent(kind: .closed, actor: chosen.actor)
+    }
+
+    /// `date` が `closedAt` の `mergeMargin` 秒前から `closedAt` までに入るか。
+    private static func isJustBefore(_ date: Date, _ closedAt: Date) -> Bool {
+        date <= closedAt && date >= closedAt - mergeMargin
     }
 
     /// 近さの幅に入る候補のうち `updated_at` にいちばん近いもの（同じ近さなら後ろのもの）。無ければ nil。
     static func closestCandidate(in timeline: [TimelineItem], createdAt: Date, updatedAt: Date) -> Candidate? {
-        timeline.compactMap(candidate(from:))
+        closest(in: timeline.compactMap(candidate(from:)), createdAt: createdAt, updatedAt: updatedAt)
+    }
+
+    private static func closest(in candidates: [Candidate], createdAt: Date, updatedAt: Date) -> Candidate? {
+        candidates
             .filter { $0.date > createdAt + creationMargin && isNear($0.date, to: updatedAt) }
             .reduce(nil) { closest, next -> Candidate? in
                 guard let closest else { return next }

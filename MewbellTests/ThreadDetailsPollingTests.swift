@@ -191,6 +191,25 @@ struct ThreadDetailsPollingTests {
         fixture.poller.stop()
     }
 
+    @Test func doesNotBringBackThreadsReadWhilePrefetching() async throws {
+        let fixture = try PollerFixture()
+        respond(fixture, notifications: [Self.list([1]), Self.list([1, 2])])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        fixture.transport.pausedWhere.value = { Self.isDetails($0) }
+        fixture.advance(by: 60)
+        await waitUntil { detailsRequests(fixture).count >= 3 }
+        await fixture.poller.perform(.done(threadID: "1"))
+        fixture.transport.pausedWhere.value = nil
+        await fixture.sleeper.waitForSleeps(2)
+        #expect(fixture.lastIDs == ["2"])
+        #expect(
+            !fixture.updates.value.contains { state in
+                state.threads.map(\.id) == ["1", "2"] || state.threads.map(\.id) == ["2", "1"]
+            })
+        fixture.poller.stop()
+    }
+
     @Test func stopsWaitingAtTheTimeLimit() async throws {
         let fixture = try PollerFixture(detailsTimeout: .milliseconds(100))
         respond(fixture, notifications: [Self.list([1]), Self.list([1, 2])])
