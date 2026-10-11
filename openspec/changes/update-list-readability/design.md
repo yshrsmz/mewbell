@@ -2,7 +2,7 @@
 
 ## Context
 
-ポップオーバーの文字は SwiftUI のテキストスタイルで指定している。macOS では `.caption` / `.caption2` / `.footnote` が 10pt、`.subheadline` が 11pt、`.callout` が 12pt、`.body` と `.headline`（太字）が 13pt。いまの主な指定は次のとおり（動機は proposal.md の Why）。
+ポップオーバーの文字は SwiftUI のテキストスタイルで指定している。macOS では `.caption` / `.caption2` / `.footnote` が 10pt、`.subheadline` が 11pt、`.callout` が 12pt、`.body` と `.headline`（太字。semibold 以上）が 13pt。いまの主な指定は次のとおり（動機は proposal.md の Why）。
 
 | 箇所 | いまの指定 |
 |---|---|
@@ -52,10 +52,10 @@
 | スレッドの件名 | `.body`（変えない） |
 | 「No unread notifications」 | 変更前 `.callout` + `.secondary`、変更後 `.subheadline` + `.secondary`（`sectionNote()`） |
 | スレッドの行の 2 行目 | `.subheadline` + `.secondary` |
-| リポジトリの見出し | `.subheadline.weight(.semibold)`、`.secondary` を外す、`truncatedToOneLine(_:mode:)`（1 行、中央の省略、ツールチップで全体、「…」の分の最小幅） |
-| アカウントのユーザー名 | `.headline`（13pt の太字）、`layoutPriority(1)`、`truncatedToOneLine(_:mode:)`（1 行、末尾の省略、ツールチップで全体、「…」の分の最小幅） |
+| リポジトリの見出し | `.subheadline.weight(.semibold)`、`.secondary` を外す、`OneLineText`（1 行。入らないときだけ中央で省略してツールチップ。最小の幅は同じ書体の「…」） |
+| アカウントのユーザー名 | `.headline`（13pt の太字）、`layoutPriority(1)`、`OneLineText`（1 行。入らないときだけ末尾で省略してツールチップ。最小の幅は同じ書体の「…」） |
 | active の印・件数 | `.subheadline`（カプセルの塗りは変えない）、`capsuleBadge` の中の `fixedSize()`（省略しない） |
-| ホスト名とホスト種別、参加のみの印 | `.subheadline` + `.secondary`、ホスト名は `truncatedToOneLine(_:mode:)`（1 行、中央の省略、ツールチップで全体、「…」の分の最小幅）、表示とツールチップは `Account.hostLabel`（UI 層の拡張） |
+| ホスト名とホスト種別、参加のみの印 | `.subheadline` + `.secondary`、ホスト名は `OneLineText`（1 行。入らないときだけ中央で省略してツールチップ。最小の幅は同じ書体の「…」）、表示とツールチップは `Account.hostLabel`（UI 層の拡張） |
 | 取得の状態、操作の失敗 | `.subheadline`（`sectionNote()`）。打ち切りの知らせは `.secondary` を外す。それ以外の `.secondary` の付け方は変えない |
 | 「Checking gh…」 | `.subheadline` + `.secondary`（`sectionNote()`） |
 | トークンを取れないときの文 | `.subheadline`、`.secondary` を外す（`sectionNote()`。コマンドの行と一緒に字下げする）。コマンドの行のコピーボタンのアイコンも `sectionNote()` の書体を受け継いで 13pt から 11pt になる（区画のほかのコピーボタンと揃う） |
@@ -81,29 +81,29 @@
 
 ### D4: 見出しの行で縮める順
 
-幅が足りないときは、ホスト名とホスト種別 → ユーザー名の末尾の順に省略する。active の印・件数・確認の文は `fixedSize()` で省略しない。ユーザー名は `layoutPriority(1)` にする。ホスト名・ユーザー名・リポジトリ名は、「…」が 1 つ入る幅を最小幅として残す。「…」も入らない幅まで縮むと、SwiftUI は省略記号を出さずに切れた字を描くため（39 文字のユーザー名で確認の文が出ているときに、半分切れた 1 文字が残った）。この幅は `@ScaledMetric(relativeTo: .subheadline)` の 16pt で、文字の大きさに合わせて変わる。1 行に収める・省略する・最小幅・ツールチップの 4 つは `truncatedToOneLine(_:mode:)` にまとめ、3 か所で同じ扱いにする。ホスト名が「g…」のように短くなりうるので、全体はツールチップで出す。リポジトリの見出しも 1 行で中央を省略する（2 行に折り返すと山形と件数が縦の中央に来るため）。
+幅が足りないときは、ホスト名とホスト種別 → ユーザー名の末尾の順に省略する。active の印・件数・確認の文は `fixedSize()` で省略しない。ユーザー名は `layoutPriority(1)` にする。ホスト名・ユーザー名・リポジトリ名は、文字列を 1 回だけ受け取る View `OneLineText(text:truncation:)`（`ListLayout.swift`）で出し、3 か所で同じ扱いにする。`ViewThatFits` で、全体が入るときはそのまま出し、入らないときだけ省略してツールチップ（`.help`）を付ける（macOS の文字欄が省略したときだけ全体を出すのと同じ。省略していない名前で VoiceOver が同じ文を重ねて読まない。ユーザーの判断）。最小の幅は、同じ書体で描いた見えない「…」の幅にする。「…」も入らない幅まで縮むと、SwiftUI は省略記号を出さずに切れた字を描くため（39 文字のユーザー名で確認の文が出ているときに、半分切れた 1 文字が残った）。同じ書体で描くので太字のユーザー名にも合い、固定の 16pt のように短い名前の後ろに空白を残さない。文字列を 1 回だけ受け取る View にするのは、表示とツールチップが別の文字列にならないように、`lineLimit` と `truncationMode` が `Text` 以外に付いて黙って効かないことが無いようにするため。ホスト名が「g…」のように短くなりうるので、省略したときは全体をツールチップで出す。リポジトリの見出しも 1 行で中央を省略する（2 行に折り返すと山形と件数が縦の中央に来るため）。
 
-- 代替案: ホスト名を読めるだけの最低幅（60pt など）を残す。ユーザー名が早く省略され、ホスト名を読むことはツールチップで足りるので採らない（上の 16pt は切れた字を出さないための幅で、ホスト名を読ませるためのものではない）
-- 代替案: 「…」も入らないときはホスト名を隠す。自前の `Layout` か `ViewThatFits` が要り、ホスト名があること自体が見えなくなるので採らない
+- 代替案: ホスト名を読めるだけの最低幅（60pt など）を残す。ユーザー名が早く省略され、ホスト名を読むことはツールチップで足りるので採らない（上の「…」の幅は切れた字を出さないための幅で、ホスト名を読ませるためのものではない）
+- 代替案: 「…」も入らないときはホスト名を隠す。自前の `Layout` が要り、ホスト名があること自体が見えなくなるので採らない
 - 代替案: ユーザー名を折り返す。確認の 5 秒だけ見出しが高くなり一覧が動くので採らない
 
 ### D5: 再試行の文
 
 「Rate limited. Retrying at <時刻>」と「Could not fetch notifications. Retrying at <時刻>」は、文ごとに 1 つの `Text` にする。2 つの `Text` を並べると時刻だけが別に折り返し、文の一部を `String` で埋め込むとローカライズのキーから外れるため。
 
-### D6: 区画の補足の文の体裁
+### D6: 区画の中の文の体裁
 
-区画の中の補足の文（取得の状態、操作の失敗、トークンを取れないときの案内）は、main では、取得の状態と操作の失敗は大きさ・字下げ・折り返しの 3 つを、「Checking gh…」は大きさと字下げを、トークンを取れないときの案内は大きさだけを指定していて、案内だけ字下げが無かった。これは書体の型ではなく区画の体裁の規則なので、`View` の拡張 `sectionNote()`（`ListLayout.swift`）に 1 つだけまとめ、トークンを取れないときの案内とコマンドにも使って字下げを揃える。「No unread notifications」も、「Checking gh…」と同じく薄い色の `sectionNote()` にする。行の間隔は `ListLayout.noteSpacing`（6）で揃える。
+区画の中の文（取得の状態、操作の失敗、トークンを取れないときの案内）は、main では、取得の状態と操作の失敗は大きさ・字下げ・折り返しの 3 つを、「Checking gh…」は大きさと字下げを、トークンを取れないときの案内は大きさだけを指定していて、案内だけ字下げが無かった。これは書体の型ではなく区画の体裁の規則なので、`View` の拡張 `sectionNote()`（`ListLayout.swift`）に 1 つだけまとめ、トークンを取れないときの案内とコマンドにも使って字下げを揃える。「No unread notifications」も、「Checking gh…」と同じく薄い色の `sectionNote()` にする。行の間隔は `ListLayout.noteSpacing`（6）で揃える。ここでいう「区画の中の文」は、spec の「補足の情報」（薄い色にしてよい文字）とは別の言葉で、色ではなく区画の中に出す文の体裁を指す。
 
 - 代替案: 中身を受け取るコンテナ（`SectionNote(kind:) { ... }`）にして、行の間隔と色（補足か案内か）も持たせる。SwiftUI では見た目は modifier で重ね、コンテナは並べ方や意味のまとまりに使うのが定石で、文字の階層（`.secondary`）も使う側が意味ごとに付ける。色を列挙で切り替える自前のコンテナは独自のデザインシステムに寄るので採らない（ユーザーの判断）。色と行の間隔は呼び出し側で付け、どの文字を薄くするかは spec の Requirement と D2 の表で確かめる
 
 ### D7: gh のコマンドの文字列
 
-案内に出す gh のコマンド（`gh --version`、`gh auth status`、`gh auth login`、ホストを付けた `login`・`switch`・`refresh`）は、`Mewbell/UI/GhCommand.swift` の `GhCommand` ですべて作る。`gh auth login --hostname <host>` が 3 か所で組み立てられていたのがきっかけで、使う回数ではなく役割（区画と案内画面に出す gh のコマンド）でまとめる。
+案内に出すコマンド（gh と、gh を入れる・新しくする Homebrew のコマンド）は、`Mewbell/UI/GhCommand.swift` の `GhCommand`（`install`・`upgrade`・`version`・`status`・`login`・`switchUser`・`refreshScopes`）ですべて作る。ホスト名とユーザー名は `AccountID` から埋め込み、取り違えを型で防ぐ（`AccountID` は検証を通った値から作る。security.md）。`login` はホスト単位でログインし直すので、ホスト名を受け取る既定引数 `host: String? = nil` の 1 つにまとめる。`ActionFailureView` も `host: String` ではなく `AccountID` を受け取り、兄弟の `FeedStatusView`（`Account` を受け取る）と揃える。`gh auth login --hostname <host>` が 3 か所で組み立てられていたのがきっかけで、使う回数ではなく役割（区画と案内画面に出すコマンド）でまとめる。
 
 ### D8: 表示用の名前と体裁の部品の置き場所
 
-`hostLabel` と `accessibilityName` はモデルではなく UI 層の `Account` の拡張（`Mewbell/UI/Account+Display.swift`）に置く。モデルは自分を表示する画面を知らない。`ListLayout`・`sectionNote()`・`capsuleBadge`・`truncatedToOneLine` は一覧の体裁の部品なので、開閉のボタンのファイルではなく `Mewbell/UI/ListLayout.swift` に置く。
+`hostLabel` はモデルではなく UI 層の `Account` の拡張（`Mewbell/UI/Account+Display.swift`）に置く。モデルは自分を表示する画面を知らない。アカウントの名前 `alice (github.com)` は、ポップオーバーと macOS の通知の両方が使うので、表示する層ではなく `AccountID.displayName`（`HostKind.displayName` と同じく識別子の側）に置く。通知の本文の書き方も、これに揃える（ユーザーの判断。notifications の spec を MODIFIED で直す）。`ListLayout`・`sectionNote()`・`capsuleBadge`・`OneLineText` は一覧の体裁の部品なので、開閉のボタンのファイルではなく `Mewbell/UI/ListLayout.swift` に置く。
 
 ### スレッドと actor の境界
 
@@ -111,14 +111,15 @@ View の modifier を変えるだけで、`@MainActor` の View の中で完結�
 
 ### テストでの差し替え
 
-SwiftUI の書体はユニットテストから読めないので、書体のユニットテストは足さない（文字列を作る `Account` の表示用の拡張と `GhCommand` にはテストを足す）。プレビューと一時的なテストで描く幅は、ポップオーバーの 380pt から `.padding()` を引いた中身の幅（348pt）にする。次で確かめる。
+SwiftUI の書体はユニットテストから読めないので、書体のユニットテストは足さない（文字列を作る `Account` の表示用の拡張・`AccountID.displayName`・通知の本文・`GhCommand` にはテストを足す）。プレビューと一時的なテストで描く幅は、ポップオーバーの 380pt から `.padding()` を引いた中身の幅（348pt）にする。次で確かめる。
 
 - `grep` で、ポップオーバーの View のファイル全部（`Mewbell/UI/` のうち `SettingsView.swift`・`DiagnosticsSettingsView.swift`・`MenuBarLabel.swift` を除いたものと `Mewbell/App/MenuBarContentView.swift`）に 10pt のテキストスタイルが残っていないこと
-- プレビュー（Xcode の RenderPreview、使えなければ一時的な `ImageRenderer` のテスト。コミットしない）で、幅 380pt の中の配置、長いホスト名の省略、件名の 2 行の省略、ホバーのボタンの位置（件名の 1 行目に揃う）
+- プレビュー（Xcode の RenderPreview、使えなければ一時的なテストで `NSHostingView` を画像にする。コミットしない）で、幅 380pt の中の配置、長いホスト名の省略、件名の 2 行の省略、ホバーのボタンの位置（件名の 1 行目に揃う）
 - 手元で起動したポップオーバーのスクリーンショットで、変更の前と同じ条件（ライトモード、後ろが暗いウィンドウ）の文字の大きさとコントラスト比を測って比べる
 - 「コントラストを上げる」はシステムの設定を切り替えず、プレビューの Increased Contrast の変種で、薄い色の文字の比が上がることを測る
 - 「透明度を下げる」は、ポップオーバー全体の背景をシステムのマテリアルのままにし、独自の背景で覆っていないこと（囲み・バッジのシステムの塗りの色を薄く重ねたものは除く）を、上と同じポップオーバーの View のファイル全部に対する grep とコードで確かめる。設定の切り替えはしない
 - Xcode のプレビューが描けないときは、一時的なテスト（コミットしない）で `NSHostingView` を画像にして、長いユーザー名・長いリポジトリ名・200 文字の件名・再試行の行・操作の失敗の文の配置を見る
+- ツールチップの有無は、その一時的なテストでアクセシビリティの木のヘルプを読んで確かめる（省略した名前には全体が出て、省略していない名前には出ない）
 
 ## セキュリティ
 
@@ -126,6 +127,6 @@ SwiftUI の書体はユニットテストから読めないので、書体のユ
 
 ## Risks / Trade-offs
 
-- [行の高さが増え、一度に見えるスレッドが減る] → 主に増えるのは 2 行目とリポジトリの見出しの 1pt ずつ、アカウントのユーザー名の 2pt（ほかに取得の状態の文と山形も 1pt 増え、「No unread notifications」は 1pt 減る）で、一覧はいまも 480pt でスクロールする。未読が少なく、見えるスレッドの数は比べられなかった（tasks.md 1.1・3.3）。行の高さが増えることは、一時的なテストの画像で見た（tasks.md 5.2）
-- [見出しの行が横にあふれる] → D4 の順（ホスト名 → ユーザー名の末尾）で縮め、active の印・件数・確認の文は省略しない。長いホスト名・長いユーザー名のプレビューで確かめる
+- [行の高さが増え、一度に見えるスレッドが減る] → 主に増えるのは 2 行目とリポジトリの見出しの 1pt ずつ、アカウントのユーザー名の 2pt（ほかに取得の状態の文と山形も 1pt 増え、「No unread notifications」は 1pt 減る）で、一覧はいまも 480pt でスクロールする。未読が少なく、見えるスレッドの数は比べられなかった（tasks.md 1.1・3.3）。行の高さが増えることは、手元のポップオーバーのスクリーンショットで見た（tasks.md 3.3 (a)）
+- [見出しの行が横にあふれる] → D4 の順（ホスト名 → ユーザー名の末尾）で縮め、active の印・件数・確認の文は省略しない。長いホスト名・長いユーザー名を一時的なテストの画像で確かめる（tasks.md 5.2・5.8）
 - [ホバーのボタンと件名の重なり] → 件名の大きさは変えないので、ボタンの位置と件名を消す範囲（`ThreadActionButtons.titleFade`）は変えずに済む。ホバーのプレビューで確かめる

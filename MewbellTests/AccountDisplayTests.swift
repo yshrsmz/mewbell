@@ -9,7 +9,7 @@ struct AccountDisplayTests {
     }
 
     @Test func namesTheAccountWithItsHost() {
-        let account = Account(id: AccountID(host: "github.com", user: "alice"), isActive: true)
-        #expect(account.accessibilityName == "alice (github.com)")
+        let account = AccountID(host: "github.com", user: "alice")
+        #expect(account.displayName == "alice (github.com)")
     }
 }

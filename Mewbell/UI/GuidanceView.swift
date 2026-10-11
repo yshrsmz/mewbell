@@ -28,7 +28,7 @@ struct GuidanceView: View {
             case .ghNotFound:
                 title("gh is not installed", systemImage: "exclamationmark.triangle")
                 Text("Mewbell uses the accounts you have logged in to with the GitHub CLI. Install it, then log in.")
-                CommandRow(command: "brew install gh")
+                CommandRow(command: GhCommand.install)
                 if let ghWebsite = Self.ghWebsite {
                     Button("Open cli.github.com") {
                         NSWorkspace.shared.open(ghWebsite)
@@ -39,7 +39,7 @@ struct GuidanceView: View {
                 Text(
                     "Found gh \(version.description). Mewbell needs gh \(GhVersion.minimumSupported.description) or later."
                 )
-                CommandRow(command: "brew upgrade gh")
+                CommandRow(command: GhCommand.upgrade)
             case .ghUnavailable:
                 title("Could not run gh", systemImage: "exclamationmark.triangle")
                 Text("gh did not respond as expected. Check that this command works, then reload.")
@@ -55,7 +55,7 @@ struct GuidanceView: View {
             case .notLoggedIn:
                 title("Not logged in to gh", systemImage: "person.crop.circle.badge.questionmark")
                 Text("Log in with the GitHub CLI. For GitHub Enterprise, add --hostname <host>.")
-                CommandRow(command: GhCommand.login)
+                CommandRow(command: GhCommand.login())
             case .accounts:
                 EmptyView()
             }

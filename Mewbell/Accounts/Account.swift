@@ -42,6 +42,9 @@ struct AccountID: Hashable, Sendable, CustomStringConvertible {
     }
 
     var description: String { "\(host)/\(user)" }
+
+    /// 画面と macOS の通知に出すアカウントの名前（`alice (github.com)`）
+    var displayName: String { "\(user) (\(host))" }
 }
 
 /// gh にログイン済みのアカウント。

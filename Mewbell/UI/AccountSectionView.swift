@@ -115,7 +115,7 @@ struct AccountSectionView: View {
                 if let feed {
                     FeedStatusView(account: account, phase: feed.phase, isTruncated: feed.isTruncated)
                     if let failure = feed.actionFailure {
-                        ActionFailureView(failure: failure, host: account.host)
+                        ActionFailureView(failure: failure, account: account.id)
                     }
                     // 折りたたんでも、取得の状態と操作の失敗は出し続ける
                     if disclosure.showsThreads && !disclosure.isCollapsed {
@@ -127,10 +127,10 @@ struct AccountSectionView: View {
     }
 
     private func header(_ disclosure: AccountDisclosure) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: ListLayout.spacing) {
             // 開閉のボタンと「すべて既読」は分ける（押し間違えて開閉しないように）
             DisclosureButton(
-                isCollapsed: disclosure.isCollapsed, name: account.accessibilityName,
+                isCollapsed: disclosure.isCollapsed, name: account.id.displayName,
                 isCollapsible: disclosure.showsThreads, count: feed?.threads.count ?? 0
             ) {
                 expansion.toggle()
@@ -159,9 +159,8 @@ struct AccountSectionView: View {
             tokenIcon
                 .frame(width: ListLayout.chevronWidth)
             // 幅が足りないときはホスト名から縮め、それでも足りなければユーザー名の末尾を省略する（active の印は省略しない）
-            Text(account.user)
+            OneLineText(text: account.user, truncation: .tail)
                 .font(.headline)
-                .truncatedToOneLine(account.user, mode: .tail)
                 .layoutPriority(1)
             if account.isActive {
                 Text("active")
@@ -169,10 +168,9 @@ struct AccountSectionView: View {
                     .capsuleBadge(.tint.opacity(0.15))
                     .help("The active account for this host in gh")
             }
-            Text(account.hostLabel)
+            OneLineText(text: account.hostLabel, truncation: .middle)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .truncatedToOneLine(account.hostLabel, mode: .middle)
             if participatingOnly {
                 Image(systemName: "person.crop.circle.badge.checkmark")
                     .font(.subheadline)
@@ -256,9 +254,9 @@ struct FeedStatusView: View {
                     "The gh token for this account has neither the repo nor the notifications scope. Add it, then reload:"
                 )
                 if !account.isActive {
-                    CommandRow(command: GhCommand.switchUser(host: account.host, user: account.user))
+                    CommandRow(command: GhCommand.switchUser(to: account.id))
                 }
-                CommandRow(command: GhCommand.refreshScopes(host: account.host))
+                CommandRow(command: GhCommand.refreshScopes(for: account.id))
             case .unauthorized:
                 Text("GitHub rejected the token from gh. Log in again, then reload:")
                 CommandRow(command: GhCommand.login(host: account.host))

@@ -25,15 +25,15 @@ enum ActionFailureMessage {
     }
 
     /// 文に添えるコマンド（認証エラーのときだけ）。
-    static func command(for failure: ActionFailure, host: String) -> String? {
-        failure.kind == .unauthorized ? GhCommand.login(host: host) : nil
+    static func command(for failure: ActionFailure, account: AccountID) -> String? {
+        failure.kind == .unauthorized ? GhCommand.login(host: account.host) : nil
     }
 }
 
 /// アカウントの区画に出す、操作の失敗の知らせ（幅に合わせて折り返す）。次の取得が成功すると `FeedState.actionFailure` ごと消える。
 struct ActionFailureView: View {
     let failure: ActionFailure
-    let host: String
+    let account: AccountID
 
     var body: some View {
         VStack(alignment: .leading, spacing: ListLayout.noteSpacing) {
@@ -42,7 +42,7 @@ struct ActionFailureView: View {
             } icon: {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
             }
-            if let command = ActionFailureMessage.command(for: failure, host: host) {
+            if let command = ActionFailureMessage.command(for: failure, account: account) {
                 CommandRow(command: command)
             }
         }
@@ -51,13 +51,15 @@ struct ActionFailureView: View {
 }
 
 #Preview {
+    let alice = AccountID(host: "github.com", user: "alice")
     VStack(alignment: .leading, spacing: 12) {
         ActionFailureView(
-            failure: ActionFailure(action: .done, kind: .httpStatus(500), occurredAt: .now), host: "github.com")
+            failure: ActionFailure(action: .done, kind: .httpStatus(500), occurredAt: .now), account: alice)
         ActionFailureView(
-            failure: ActionFailure(action: .read, kind: .unauthorized, occurredAt: .now), host: "github.com")
+            failure: ActionFailure(action: .read, kind: .unauthorized, occurredAt: .now), account: alice)
         ActionFailureView(
-            failure: ActionFailure(action: .markAllRead, kind: .rateLimited, occurredAt: .now), host: "acme.ghe.com")
+            failure: ActionFailure(action: .markAllRead, kind: .rateLimited, occurredAt: .now),
+            account: AccountID(host: "acme.ghe.com", user: "bob"))
     }
     .padding()
     .frame(width: 380)

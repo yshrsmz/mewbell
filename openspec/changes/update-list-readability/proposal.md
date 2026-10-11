@@ -10,14 +10,15 @@
 
 ## What Changes
 
-- ポップオーバーの文字は 11pt（`.subheadline`）より小さくしない。10pt の `.caption` / `.caption2` を使っている箇所（スレッドの行の 2 行目、リポジトリの見出し、ホスト名、active の印、参加のみの印、取得の状態、操作の失敗、トークンを取れないときの案内、通知が切られているときの案内、折りたたんだときの件数、すべて既読の確認の文、見出しの山形、「Checking gh…」）を `.subheadline` に上げる。「No unread notifications」は、ほかの補足の文と揃えるため、12pt（`.callout`）から 11pt（`.subheadline`）にする（この change で小さくなる文字はここだけ。ほかに、通知が切られているときの案内のベルと、トークンを取れないときのコマンドの行のコピーボタンのアイコンが、並ぶ文字に合わせて 13pt から 11pt になる）
+- ポップオーバーの文字は 11pt（`.subheadline`）より小さくしない。10pt の `.caption` / `.caption2` を使っている箇所（スレッドの行の 2 行目、リポジトリの見出し、ホスト名、active の印、参加のみの印、取得の状態、操作の失敗、トークンを取れないときの案内、通知が切られているときの案内、折りたたんだときの件数、すべて既読の確認の文、見出しの山形、区画の「Checking gh…」）を `.subheadline` に上げる。「No unread notifications」は、ほかの補足の文と揃えるため、12pt（`.callout`）から 11pt（`.subheadline`）にする（この change で小さくなる文字はここだけ。ほかに、通知が切られているときの案内のベルと、トークンを取れないときのコマンドの行のコピーボタンのアイコンが、並ぶ文字に合わせて 13pt から 11pt になる）
 - アカウントの見出しのユーザー名を、スレッドの件名（13pt）より小さい 11pt の太字から、13pt の太字（`.headline`）に上げ、見出しとして件名より目立たせる
 - 見出し（アカウントのユーザー名、リポジトリの `owner/name`）は `.secondary` で薄くせず、標準の文字色で出す。`.secondary` は補足の情報（スレッドの行の 2 行目、ホスト名、「Updated」の行など）にだけ使う。トークンを取れないときの案内と一覧を打ち切ったことの知らせも、読めないと困る文なので標準の文字色にする。薄い色にする文字の範囲は spec の Requirement を正とする
 - 文字の色はシステムの色（`.primary` / `.secondary`）だけを使い、文字に独自の透明度を掛けない（「コントラストを上げる」「透明度を下げる」の設定がそのまま効くように）
-- 幅 380pt のポップオーバーに収まることは変えない。アカウントの見出しはホスト名 → ユーザー名の順に省略して 1 行に収め、active の印・件数・すべて既読の確認の文は省略しない。リポジトリの見出しは 1 行にして中央を省略する（今は折り返している）。ユーザー名・ホスト名・リポジトリ名はツールチップで全体を読める。件名は今と同じく 2 行まで
+- 幅 380pt のポップオーバーに収まることは変えない。アカウントの見出しはホスト名 → ユーザー名の順に省略して 1 行に収め、active の印・件数・すべて既読の確認の文は省略しない。リポジトリの見出しは 1 行にして中央を省略する（今は折り返している）。省略したときだけ、ユーザー名・ホスト名・リポジトリ名の全体をツールチップで出す。件名は今と同じく 2 行まで
 - 再試行の文（Rate limited. / Could not fetch notifications. Retrying at <時刻>）を、時刻の途中で折り返さないよう文ごとに 1 つの文にする
 - アカウントの表示用の文字列（`hostLabel`）を UI 層にまとめ、設定画面の同じ書式もそれを使う（設定画面の表示は変えない）
-- 案内に出す gh のコマンドを `GhCommand` にまとめる（表示は変えない）
+- アカウントの書き方を `alice (github.com)` に揃え、macOS の通知の本文（今は `alice@github.com`）も同じ書き方にする
+- 案内に出す gh のコマンドを `GhCommand` にまとめる（Homebrew のコマンドも含め、アカウントの識別子の型で受け取る）。表示は変えない
 - 設定ウィンドウは対象にしない。不透明な背景の標準の `Form` で、項目の説明に `.caption` と `.secondary` を使うのは macOS の設定画面の慣習どおりのため
 
 ## Capabilities
@@ -29,10 +30,11 @@
 ### Modified Capabilities
 
 - `ui`: ポップオーバーの文字の大きさと色の決まりを定める Requirement「ポップオーバーの文字の読みやすさ」を新しく足す。既存の Requirement「操作の失敗の表示」の「1 行」の言い方を、1 つの知らせとして折り返してよい意味に直す（MODIFIED）。表示する項目は変えない。リポジトリの見出しは、折り返す代わりに省略してツールチップで全体を出す
+- `notifications`: macOS の通知の本文のアカウントの書き方を `<user> (<host>)` にする（MODIFIED）
 
 ## Impact
 
-- 変わるコード: `Mewbell/UI/`（`ThreadRow.swift`、`RepositoryGroupView.swift`、`AccountSectionView.swift`、`ActionFailureView.swift`、`DisclosureButton.swift`、`NotificationPermissionBanner.swift`、`CommandRow.swift`、`GuidanceView.swift`（gh のコマンドの文字列だけ）、`SettingsView.swift`（ホスト名の書式だけ）、新規の `ListLayout.swift`・`Account+Display.swift`・`GhCommand.swift`）、`MewbellTests/`（新規の `AccountDisplayTests.swift`・`GhCommandTests.swift`、`ActionFailureMessageTests.swift`）。表示する内容と操作は変えない（省略したリポジトリ名・ホスト名・ユーザー名の全体はツールチップで読める）
+- 変わるコード: `Mewbell/UI/`（`ThreadRow.swift`、`RepositoryGroupView.swift`、`AccountSectionView.swift`、`ActionFailureView.swift`、`DisclosureButton.swift`、`NotificationPermissionBanner.swift`、`GuidanceView.swift`（gh のコマンドの文字列だけ）、`SettingsView.swift`（ホスト名の書式だけ）、新規の `ListLayout.swift`・`Account+Display.swift`・`GhCommand.swift`）、`Mewbell/Accounts/Account.swift`（`AccountID.displayName`）、`Mewbell/Notifications/ThreadNotificationContent.swift`（通知の本文）、`MewbellTests/`（`AccountDisplayTests.swift`・`GhCommandTests.swift`・`ActionFailureMessageTests.swift`、通知の本文を確かめている `SystemNotificationTests.swift`）。`CommandRow.swift` のファイルは変えない（コマンドの行のコピーボタンのアイコンが、親の書体を受け継いで小さくなる）。表示する内容と操作は変えない（省略したリポジトリ名・ホスト名・ユーザー名の全体はツールチップで読める）
 - 設定ウィンドウの文字の大きさと色（`SettingsView`、`DiagnosticsSettingsView`）とメニューバーのアイコン（`MenuBarLabel`）は変えない
 - トークン: 扱わない。何も永続化しない
 - gh サブプロセス: 触れない

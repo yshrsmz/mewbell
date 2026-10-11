@@ -12,16 +12,15 @@ struct RepositoryGroupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
+            HStack(spacing: ListLayout.spacing) {
                 DisclosureButton(
                     isCollapsed: isCollapsed, name: group.repository.description,
                     count: group.threads.count
                 ) {
                     expansion.toggleRepository(group.repository)
                 } label: {
-                    Text(group.repository.description)
+                    OneLineText(text: group.repository.description, truncation: .middle)
                         .font(.subheadline.weight(.semibold))
-                        .truncatedToOneLine(group.repository.description, mode: .middle)
                 }
                 Spacer(minLength: 0)
             }
