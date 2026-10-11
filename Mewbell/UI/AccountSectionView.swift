@@ -99,12 +99,12 @@ struct AccountSectionView: View {
             switch status.tokenState {
             case .fetching where feed == nil:
                 Text("Checking gh…")
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.leading, ListLayout.contentIndent)
             case .unavailable:
                 Text("Could not get a token from gh. Log in again with:")
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                 CommandRow(command: "gh auth login --hostname \(account.host)")
             case .disabled:
@@ -159,21 +159,21 @@ struct AccountSectionView: View {
             tokenIcon
                 .frame(width: ListLayout.chevronWidth)
             Text(account.user)
-                .font(.subheadline.weight(.semibold))
+                .font(.headline)
             if account.isActive {
                 Text("active")
-                    .font(.caption)
+                    .font(.subheadline)
                     .capsuleBadge(.tint.opacity(0.15))
                     .help("The active account for this host in gh")
             }
             Text("\(account.host) — \(account.hostKind.displayName)")
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
             if participatingOnly {
                 Image(systemName: "person.crop.circle.badge.checkmark")
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .help("Showing only threads you are participating in")
                     .accessibilityLabel("Participating only")
@@ -270,7 +270,7 @@ struct FeedStatusView: View {
                 .foregroundStyle(.secondary)
             }
         }
-        .font(.caption)
+        .font(.subheadline)
         .padding(.leading, ListLayout.contentIndent)
         .fixedSize(horizontal: false, vertical: true)
     }

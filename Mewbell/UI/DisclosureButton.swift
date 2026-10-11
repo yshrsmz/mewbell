@@ -100,7 +100,7 @@ private struct DisclosureChevron: View {
 
     var body: some View {
         Image(systemName: "chevron.right")
-            .font(.caption2.weight(.semibold))
+            .font(.subheadline.weight(.semibold))
             .foregroundStyle(.secondary)
             .rotationEffect(.degrees(isCollapsed ? 0 : 90))
             .frame(width: ListLayout.chevronWidth)
@@ -114,7 +114,7 @@ private struct CollapsedCount: View {
 
     var body: some View {
         Text("\(count)")
-            .font(.caption.monospacedDigit())
+            .font(.subheadline.monospacedDigit())
             .foregroundStyle(.secondary)
             .capsuleBadge(.secondary.opacity(0.15))
             .accessibilityLabel("\(count) unread")
