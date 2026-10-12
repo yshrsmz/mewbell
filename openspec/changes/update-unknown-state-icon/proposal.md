@@ -16,7 +16,7 @@ ui の Requirement「スレッドの行の状態のアイコン」は、状態�
   - 状態が分からないことを示すために、種類が見分けられなくなる記号（種類によらない疑問符など）を使わない
   - VoiceOver では種類だけを読む
   - 状態が分からない Issue と、種類に合わない状態の Scenario を足す
-- コードは変えない。今の `ThreadIcon` とそのテストが、書き直した Requirement を満たしている
+- 本体のコードは変えない。今の `ThreadIcon` は書き直した Requirement を満たしている。`ThreadIconTests` に、状態が分からない Pull request・Issue の名前と、2 つの記号が違うことを確かめるテストを足す
 - 記号を変える案（疑問符の丸、枝分かれの矢印と空の丸など）を検討して採らなかった理由と、今の形のほうがよい理由を design.md に残す
 
 ## Capabilities
@@ -31,7 +31,7 @@ ui の Requirement「スレッドの行の状態のアイコン」は、状態�
 
 ## Impact
 
-- 変わるコード: なし（`openspec/specs/ui/spec.md` だけ）
+- 変わるコード: 本体は無し。`MewbellTests/ThreadPresentationTests.swift`（`ThreadIconTests`）と `openspec/specs/ui/spec.md`
 - 見た目: 変わらない
 - トークン: 扱わない。何も永続化しない
 - gh サブプロセス: 触れない
