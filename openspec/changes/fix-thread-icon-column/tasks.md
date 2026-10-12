@@ -12,7 +12,7 @@
 ## 3. 確認
 
 - [x] 3.1 ビルドとテストが通ることを確かめる。確認: `bash scripts/format.sh` の後に `bash scripts/lint.sh`、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test`、`MEWBELL_WARNINGS_AS_ERRORS=YES` の Debug と Release のビルド、`npx --no-install openspec validate fix-thread-icon-column --strict` が通る
-- [ ] 3.2 `bash scripts/run.sh` で起動し、手元のポップオーバーで確かめる（ユーザーが行う）。確認: Discussion のスレッドの行の種類のアイコンが、倍率 1 の画面でも、行にマウスを載せているときも欠けずに出る。スレッドの行の種類のアイコン、見出しの山形、トークンの状態のアイコンが同じ幅の列に揃う。長い件名と長いホスト名が、決まりどおりに省略される
+- [x] 3.2 `bash scripts/run.sh` で起動し、手元のポップオーバーで確かめる（ユーザーが行う）。確認: Discussion のスレッドの行の種類のアイコンが、倍率 1 の画面でも、行にマウスを載せているときも欠けずに出る。スレッドの行の種類のアイコン、見出しの山形、トークンの状態のアイコンが同じ幅の列に揃う。長い件名と長いホスト名が、決まりどおりに省略される。結果: ユーザーが手元の画面で確かめ、問題なし（倍率 1 の画面は IconColumnTests で確かめている）
 
 ## 4. レビュー
 
