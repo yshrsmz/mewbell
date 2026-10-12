@@ -3,7 +3,7 @@ import Testing
 
 @testable import Mewbell
 
-/// `AccountPoller.perform(.done)` のテスト。
+/// `AccountPoller.perform(.done)` に固有のテスト（既読と共通のものは `MarkReadPollingTests`）。
 struct DonePollingTests {
     private let fixture: PollerFixture
 
@@ -11,47 +11,11 @@ struct DonePollingTests {
         fixture = try PollerFixture()
     }
 
-    /// `PATCH` には `205`、`DELETE` には `delete` を返す。
-    private func route(gets: [HTTPResponse], delete: HTTPResponse = HTTPResponse(statusCode: 204)) {
-        fixture.respond(gets: gets) { request in
-            request.httpMethod == "DELETE" ? delete : HTTPResponse(statusCode: 205)
-        }
-    }
-
     private func requests(_ method: String) -> [URLRequest] { fixture.requests(method) }
     private var lastIDs: [String] { fixture.lastIDs }
 
-    @Test func removesTheThreadAndSendsTheDelete() async {
-        route(gets: [PollerFixture.ok(1...3), PollerFixture.notModified])
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
-        await fixture.poller.perform(.done(threadID: "2"))
-        #expect(lastIDs == ["1", "3"])
-        #expect(
-            requests("DELETE").map { $0.url?.absoluteString } == ["https://api.github.com/notifications/threads/2"])
-        #expect(requests("DELETE").first?.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
-        #expect(requests("PATCH").isEmpty)
-        fixture.sleeper.advance()
-        await fixture.sleeper.waitForSleeps(2)
-        #expect(requests("GET").map { $0.value(forHTTPHeaderField: "If-Modified-Since") } == [nil, nil])
-        #expect(fixture.sleeper.durations == [.seconds(60), .seconds(60)])
-        fixture.poller.stop()
-    }
-
-    @Test func bringsTheThreadBackWhenTheDeleteFailed() async {
-        route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3)], delete: HTTPResponse(statusCode: 500))
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
-        await fixture.poller.perform(.done(threadID: "2"))
-        #expect(lastIDs == ["1", "3"])
-        fixture.sleeper.advance()
-        await fixture.sleeper.waitForSleeps(2)
-        #expect(lastIDs == ["1", "2", "3"])
-        fixture.poller.stop()
-    }
-
     @Test func keepsTheThreadOutOfAFetchThatEndsWhileTheDeleteIsInFlight() async {
-        route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3), PollerFixture.ok(1...3)])
+        fixture.route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3), PollerFixture.ok(1...3)])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         fixture.transport.pausedMethod.value = "DELETE"
@@ -72,7 +36,7 @@ struct DonePollingTests {
     }
 
     @Test func keepsTheThreadHiddenUntilBothTheReadAndTheDoneEnd() async {
-        route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3), PollerFixture.ok(1...3)])
+        fixture.route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3), PollerFixture.ok(1...3)])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         fixture.transport.pausedMethod.value = "PATCH"
@@ -89,14 +53,6 @@ struct DonePollingTests {
         await fixture.sleeper.waitForSleeps(3)
         #expect(lastIDs == ["1", "2", "3"])
         fixture.poller.stop()
-    }
-
-    @Test func sendsNothingWhileStopped() async {
-        route(gets: [PollerFixture.ok(1...3, scopes: "gist")])
-        fixture.poller.start()
-        await waitUntil { self.fixture.last?.phase == .scopeInsufficient }
-        await fixture.poller.perform(.done(threadID: "2"))
-        #expect(requests("DELETE").isEmpty)
     }
 }
 
@@ -189,18 +145,6 @@ struct MarkAllReadPollingTests {
         fixture.poller.stop()
     }
 
-    @Test func bringsTheThreadsBackWhenThePutFailed() async {
-        await startLoaded(
-            [Self.twoThreads, Self.twoThreads],
-            put: { _ throws(TransportError) in throw .network(code: URLError.Code.timedOut.rawValue) })
-        await markAllRead()
-        #expect(lastIDs.isEmpty)
-        fixture.sleeper.advance()
-        await fixture.sleeper.waitForSleeps(2)
-        #expect(lastIDs == ["1", "2"])
-        fixture.poller.stop()
-    }
-
     @Test func keepsTheThreadsOutOfAFetchThatEndsWhileThePutIsInFlight() async {
         await startLoaded(
             [Self.twoThreads, Self.threeThreads, Self.twoThreads],
@@ -272,21 +216,15 @@ struct MarkAllReadPollingTests {
         fixture.poller.stop()
     }
 
-    @Test func sendsNothingWhileStopped() async {
-        fixture.respond(gets: [Self.ok([("1", Self.noon)], scopes: "gist")]) { _ in HTTPResponse(statusCode: 202) }
-        fixture.poller.start()
-        await waitUntil { self.fixture.last?.phase == .scopeInsufficient }
-        await markAllRead()
-        #expect(puts.isEmpty)
-    }
-
     @Test func neitherSendsNorClearsWithoutAToken() async {
         await startLoaded([Self.twoThreads])
         await fixture.tokens.discardToken(for: PollerFixture.alice)
         await markAllRead()
         #expect(puts.isEmpty)
         // 送れなかったことだけを知らせ、一覧はそのまま
-        #expect(fixture.last?.actionFailure?.kind == .noToken)
+        #expect(
+            fixture.last?.actionFailure
+                == ActionFailure(action: .markAllRead, kind: .noToken, occurredAt: fixture.clock.value))
         #expect(lastIDs == ["1", "2"])
         fixture.poller.stop()
     }

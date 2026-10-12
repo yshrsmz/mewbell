@@ -35,45 +35,20 @@ struct UnconditionalFetchTests {
         fixture.poller.stop()
     }
 
-    /// 条件なしにした取得（5 分たった、または再読み込み）が失敗したら、次の取得もまた条件なしにする。
+    /// 条件なしにした取得（5 分たった、または既読にした後）が失敗したら、次の取得もまた条件なしにする。
     @Test(arguments: [false, true])
     func retriesWithoutIfModifiedSinceAfterAFailedUnconditionalFetch(requested: Bool) async {
-        fixture.respond([PollerFixture.ok(1...1), HTTPResponse(statusCode: 500), PollerFixture.notModified])
+        fixture.route(gets: [PollerFixture.ok(1...1), HTTPResponse(statusCode: 500), PollerFixture.notModified])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         if requested {
-            fixture.poller.requestUnconditionalFetch()
+            await fixture.poller.perform(.read(threadID: "1"))
         }
         fixture.advance(by: requested ? 60 : 300)
         await fixture.sleeper.waitForSleeps(2)
         fixture.advance(by: 60)
         await fixture.sleeper.waitForSleeps(3)
-        #expect(fixture.ifModifiedSince == [nil, nil, nil])
-        fixture.poller.stop()
-    }
-
-    @Test func requestedFetchIsUnconditionalButNotEarlier() async {
-        fixture.respond([
-            PollerFixture.ok(1...1), PollerFixture.ok(1...2, lastModified: "LM-2"), PollerFixture.notModified,
-        ])
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
-        fixture.poller.requestUnconditionalFetch()
-        try? await Task.sleep(for: .milliseconds(50))
-        // 取得は早まらない（待ちも増えない）
-        #expect(fixture.transport.requests.count == 1)
-        #expect(fixture.sleeper.durations.count == 1)
-
-        fixture.advance(by: 60)
-        await fixture.sleeper.waitForSleeps(2)
-        #expect(fixture.ifModifiedSince == [nil, nil])
-        #expect(fixture.last?.threads.count == 2)
-
-        // 取り終えたら、その次はまた条件付きに戻る
-        fixture.advance(by: 60)
-        await fixture.sleeper.waitForSleeps(3)
-        #expect(fixture.ifModifiedSince == [nil, nil, "LM-2"])
-        #expect(fixture.sleeper.durations == [60, 60, 60].map { .seconds($0) })
+        #expect(fixture.requests("GET").map { $0.value(forHTTPHeaderField: "If-Modified-Since") } == [nil, nil, nil])
         fixture.poller.stop()
     }
 

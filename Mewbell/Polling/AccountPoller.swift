@@ -107,7 +107,7 @@ actor AccountPoller {
     }
 
     /// 次の取得を `If-Modified-Since` なしにする。取得を早めはしない。
-    nonisolated func requestUnconditionalFetch() {
+    private nonisolated func requestUnconditionalFetch() {
         unconditionalRequested.store(true, ordering: .relaxed)
     }
 

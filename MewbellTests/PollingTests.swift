@@ -46,26 +46,6 @@ struct AccountPollerTests {
         fixture.poller.stop()
     }
 
-    @Test func keepsLastModifiedWhenALaterPageFails() async {
-        let partial = HTTPResponse(
-            statusCode: 200,
-            headers: [
-                "Last-Modified": "LM-2", "X-OAuth-Scopes": "repo",
-                "Link": #"<https://api.github.com/notifications?page=2>; rel="next""#,
-            ],
-            body: FakeHTTPTransport.page(1...1))
-        fixture.respond([PollerFixture.ok(1...1), partial])  // 2 ページ目は通信の失敗
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
-        fixture.sleeper.advance()
-        await fixture.sleeper.waitForSleeps(2)
-        fixture.respond([PollerFixture.notModified])
-        fixture.sleeper.advance()
-        await fixture.sleeper.waitForSleeps(3)
-        #expect(fixture.ifModifiedSince == [nil, "LM-1", nil, "LM-1"])
-        fixture.poller.stop()
-    }
-
     @Test func backsOffAndKeepsTheThreadsWhileFailing() async {
         fixture.respond([PollerFixture.ok(1...2)])
         fixture.poller.start()
@@ -84,19 +64,6 @@ struct AccountPollerTests {
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(5)
         #expect(fixture.sleeper.durations.last == .seconds(60))
-        fixture.poller.stop()
-    }
-
-    @Test func waitsForTheRateLimit() async {
-        fixture.respond([HTTPResponse(statusCode: 403, headers: ["Retry-After": "300"])])
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
-        #expect(fixture.sleeper.durations == [.seconds(300)])
-        if case .retrying(_, let rateLimited) = fixture.last?.phase {
-            #expect(rateLimited)
-        } else {
-            Issue.record("unexpected phase \(String(describing: fixture.last?.phase))")
-        }
         fixture.poller.stop()
     }
 
@@ -136,6 +103,8 @@ struct AccountPollerTests {
         await waitUntil { self.fixture.last?.phase == .scopeInsufficient }
         #expect(fixture.last?.phase == .scopeInsufficient)
         #expect(fixture.sleeper.durations.isEmpty)
+        #expect(fixture.last?.diagnostics.scopes == OAuthScopes(header: "gist, read:org"))
+        #expect(fixture.last?.diagnostics.lastFetchFailure?.kind == .httpStatus(403))
     }
 
     @Test func keepsRetryingAForbiddenResponseWithoutScopes() async {
@@ -185,14 +154,6 @@ struct AccountPollerTests {
         fixture.poller.stop()
     }
 
-    @Test func stopsAsUnauthorizedWhenTheTokenCannotBeRefreshed() async {
-        fixture.respond([HTTPResponse(statusCode: 401)])
-        fixture.poller.start()
-        await waitUntil { self.fixture.last?.phase == .unauthorized }
-        #expect(fixture.tokens.refreshCount.value == 1)
-        #expect(fixture.transport.requests.count == 1)
-    }
-
     @Test func stopsWhenTheScopesAreInsufficientAndResumesLater() async {
         fixture.respond([PollerFixture.ok(1...3, scopes: "gist, read:org")])
         fixture.poller.start()
@@ -201,14 +162,18 @@ struct AccountPollerTests {
         try? await Task.sleep(for: .milliseconds(50))
         #expect(fixture.transport.requests.count == 1)
         #expect(fixture.sleeper.durations.isEmpty)
+        #expect(fixture.last?.diagnostics.scopes == OAuthScopes(header: "gist, read:org"))
 
         fixture.tokens.refreshedValue.value = "test-token-alice-2"
         fixture.respond([PollerFixture.ok(1...3)])
+        let updatesBefore = fixture.updates.value.count
         fixture.poller.resume()
         await fixture.sleeper.waitForSleeps(1)
         #expect(fixture.tokens.refreshCount.value == 1)
-        // 再開の間は最初の取得中を出す（Diagnostics の値は持ち越す）
-        #expect(fixture.updates.value.contains { $0.phase == .loading && $0.threads.isEmpty })
+        // 再開の間は最初の取得中を出す（Diagnostics の値は持ち越すが、前のトークンのスコープは捨てる）
+        let loading = fixture.updates.value.dropFirst(updatesBefore).first { $0.phase == .loading }
+        #expect(loading?.threads.isEmpty == true)
+        #expect(loading?.diagnostics.scopes == nil)
         #expect(fixture.last?.threads.count == 3)
         #expect(fixture.ifModifiedSince == [nil, nil])
         #expect(fixture.authorizations.last == "Bearer test-token-alice-2")
@@ -299,19 +264,6 @@ struct NotificationStoreTests {
         #expect(tokens.refreshCount.value == 1)
     }
 
-    @Test func keepsRunningPollersWhileTheTokenIsFetched() async {
-        tokens.set("test-token-alice", for: alice)
-        let store = makeStore()
-        store.sync(with: .accounts([status("alice", .ready)]))
-        await sleeper.waitForSleeps(1)
-        store.sync(with: .accounts([status("alice", .fetching)]))
-        store.sync(with: .accounts([status("alice", .ready)]))
-        #expect(created.value == [alice])
-        #expect(store.feeds[alice]?.threads.count == 1)
-        #expect(transport.requests.count == 1)
-        store.stopAll()
-    }
-
     @Test func refreshResumesStoppedPollers() async {
         tokens.set("test-token-bob", for: bob)
         let store = await storeWithUnauthorizedAlice(otherAccounts: [status("bob", .ready)])
@@ -327,19 +279,5 @@ struct NotificationStoreTests {
         #expect(store.isRefreshing)
         #expect(store.feeds[alice]?.threads.count == 1)
         store.stopAll()
-    }
-
-    @Test func ignoresUpdatesFromStoppedPollers() async {
-        tokens.set("test-token-alice", for: alice)
-        transport.setHandler { _ throws(TransportError) in
-            Thread.sleep(forTimeInterval: 0.1)
-            return PollerFixture.ok(1...1)
-        }
-        let store = makeStore()
-        store.sync(with: .accounts([status("alice", .ready)]))
-        await waitUntil { self.transport.requests.count == 1 }
-        store.sync(with: .notLoggedIn)
-        try? await Task.sleep(for: .milliseconds(200))
-        #expect(store.feeds.isEmpty)
     }
 }

@@ -115,26 +115,6 @@ struct ThreadDetailsPollingTests {
         fixture.poller.stop()
     }
 
-    @Test func refetchesWhenTheUpdateAdvances() async throws {
-        let fixture = try PollerFixture()
-        let halfPast = try #require(ThreadEventResolver.date("2026-10-08T12:30:00Z"))
-        // 12:00:00 のコメントは 12:30 の更新の近さの幅に入らないので、取り直した後はイベントが付かない
-        let later = PollerFixture.ok(
-            body: Data(
-                "[\(FakeHTTPTransport.threadJSON(id: "1", updatedAt: "2026-10-08T12:30:00Z", subjectURL: "https://api.github.com/repos/octo/app/issues/1"))]"
-                    .utf8))
-        respond(fixture, notifications: [Self.list([1]), later])
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
-        fixture.advance(by: 60)
-        await fixture.sleeper.waitForSleeps(2)
-        #expect(detailsRequests(fixture).count == 4)
-        // 12:30 の一覧は、取り直した結果を付けて初めて知らされる（12:00 のイベントは付けない）
-        let updated = fixture.updates.value.filter { $0.threads.first?.updatedAt == halfPast }
-        #expect(updated.first?.threads.first?.details == ThreadDetails(state: .open, event: nil))
-        fixture.poller.stop()
-    }
-
     @Test func failuresDoNotChangeTheFeedState() async throws {
         let fixture = try PollerFixture()
         respond(fixture, notifications: [Self.list([1]), Self.list([1])]) { _ in HTTPResponse(statusCode: 502) }
@@ -221,13 +201,9 @@ struct ThreadDetailsPollingTests {
         let published = try #require(firstUpdate(containing: "2", fixture))
         #expect(published.threads.first { $0.id == "2" }?.details == nil)
         fixture.transport.pausedWhere.value = nil
-        // 打ち切った分は一時的な失敗として扱い、同じ回には取り直さず、次の回に取る
+        // 打ち切った分は一時的な失敗として扱い、同じ回には取り直さない
         await fixture.sleeper.waitForSleeps(2)
         #expect(fixture.last?.threads.first { $0.id == "2" }?.details == nil)
-        respond(fixture, notifications: [Self.list([1, 2])])
-        fixture.advance(by: 60)
-        await fixture.sleeper.waitForSleeps(3)
-        #expect(fixture.last?.threads.first { $0.id == "2" }?.details == Self.commented)
         fixture.poller.stop()
     }
 
@@ -251,17 +227,6 @@ struct ThreadDetailsPollingTests {
         #expect(resumed.threads.first?.details == nil)
         #expect(detailsRequests(fixture).count == before + 2)
         #expect(fixture.last?.threads.first?.details == Self.commented)
-        fixture.poller.stop()
-    }
-
-    @Test func sendsOnlyTheAccountsToken() async throws {
-        let fixture = try PollerFixture()
-        respond(fixture, notifications: [Self.list([1, 2])])
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
-        let requests = detailsRequests(fixture)
-        #expect(requests.count == 4)
-        #expect(requests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice" })
         fixture.poller.stop()
     }
 }

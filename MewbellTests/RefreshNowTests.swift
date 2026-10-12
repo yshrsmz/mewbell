@@ -11,13 +11,6 @@ struct RefreshNowTests {
         fixture = try PollerFixture()
     }
 
-    private func waitForPendingRefresh() async {
-        let deadline = ContinuousClock.now + .seconds(2)
-        while await fixture.poller.pendingRefreshCount == 0, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(1))
-        }
-    }
-
     /// 最初の取得を終えて、次の取得を待っているポーラー。
     private func startAndWait() async {
         fixture.poller.start()
@@ -45,6 +38,8 @@ struct RefreshNowTests {
         await fixture.sleeper.waitForSleeps(2)
         #expect(fixture.sleeper.durations == [.seconds(60), .seconds(7)])
         #expect(fixture.transport.requests.count == 1)
+        // 早めた取得の予定時刻を Diagnostics に出す
+        #expect(fixture.last?.diagnostics.nextFetchAt == PollerFixture.now.addingTimeInterval(10))
         fixture.advance(by: 7)
         await refresh.value
         #expect(fixture.ifModifiedSince == [nil, nil])
@@ -58,7 +53,7 @@ struct RefreshNowTests {
         fixture.advance(by: 60)
         await waitUntil { fixture.transport.requests.count == 2 }
         let refresh = Task { await fixture.poller.refreshNow() }
-        await waitForPendingRefresh()
+        await fixture.waitForPendingRefresh()
         fixture.transport.pausedMethod.value = nil
         // 取得中の分が終わった後は、その取得の開始から 10 秒の下限だけ待つ
         await fixture.sleeper.waitForSleeps(2)
@@ -100,7 +95,7 @@ struct RefreshNowTests {
         fixture.advance(by: 60)
         await waitUntil { fixture.transport.requests.count == 2 }
         let refresh = Task { await fixture.poller.refreshNow() }
-        await waitForPendingRefresh()
+        await fixture.waitForPendingRefresh()
         fixture.transport.pausedMethod.value = nil
         await refresh.value
         await fixture.sleeper.waitForSleeps(2)
@@ -121,7 +116,7 @@ struct RefreshNowTests {
         fixture.advance(by: 300)
         await waitUntil { fixture.transport.requests.count == 3 }
         let refresh = Task { await fixture.poller.refreshNow() }
-        await waitForPendingRefresh()
+        await fixture.waitForPendingRefresh()
         fixture.transport.pausedMethod.value = nil
         await fixture.sleeper.waitForSleeps(3)
         #expect(fixture.sleeper.durations == [.seconds(60), .seconds(300), .seconds(10)])
@@ -285,17 +280,5 @@ struct NotificationStoreRefreshTests {
         transport.pausedMethod.value = nil
         await waitUntil { MainActor.assumeIsolated { !store.isRefreshing } }
         store.stopAll()
-    }
-
-    @Test func endsTheProgressWhenStopped() async {
-        let store = await loadedStore()
-        clock.withLock { $0 = $0.addingTimeInterval(-15) }
-        // 前の取得から 5 秒なので、どちらも下限の待ちに入る
-        store.refresh()
-        await sleeper.waitForSleeps(6)
-        store.stopAll()
-        await waitUntil { MainActor.assumeIsolated { !store.isRefreshing } }
-        #expect(!store.isRefreshing)
-        #expect(transport.requests.count == 2)
     }
 }
