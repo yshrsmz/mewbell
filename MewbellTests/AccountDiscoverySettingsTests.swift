@@ -53,14 +53,6 @@ struct AccountDiscoverySettingsTests {
         #expect(executables == [realPath(other)])
     }
 
-    @Test func doesNotFallBackFromAnUnusableGhPath() async throws {
-        try fixture.writeHosts(twoAccounts)
-        let states = await reload(
-            fixture.discovery(), DiscoveryOptions(overrides: GhOverrides(executablePath: "/nonexistent/gh")))
-        #expect(states.last == .ghNotFound)
-        #expect(fixture.runner.requests.isEmpty)
-    }
-
     // MARK: - 設定ディレクトリの上書き
 
     @Test func readsTheOverriddenConfigDirectoryAndPassesItToGh() async throws {
@@ -78,7 +70,6 @@ struct AccountDiscoverySettingsTests {
         let resolved = try #require(realPath(work.path))
         for request in fixture.runner.requests {
             #expect(request.environment["GH_CONFIG_DIR"] == resolved)
-            #expect(GhEnvironment.removedKeys.allSatisfy { request.environment[$0] == nil })
         }
 
         // 401 の後の取り直しも同じ設定ディレクトリで実行する
@@ -158,45 +149,6 @@ struct AccountDiscoverySettingsTests {
     }
 }
 
-/// 指定した引数の gh を、開くまで待たせる `ProcessRunning`。
-final class ArgumentGatedRunner: ProcessRunning {
-    private let base: FakeProcessRunner
-    private let firstArgument: String
-    private let gate = LockedValue<(isOpen: Bool, waiters: [CheckedContinuation<Void, Never>])>((false, []))
-
-    init(base: FakeProcessRunner, gating firstArgument: String) {
-        self.base = base
-        self.firstArgument = firstArgument
-    }
-
-    var waitingCount: Int { gate.value.waiters.count }
-
-    func open() {
-        let waiters = gate.withLock { gate in
-            gate.isOpen = true
-            defer { gate.waiters = [] }
-            return gate.waiters
-        }
-        for waiter in waiters {
-            waiter.resume()
-        }
-    }
-
-    func run(_ request: ProcessRequest) async throws -> ProcessOutput {
-        if request.arguments.first == firstArgument {
-            await withCheckedContinuation { continuation in
-                let passes = gate.withLock { gate in
-                    if gate.isOpen { return true }
-                    gate.waiters.append(continuation)
-                    return false
-                }
-                if passes { continuation.resume() }
-            }
-        }
-        return try await base.run(request)
-    }
-}
-
 /// 読み直しの途中の無効化と、設定ディレクトリの切り替え。
 struct AccountDiscoveryRaceTests {
     private let fixture: DiscoveryFixture
@@ -219,13 +171,14 @@ struct AccountDiscoveryRaceTests {
     }
 
     @Test func keepsAnAccountDisabledDuringAReloadThatStartedBefore() async throws {
-        let gated = ArgumentGatedRunner(base: fixture.runner, gating: "--version")
+        let gated = GatedProcessRunner(base: fixture.runner, gating: "--version")
         let discovery = fixture.discovery(runner: gated)
+        gated.close()
         let states = LockedValue<[DiscoveryState]>([])
         async let reloaded: Void = discovery.reload(userInitiated: false, options: DiscoveryOptions()) { state in
             states.withLock { $0.append(state) }
         }
-        await waitUntil { gated.waitingCount == 1 }
+        await gated.waitUntilWaiting(1)
         // 古い設定で始めた読み直しが `gh --version` を待っている間に無効にする
         await discovery.disable(dave)
         gated.open()

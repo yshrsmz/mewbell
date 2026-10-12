@@ -152,6 +152,27 @@ final class PollerFixture: Sendable {
         }
     }
 
+    /// 既読・Done・すべて既読の成功の応答
+    static let actionSuccesses = [
+        "PATCH": HTTPResponse(statusCode: 205), "DELETE": HTTPResponse(statusCode: 204),
+        "PUT": HTTPResponse(statusCode: 202),
+    ]
+
+    /// `GET` には `gets` を順に返し（尽きたら通信の失敗）、ほかのメソッドには `responses` の応答を返す（無ければ `500`）。
+    func route(gets: [HTTPResponse], _ responses: [String: HTTPResponse] = actionSuccesses) {
+        respond(gets: gets) { request in
+            responses[request.httpMethod ?? ""] ?? HTTPResponse(statusCode: 500)
+        }
+    }
+
+    /// 再読み込みが、今の取得の後の取得を待ち始めるまで待つ（2 秒で諦める）。
+    func waitForPendingRefresh() async {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while await poller.pendingRefreshCount == 0, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
     static func ok(_ ids: ClosedRange<Int>, lastModified: String = "LM-1", scopes: String = "repo") -> HTTPResponse {
         ok(body: FakeHTTPTransport.page(ids), lastModified: lastModified, scopes: scopes)
     }

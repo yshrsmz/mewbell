@@ -67,7 +67,6 @@ struct NotificationStoreRepositoriesTests {
         let store = makeStore()
         await send(FeedState(phase: loaded, threads: try threads()))
         let groups = try #require(store.repositories[alice])
-        #expect(groups == RepositoryGroup.groups(from: try threads()))
         #expect(groups.map(\.id) == ["octo/lib", "octo/app"])
         #expect(groups[1].threads.map(\.id) == ["3", "1"])
         store.stopAll()

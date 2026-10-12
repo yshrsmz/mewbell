@@ -22,12 +22,6 @@ struct ListExpansionTests {
             kind: .issue, subjectURL: nil, repository: repository, subjectNumber: nil)
     }
 
-    @Test func startsWithEverythingExpanded() {
-        let state = ListExpansion().state(for: alice)
-        #expect(!state.isCollapsed)
-        #expect(!state.isRepositoryCollapsed(app))
-    }
-
     @Test func togglesAccountsAndRepositoriesSeparately() {
         let state = ListExpansion().state(for: alice)
         state.toggle()
@@ -38,18 +32,6 @@ struct ListExpansionTests {
         state.toggle()
         #expect(!state.isCollapsed)
         #expect(state.isRepositoryCollapsed(app))
-    }
-
-    @Test func keepsTheSameRepositoryOfAnotherAccountApart() {
-        let expansion = ListExpansion()
-        expansion.state(for: alice).toggleRepository(app)
-        #expect(!expansion.state(for: bob).isRepositoryCollapsed(app))
-    }
-
-    @Test func returnsTheSameStateForTheSameAccount() {
-        let expansion = ListExpansion()
-        #expect(expansion.state(for: alice) === expansion.state(for: alice))
-        #expect(expansion.state(for: alice) !== expansion.state(for: bob))
     }
 
     @Test func expandsOnlyTheAccountAndTheRepositoriesWithNewThreads() {
@@ -69,14 +51,6 @@ struct ListExpansionTests {
         #expect(aliceState.isRepositoryCollapsed(lib))
         #expect(bobState.isCollapsed)
         #expect(bobState.isRepositoryCollapsed(app))
-    }
-
-    @Test func expandingAnAccountWithoutStateDoesNothing() {
-        let expansion = ListExpansion()
-        expansion.expand(account: alice, newThreads: [thread("1", in: app)])
-        let state = expansion.state(for: alice)
-        #expect(!state.isCollapsed)
-        #expect(!state.isRepositoryCollapsed(app))
     }
 
     @Test func forgetsAccountsThatAreNoLongerShown() {

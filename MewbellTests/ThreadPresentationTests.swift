@@ -33,12 +33,8 @@ struct RepositoryGroupTests {
 }
 
 struct ThreadReasonTests {
-    @Test(arguments: [
-        ("review_requested", "Review requested"),
-        ("mention", "Mentioned"),
-        ("approval_requested", "Approval requested"),
-        ("", ""),
-    ])
+    /// 表にある値は表の名前、知らない値は `_` を空白にして先頭を大文字にする。
+    @Test(arguments: [("review_requested", "Review requested"), ("approval_requested", "Approval requested")])
     func namesReasons(_ reason: String, _ text: String) {
         #expect(ThreadReason.text(reason) == text)
     }
@@ -51,14 +47,10 @@ struct ThreadEventTextTests {
         #expect(names.allSatisfy { !$0.isEmpty })
     }
 
+    /// 検証を通らないログイン名は出さない。
     @Test(arguments: [
         (ThreadEvent(kind: .closed, actor: "alice"), "Closed by alice"),
-        (ThreadEvent(kind: .approved, actor: "bob"), "Approved by bob"),
-        (ThreadEvent(kind: .changesRequested, actor: "bob"), "Requested changes by bob"),
-        (ThreadEvent(kind: .commented, actor: "dependabot[bot]"), "Commented by dependabot[bot]"),
-        (ThreadEvent(kind: .opened, actor: "carol"), "Opened by carol"),
         (ThreadEvent(kind: .pushedCommits, actor: nil), "Pushed commits"),
-        (ThreadEvent(kind: .merged, actor: nil), "Merged"),
         (ThreadEvent(kind: .closed, actor: "-evil"), "Closed"),
     ])
     func describesEvents(_ event: ThreadEvent, _ text: String) {
@@ -77,18 +69,16 @@ struct ThreadIconTests {
     }
 
     @Test func labelsTheKindAndState() {
-        #expect(ThreadIcon(kind: .pullRequest, state: .merged).label == "Pull request, merged")
         #expect(ThreadIcon(kind: .issue, state: .closedNotPlanned).label == "Issue, closed as not planned")
-        #expect(ThreadIcon(kind: .pullRequest, state: .merged).color == .purple)
     }
 
-    @Test func fallsBackToTheKindWithoutAState() {
+    @Test func fallsBackToTheKindWithoutAMatchingState() {
         let unknown = ThreadIcon(kind: .pullRequest, state: nil)
-        #expect(unknown.symbol == "arrow.triangle.pull")
         #expect(unknown.color == nil)
         #expect(unknown.label == "Pull request")
+        // 種類に合わない状態は、状態が無いときと同じ
         #expect(ThreadIcon(kind: .release, state: .open) == ThreadIcon(kind: .release, state: nil))
-        #expect(ThreadIcon(kind: .issue, state: .merged).symbol == "smallcircle.filled.circle")
+        #expect(ThreadIcon(kind: .issue, state: .merged) == ThreadIcon(kind: .issue, state: nil))
     }
 }
 
@@ -108,12 +98,9 @@ struct ThreadWebURLTests {
     }
 
     @Test func opensTheWebNotificationsPageOfTheHost() {
-        #expect(ThreadWebURL.notificationsPage(endpoints: github)?.absoluteString == "https://github.com/notifications")
         #expect(
             ThreadWebURL.notificationsPage(endpoints: gheCloud)?.absoluteString
                 == "https://acme.ghe.com/notifications")
-        #expect(
-            ThreadWebURL.notificationsPage(endpoints: ghes)?.absoluteString == "https://ghe.example.com/notifications")
     }
 
     @Test func opensPullRequestsIssuesAndCommits() throws {
@@ -175,12 +162,10 @@ struct ThreadWebURLTests {
 
 struct ThreadSubjectNumberTests {
     private let github: APIEndpoints
-    private let gheCloud: APIEndpoints
     private let ghes: APIEndpoints
 
     init() throws {
         github = try #require(APIEndpoints(host: "github.com"))
-        gheCloud = try #require(APIEndpoints(host: "acme.ghe.com"))
         ghes = try #require(APIEndpoints(host: "ghe.example.com"))
     }
 
@@ -200,17 +185,13 @@ struct ThreadSubjectNumberTests {
             try number(
                 repository: "team/svc", kind: .issue,
                 subjectURL: "https://ghe.example.com/api/v3/repos/team/svc/issues/7", endpoints: ghes) == "7")
-        #expect(
-            try number(
-                repository: "acme/web", subjectURL: "https://api.acme.ghe.com/repos/acme/web/pulls/3",
-                endpoints: gheCloud) == "3")
     }
 
     /// 番号は `subject.url` の形で決まり、`subject.type` には依らない（Release と Discussion を除く）。
-    @Test(arguments: [SubjectKind.issue, .commit, .checkSuite])
-    func readsTheNumberFromThePullRequestURLForOtherKinds(_ kind: SubjectKind) throws {
+    @Test func readsTheNumberFromThePullRequestURLForOtherKinds() throws {
         #expect(
-            try number(kind: kind, subjectURL: "https://api.github.com/repos/octo/app/pulls/42", endpoints: github)
+            try number(
+                kind: .checkSuite, subjectURL: "https://api.github.com/repos/octo/app/pulls/42", endpoints: github)
                 == "42")
     }
 

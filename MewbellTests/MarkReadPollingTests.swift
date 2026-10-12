@@ -3,7 +3,7 @@ import Testing
 
 @testable import Mewbell
 
-/// `AccountPoller.perform(.read)` のテスト。
+/// `AccountPoller.perform` のテスト。既読と Done で同じ振る舞いは、両方で確かめる。
 struct MarkReadPollingTests {
     private let fixture: PollerFixture
 
@@ -11,36 +11,42 @@ struct MarkReadPollingTests {
         fixture = try PollerFixture()
     }
 
-    private func route(gets: [HTTPResponse], patch: HTTPResponse = HTTPResponse(statusCode: 205)) {
-        fixture.respond(gets: gets) { _ in patch }
-    }
-
     private var gets: [URLRequest] { fixture.requests("GET") }
     private var patches: [URLRequest] { fixture.requests("PATCH") }
     private var lastIDs: [String] { fixture.lastIDs }
 
-    @Test func removesTheThreadAndSendsThePatch() async {
-        route(gets: [PollerFixture.ok(1...3), PollerFixture.notModified])
+    private static let actions = [ThreadAction.read(threadID: "2"), .done(threadID: "2")]
+
+    @Test(arguments: zip(actions, ["PATCH", "DELETE"]))
+    func removesTheThreadAndSendsTheRequest(_ action: ThreadAction, method: String) async {
+        fixture.route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3), PollerFixture.notModified])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
-        await fixture.poller.perform(.read(threadID: "2"))
+        await fixture.poller.perform(action)
         #expect(lastIDs == ["1", "3"])
-        #expect(patches.map { $0.url?.absoluteString } == ["https://api.github.com/notifications/threads/2"])
-        #expect(patches.first?.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
+        let sent = fixture.transport.requests.filter { $0.httpMethod != "GET" }
+        #expect(
+            sent.map { "\($0.httpMethod ?? "") \($0.url?.absoluteString ?? "")" }
+                == ["\(method) https://api.github.com/notifications/threads/2"])
+        #expect(sent.first?.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
         // 次の取得は条件なしで、取得は早まらない
         #expect(fixture.sleeper.durations == [.seconds(60)])
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
-        #expect(gets.map { $0.value(forHTTPHeaderField: "If-Modified-Since") } == [nil, nil])
-        #expect(fixture.sleeper.durations == [.seconds(60), .seconds(60)])
+        // 取り終えたら、その次はまた条件付きに戻る
+        fixture.sleeper.advance()
+        await fixture.sleeper.waitForSleeps(3)
+        #expect(fixture.ifModifiedSince == [nil, nil, "LM-1"])
+        #expect(fixture.sleeper.durations == Array(repeating: .seconds(60), count: 3))
         fixture.poller.stop()
     }
 
-    @Test func bringsTheThreadBackWhenThePatchFailed() async {
-        route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3)], patch: HTTPResponse(statusCode: 500))
+    @Test(arguments: actions)
+    func bringsTheThreadBackWhenTheRequestFailed(_ action: ThreadAction) async {
+        fixture.route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3)], [:])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
-        await fixture.poller.perform(.read(threadID: "2"))
+        await fixture.poller.perform(action)
         #expect(lastIDs == ["1", "3"])
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
@@ -49,7 +55,7 @@ struct MarkReadPollingTests {
     }
 
     @Test func keepsTheThreadOutOfAFetchStartedBeforeMarkingItRead() async {
-        route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3), PollerFixture.ok(1...1)])
+        fixture.route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3), PollerFixture.ok(1...1)])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         // 2 回目の取得の応答を止めている間に既読にする
@@ -65,15 +71,7 @@ struct MarkReadPollingTests {
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(3)
         #expect(lastIDs == ["1"])
-        #expect(gets.last?.value(forHTTPHeaderField: "If-Modified-Since") == nil)
+        #expect(fixture.ifModifiedSince.last == .some(nil))
         fixture.poller.stop()
-    }
-
-    @Test func sendsNothingWhileStopped() async {
-        route(gets: [PollerFixture.ok(1...3, scopes: "gist")])
-        fixture.poller.start()
-        await waitUntil { self.fixture.last?.phase == .scopeInsufficient }
-        await fixture.poller.perform(.read(threadID: "2"))
-        #expect(patches.isEmpty)
     }
 }

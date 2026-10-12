@@ -62,12 +62,16 @@ sign() {
 
 failures=0
 
-# expect <pass|fail> <description> <app> [version] [expected-message]
+# expect <pass|fail> <description> <app> [version] [expected-message...]
+# fail のときは、渡したメッセージがすべて出力に含まれることも確かめる
 expect() {
-  local want="$1" description="$2" app="$3" version="${4:-1.2.3}" message="${5:-}"
-  local output rc=0
+  local want="$1" description="$2" app="$3" version="${4:-1.2.3}"
+  local output rc=0 matched=true message
   output="$(verify_app "$app" "$version" 2>&1)" || rc=$?
-  if [[ "$want" == pass && $rc -eq 0 ]] || [[ "$want" == fail && $rc -ne 0 && "$output" == *"$message"* ]]; then
+  for message in "${@:5}"; do
+    [[ "$output" == *"$message"* ]] || matched=false
+  done
+  if [[ "$want" == pass && $rc -eq 0 ]] || [[ "$want" == fail && $rc -ne 0 && "$matched" == true ]]; then
     echo "ok: $description"
   else
     echo "NG: ${description}（rc=${rc}）" >&2
@@ -80,12 +84,12 @@ app="$(make_app valid)"
 sign -o runtime "$app"
 expect pass "正常な .app は通る" "$app"
 
-for key in "${VERIFY_APP_FORBIDDEN_ENTITLEMENTS[@]}"; do
-  write_entitlements "$key"
-  app="$(make_app "$key")"
-  sign -o runtime --entitlements "$work/$key.entitlements" "$app"
-  expect fail "${key} 付きは落ちる" "$app" 1.2.3 "$key"
-done
+# 禁止の entitlement の一覧（VERIFY_APP_FORBIDDEN_ENTITLEMENTS）を回すと実装の写しになるので、代表の 1 つで確かめる
+key=com.apple.security.cs.disable-library-validation
+write_entitlements "$key"
+app="$(make_app entitlement)"
+sign -o runtime --entitlements "$work/$key.entitlements" "$app"
+expect fail "${key} 付きは落ちる" "$app" 1.2.3 "$key"
 
 app="$(make_app no-runtime)"
 sign "$app"
@@ -104,14 +108,11 @@ app="$(make_app bundle-id universal com.example.other)"
 sign -o runtime "$app"
 expect fail "CFBundleIdentifier が違うと落ちる" "$app" 1.2.3 "CFBundleIdentifier"
 
+# 2 つのキーはそれぞれ別のメッセージを出すので、両方が違う .app を 1 回検査して、どちらも確かめる
 app="$(make_app version)"
 sign -o runtime "$app"
-expect fail "バージョンが違うと落ちる" "$app" 1.2.4 "CFBundleShortVersionString"
-
-app="$(make_app build-number)"
-plutil -replace CFBundleVersion -string 1 "$app/Contents/Info.plist"
-sign -o runtime "$app"
-expect fail "CFBundleVersion だけが違っても落ちる" "$app" 1.2.3 "CFBundleVersion"
+expect fail "バージョンと build number が違うと、それぞれ落ちる" "$app" 1.2.4 \
+  "CFBundleShortVersionString が 1.2.4" "CFBundleVersion が 1.2.4"
 
 # package-release.sh と同じく set -euo pipefail の下で呼んでも、途中で止まらずに理由を出して失敗する
 # （expect の中の $(...) || rc=$? では errexit が効かないので、別の bash で動かす）

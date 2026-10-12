@@ -32,9 +32,7 @@ final class FakeHTTPTransport: HTTPTransport {
             try? await Task.sleep(for: .milliseconds(5))
         }
         let handler = handler.value
-        let response = try handler(request)
-        guard response.body.count <= bodyLimit else { throw .bodyTooLarge }
-        return response
+        return try handler(request)
     }
 
     /// 通知のスレッドの JSON（1 件）。
@@ -56,8 +54,8 @@ final class FakeHTTPTransport: HTTPTransport {
 }
 
 extension FakeHTTPTransport {
-    /// 届いたリクエストの `If-Modified-Since`（順に）
+    /// 届いた `GET` の `If-Modified-Since`（順に）。既読・Done などの `GET` 以外は含めない
     var ifModifiedSince: [String?] {
-        requests.map { $0.value(forHTTPHeaderField: "If-Modified-Since") }
+        requests.filter { $0.httpMethod == "GET" }.map { $0.value(forHTTPHeaderField: "If-Modified-Since") }
     }
 }

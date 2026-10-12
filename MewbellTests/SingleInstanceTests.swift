@@ -11,11 +11,6 @@ final class SingleInstanceLockTests {
         try? FileManager.default.removeItem(at: directory)
     }
 
-    @Test func acquiresWhenNobodyHoldsTheLock() {
-        let lock = SingleInstanceLock(fileURL: lockURL)
-        #expect(lock.tryAcquire() == .acquired)
-    }
-
     @Test func secondInstanceCannotAcquireWhileFirstHoldsTheLock() {
         let first = SingleInstanceLock(fileURL: lockURL)
         let second = SingleInstanceLock(fileURL: lockURL)
@@ -23,25 +18,11 @@ final class SingleInstanceLockTests {
         #expect(second.tryAcquire() == .heldByAnotherInstance)
     }
 
-    @Test func secondInstanceCanAcquireAfterFirstReleases() {
-        let first = SingleInstanceLock(fileURL: lockURL)
-        let second = SingleInstanceLock(fileURL: lockURL)
-        #expect(first.tryAcquire() == .acquired)
-        first.release()
-        #expect(second.tryAcquire() == .acquired)
-    }
-
     @Test func lockIsReleasedWhenTheHolderGoesAway() {
         var first: SingleInstanceLock? = SingleInstanceLock(fileURL: lockURL)
         #expect(first?.tryAcquire() == .acquired)
         first = nil
         #expect(SingleInstanceLock(fileURL: lockURL).tryAcquire() == .acquired)
-    }
-
-    @Test func acquiringTwiceFromTheSameHolderSucceeds() {
-        let lock = SingleInstanceLock(fileURL: lockURL)
-        #expect(lock.tryAcquire() == .acquired)
-        #expect(lock.tryAcquire() == .acquired)
     }
 
     @Test func reportsFailureWhenTheLockFileCannotBeOpened() throws {

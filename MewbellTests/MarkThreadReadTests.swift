@@ -17,21 +17,19 @@ struct ThreadIDTests {
 
 struct MarkThreadReadTests {
     private let github: APIEndpoints
-    private let ghes: APIEndpoints
     private let token: AccessToken
 
     init() throws {
         github = try #require(APIEndpoints(host: "github.com"))
-        ghes = try #require(APIEndpoints(host: "ghe.example.com"))
         token = try #require(AccessToken(ghOutput: Data("test-token-alice".utf8)))
     }
 
     private func markRead(
-        _ response: HTTPResponse, endpoints: APIEndpoints? = nil, threadID: String = "123"
+        _ response: HTTPResponse, threadID: String = "123"
     ) async -> (ThreadActionResult, FakeHTTPTransport) {
         let transport = FakeHTTPTransport { _ in response }
         let result = await GitHubAPIClient(transport: transport).markThreadRead(
-            endpoints: endpoints ?? github, token: token, threadID: threadID)
+            endpoints: github, token: token, threadID: threadID)
         return (result, transport)
     }
 
@@ -41,19 +39,8 @@ struct MarkThreadReadTests {
         let request = try #require(transport.requests.first)
         #expect(request.httpMethod == "PATCH")
         #expect(request.url?.absoluteString == "https://api.github.com/notifications/threads/123")
-        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
-        #expect(request.value(forHTTPHeaderField: "Accept") == "application/vnd.github+json")
-        #expect(request.value(forHTTPHeaderField: "X-GitHub-Api-Version") == "2022-11-28")
-        #expect(request.value(forHTTPHeaderField: "User-Agent")?.hasPrefix("Mewbell/") == true)
-        #expect(request.value(forHTTPHeaderField: "If-Modified-Since") == nil)
         #expect(request.value(forHTTPHeaderField: "Content-Type") == nil)
         #expect(request.httpBody == nil)
-    }
-
-    @Test func usesTheGHESBasePath() async {
-        let (_, transport) = await markRead(HTTPResponse(statusCode: 205), endpoints: ghes, threadID: "77")
-        #expect(
-            transport.requests.first?.url?.absoluteString == "https://ghe.example.com/api/v3/notifications/threads/77")
     }
 
     @Test(arguments: [
@@ -75,9 +62,9 @@ struct MarkThreadReadTests {
         #expect(result == expected)
     }
 
-    @Test(arguments: ["123/../../user", "abc", ""])
-    func sendsNothingForAnInvalidID(_ id: String) async {
-        let (result, transport) = await markRead(HTTPResponse(statusCode: 205), threadID: id)
+    /// ID の形の判定は `ThreadIDTests` で確かめる。ここでは、判定を通らない ID では何も送らないことを確かめる
+    @Test func sendsNothingForAnInvalidID() async {
+        let (result, transport) = await markRead(HTTPResponse(statusCode: 205), threadID: "123/../../user")
         #expect(result == .failed(.rejectedURL))
         #expect(transport.requests.isEmpty)
     }

@@ -117,24 +117,14 @@ struct NotificationStoreActionTests {
             repository: try #require(RepositoryName(owner: "octo", name: "app")), subjectNumber: nil)
     }
 
+    /// 取得し終えていて、スレッドがあるときだけ、すべて既読にできる。
     @Test(arguments: [
-        (FeedPhase.retrying(nextAttempt: .now, rateLimited: false), true),
-        (.loading, false),
-        (.loaded(updatedAt: .now), false),
-        (.scopeInsufficient, false),
-        (.unauthorized, false),
+        (FeedPhase.loaded(updatedAt: .now), true, true),
+        (.loaded(updatedAt: .now), false, false),
+        (.retrying(nextAttempt: .now, rateLimited: false), true, false),
     ])
-    func cannotMarkAllReadUnlessLoadedWithThreads(_ phase: FeedPhase, _ hasThreads: Bool) throws {
+    func canMarkAllReadOnlyWhenLoadedWithThreads(_ phase: FeedPhase, _ hasThreads: Bool, _ expected: Bool) throws {
         let feed = FeedState(phase: phase, threads: hasThreads ? [try Self.thread()] : [])
-        let store = NotificationStore(makePoller: nil, openURL: { _ in }, feeds: [alice: feed])
-        #expect(store.feeds[alice]?.canMarkAllRead != true)
-        #expect(store.feeds[bob]?.canMarkAllRead != true)
-    }
-
-    @Test func canMarkAllReadWhenLoadedWithThreads() throws {
-        let store = NotificationStore(
-            makePoller: nil, openURL: { _ in },
-            feeds: [alice: FeedState(phase: .loaded(updatedAt: .now), threads: [try Self.thread()])])
-        #expect(store.feeds[alice]?.canMarkAllRead == true)
+        #expect(feed.canMarkAllRead == expected)
     }
 }

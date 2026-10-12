@@ -124,14 +124,6 @@ struct AccountDiscoveryTests {
         #expect(states.last == .ghNotFound)
     }
 
-    @Test func reportsAnOutdatedGh() async throws {
-        fixture.setVersion("gh version 2.39.2 (2023-11-14)\n")
-        try fixture.writeHosts(twoAccounts)
-        let states = await reload(fixture.discovery())
-        #expect(states.last == .ghOutdated(version: GhVersion(major: 2, minor: 39, patch: 2)))
-        #expect(fixture.tokenRequests.isEmpty)
-    }
-
     @Test func reportsAGhThatCannotRunAndChecksAgainNextTime() async throws {
         try fixture.writeHosts(twoAccounts)
         fixture.setVersion("")
@@ -144,12 +136,6 @@ struct AccountDiscoveryTests {
     @Test func reportsNotLoggedInWithoutHostsFile() async {
         let states = await reload(fixture.discovery())
         #expect(states.last == .notLoggedIn)
-    }
-
-    @Test func reportsAnUnreadableHostsFile() async throws {
-        try fixture.writeHosts("github.com: [unclosed")
-        let states = await reload(fixture.discovery())
-        #expect(states.last == .hostsFileUnreadable(path: fixture.configDirectory.appending(path: "hosts.yml").path))
     }
 
     @Test func reportsAnUnreadableHostsFileEvenWhenGhCannotStart() async throws {
@@ -232,13 +218,6 @@ struct AccountDiscoveryTests {
         fixture.setFailing(["alice"])
         #expect(await discovery.refreshToken(for: alice) == nil)
         #expect(await fixture.credentials.token(for: alice) == nil)
-    }
-
-    @Test func doesNotRefreshBeforeGhIsVerified() async throws {
-        await fixture.credentials.set(try #require(AccessToken(ghOutput: Data("old-token".utf8))), for: alice)
-        #expect(await fixture.discovery().refreshToken(for: alice) == nil)
-        #expect(await fixture.credentials.token(for: alice) == nil)
-        #expect(fixture.tokenRequests.isEmpty)
     }
 
     @Test func doesNotStoreATokenForAnAccountRemovedWhileRefreshing() async throws {

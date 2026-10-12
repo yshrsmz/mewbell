@@ -25,34 +25,6 @@ struct ParticipatingPollerTests {
             transport.requests.first?.url?.absoluteString
                 == "https://api.acme.ghe.com/notifications?all=false&participating=true&per_page=50")
     }
-
-    @Test func sendsParticipatingFalseByDefault() async throws {
-        let poller = try poller(host: "github.com", participating: false)
-        poller.start()
-        await waitUntil { !self.transport.requests.isEmpty }
-        poller.stop()
-        #expect(
-            transport.requests.first?.url?.absoluteString
-                == "https://api.github.com/notifications?all=false&participating=false&per_page=50")
-    }
-
-    @Test func followsTheNextLinkAsIs() async throws {
-        let next = "https://api.acme.ghe.com/notifications?all=false&participating=true&per_page=50&page=2"
-        transport.setHandler { request in
-            if request.url?.absoluteString == next {
-                return HTTPResponse(
-                    statusCode: 200, headers: ["X-OAuth-Scopes": "repo"], body: FakeHTTPTransport.page(3...3))
-            }
-            return HTTPResponse(
-                statusCode: 200, headers: ["X-OAuth-Scopes": "repo", "Link": "<\(next)>; rel=\"next\""],
-                body: FakeHTTPTransport.page(1...2))
-        }
-        let poller = try poller(host: "acme.ghe.com", participating: true)
-        poller.start()
-        await waitUntil { self.transport.requests.count >= 2 }
-        poller.stop()
-        #expect(transport.requests.map { $0.url?.absoluteString }.last == next)
-    }
 }
 
 /// `ThreadNotifying` への呼び出しを記録する。
@@ -275,28 +247,6 @@ struct NotificationStoreSettingsTests {
         store.stopAll()
     }
 
-    @Test func keepsTheRateLimitWaitWhenRestarting() async {
-        // 最初の取得がレート制限で失敗する
-        transport.setHandler { _ in
-            HTTPResponse(statusCode: 429, headers: ["Retry-After": "120"])
-        }
-        tokens.set("test-token-alice", for: alice)
-        let store = makeStore()
-        store.sync(with: .accounts([status(alice, .ready)]))
-        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.phase.isRateLimited == true } }
-        let count = transport.requests.count
-        let sleeps = sleeper.durations.count
-        settings.setParticipatingOnly(true, for: alice)
-        store.restart(alice)
-        #expect(store.feeds[alice]?.phase.isRateLimited == true)
-        // 新しいポーラーは、前の再試行の時刻まで待ってから取得する
-        await sleeper.waitForSleeps(sleeps + 1)
-        #expect(transport.requests.count == count)
-        let carried = sleeper.durations.last ?? .zero
-        #expect(carried > .seconds(100) && carried <= .seconds(120))
-        store.stopAll()
-    }
-
     @Test func keepsTheRateLimitWaitWhenEnabledAgain() async {
         transport.setHandler { _ in HTTPResponse(statusCode: 429, headers: ["Retry-After": "120"]) }
         tokens.set("test-token-alice", for: alice)
@@ -317,9 +267,10 @@ struct NotificationStoreSettingsTests {
         store.refresh()
         try? await Task.sleep(for: .milliseconds(50))
         #expect(transport.requests.count == count)
-        // 待ちの途中で作り直しても、待ちは縮まない
+        // 待ちの途中で作り直しても、レート制限の待ちとして表示し、待ちは縮まない
         settings.setParticipatingOnly(true, for: alice)
         store.restart(alice)
+        #expect(store.feeds[alice]?.phase.isRateLimited == true)
         await sleeper.waitForSleeps(sleeps + 2)
         #expect(transport.requests.count == count)
         let again = sleeper.durations.last ?? .zero

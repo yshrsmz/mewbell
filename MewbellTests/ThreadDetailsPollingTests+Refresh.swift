@@ -140,10 +140,7 @@ extension ThreadDetailsPollingTests {
         await waitUntil { fixture.transport.requests.filter { !Self.isDetails($0) }.count == 2 }
         let before = detailsRequests(fixture).count
         let refreshed = Task { await fixture.poller.refreshNow() }
-        let deadline = ContinuousClock.now + .seconds(2)
-        while await fixture.poller.pendingRefreshCount == 0, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(1))
-        }
+        await fixture.waitForPendingRefresh()
         fixture.transport.pausedWhere.value = nil
         await fixture.sleeper.waitForSleeps(2)
         // 再読み込みを待っている間は、新着の 2 の分も取らない

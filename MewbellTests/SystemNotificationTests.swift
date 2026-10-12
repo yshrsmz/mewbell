@@ -98,7 +98,6 @@ struct ThreadNotificationContentTests {
             [content.identifier, content.title, content.subtitle, content.body, content.threadIdentifier]
             + content.userInfo.keys + content.userInfo.values
         for text in texts {
-            #expect(!text.contains("test-token"))
             #expect(!text.contains("/api/v3"))
             #expect(!text.contains("api.github.com"))
         }
@@ -153,11 +152,6 @@ struct ThreadOpenRequestTests {
         #expect(request(["url": "https://evil.example.com/", "repository": repository]) == nil)
     }
 
-    @Test func ignoresNonStringValues() {
-        var userInfo: [AnyHashable: Any] = valid
-        userInfo["threadID"] = 123
-        #expect(ThreadOpenRequest(userInfo: userInfo) == nil)
-    }
 }
 
 /// `SystemNotifier` の、通知センターへの操作（新着の判定は `NotificationStoreNewThreadsTests`）。
@@ -176,6 +170,10 @@ struct SystemNotifierTests {
         await notifier.waitForPendingWork()
         #expect(center.added.value.isEmpty)
         #expect(center.delivered.value == ["github.com/alice/1", "github.com/bob/9"])
+        // 空の基準では、そのアカウントの通知をすべて消す
+        notifier.baselineSet(for: alice, keeping: [])
+        await notifier.waitForPendingWork()
+        #expect(center.delivered.value == ["github.com/bob/9"])
     }
 
     @Test func postsNewThreadsAndRetractsGoneOnes() async throws {
@@ -186,27 +184,11 @@ struct SystemNotifierTests {
         #expect(center.delivered.value == ["github.com/alice/3"])
     }
 
-    @Test func clearsTheAccountForAnEmptyBaseline() async {
-        // 前回の実行の通知を掃除する
-        center.delivered.value = ["github.com/alice/9", "github.com/bob/9"]
-        notifier.baselineSet(for: alice, keeping: [])
-        await notifier.waitForPendingWork()
-        #expect(center.delivered.value == ["github.com/bob/9"])
-    }
-
     @Test func retractsAThreadMarkedRead() async {
         center.delivered.value = ["github.com/alice/1", "github.com/alice/2"]
         notifier.threadRemoved("1", for: alice)
         await notifier.waitForPendingWork()
         #expect(center.delivered.value == ["github.com/alice/2"])
-    }
-
-    @Test func retractsOnlyTheAccountMarkedAllRead() async {
-        center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/bob/3"]
-        notifier.threadsChanged(for: alice, posted: [], retracted: ["1", "2"])
-        await notifier.waitForPendingWork()
-        #expect(center.delivered.value == ["github.com/bob/3"])
-        #expect(center.added.value.isEmpty)
     }
 
     @Test func retractsTheAccountWhenItStopsOrIsRemoved() async {

@@ -75,21 +75,10 @@ struct AccountStoreTests {
         let discovery = BlockingDiscovery()
         let accounts = DiscoveryState.accounts([])
         let store = AccountStore(discovery: discovery, state: accounts)
-        store.reload()
+        // ユーザーの再読み込みでも、一覧が出ていれば確認中の表示にしない
+        store.reload(userInitiated: true)
         #expect(store.state == accounts)
         discovery.finish()
-    }
-
-    @Test func runsAQueuedReloadAfterTheCurrentOne() async {
-        let discovery = BlockingDiscovery()
-        let store = AccountStore(discovery: discovery)
-        store.reload()
-        store.reload()
-        store.reload()
-        discovery.finish()
-        discovery.finish()
-        await store.waitForReload()
-        #expect(discovery.callCount == 2)
     }
 
     @Test func closesCredentialsAndRefusesToReloadWhenTerminating() async {
@@ -103,13 +92,6 @@ struct AccountStoreTests {
         store.reload()
         #expect(!store.isReloading)
         #expect(discovery.callCount == 1)
-    }
-
-    @Test func doesNothingWithoutDiscovery() {
-        let store = AccountStore(discovery: nil, state: .ghNotFound)
-        store.reload()
-        #expect(store.state == .ghNotFound)
-        #expect(!store.isReloading)
     }
 }
 

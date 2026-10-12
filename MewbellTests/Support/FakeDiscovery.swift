@@ -2,13 +2,15 @@ import Synchronization
 
 @testable import Mewbell
 
-/// `gh auth token` を、開くまで待たせる `ProcessRunning`。
+/// 最初の引数が `firstArgument` の gh（既定は `gh auth token`）を、`close()` の後は開くまで待たせる `ProcessRunning`。
 final class GatedProcessRunner: ProcessRunning {
     private let base: FakeProcessRunner
+    private let firstArgument: String
     private let gate = Mutex<(isOpen: Bool, waiters: [CheckedContinuation<Void, Never>])>((true, []))
 
-    init(base: FakeProcessRunner) {
+    init(base: FakeProcessRunner, gating firstArgument: String = "auth") {
         self.base = base
+        self.firstArgument = firstArgument
     }
 
     var waitingCount: Int { gate.withLock { $0.waiters.count } }
@@ -33,7 +35,7 @@ final class GatedProcessRunner: ProcessRunning {
     }
 
     func run(_ request: ProcessRequest) async throws -> ProcessOutput {
-        if request.arguments.first == "auth" {
+        if request.arguments.first == firstArgument {
             await withCheckedContinuation { continuation in
                 let passes = gate.withLock { gate in
                     if gate.isOpen { return true }
@@ -58,15 +60,12 @@ final class BlockingDiscovery: AccountDiscovering {
     private let recordedOptions = Mutex<[DiscoveryOptions]>([])
     private let resultState = Mutex<DiscoveryState>(.notLoggedIn)
     private let ghState = Mutex(GhDiagnostics())
-    private let ghReads = Mutex(0)
 
     /// `ghDiagnostics()` が返す値
     var ghDetection: GhDiagnostics {
         get { ghState.withLock { $0 } }
         set { ghState.withLock { $0 = newValue } }
     }
-    /// `ghDiagnostics()` が呼ばれた回数
-    var ghReadCount: Int { ghReads.withLock { $0 } }
 
     /// 読み込みの最後に渡す状態
     var result: DiscoveryState {
@@ -120,8 +119,7 @@ final class BlockingDiscovery: AccountDiscovering {
     }
 
     func ghDiagnostics() async -> GhDiagnostics {
-        ghReads.withLock { $0 += 1 }
-        return ghDetection
+        ghDetection
     }
 
     /// 待っている読み込みを 1 つ進める（待っていなければ、次の読み込みをすぐ通す）。
