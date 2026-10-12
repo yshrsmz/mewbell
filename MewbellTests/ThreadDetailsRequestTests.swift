@@ -101,6 +101,10 @@ struct ThreadDetailsRequestTests {
         #expect(transport.requests.isEmpty)
     }
 
+}
+
+// Timeline のページの選び方と、状態コードの扱い
+extension ThreadDetailsRequestTests {
     @Test func fetchesTheLastPage() async throws {
         let (thread, endpoints) = try thread(subjectURL: "https://api.github.com/repos/octo/app/issues/7")
         let last = #"<https://api.github.com/repositories/1/issues/7/timeline?per_page=100&page=5>; rel="last""#
@@ -168,6 +172,37 @@ struct ThreadDetailsRequestTests {
         let result = await fetch(thread, endpoints, transport)
         #expect(result == .found(ThreadDetails(state: .open, event: ThreadEvent(kind: .commented, actor: "bob"))))
         #expect(transport.requests.count == 4)
+    }
+
+    @Test func usesTheLastPageWhenThePageBeforeIsGone() async throws {
+        let (thread, endpoints) = try thread(subjectURL: "https://api.github.com/repos/octo/app/issues/7")
+        let last = #"<https://api.github.com/repositories/1/issues/7/timeline?per_page=100&page=5>; rel="last""#
+        let transport = transport(issue: Self.ok(issue)) { [comment] page in
+            switch page {
+            case 1: Self.ok(TimelineJSON.page([]), link: last)
+            case 4: HTTPResponse(statusCode: 404)
+            default: Self.ok(comment)
+            }
+        }
+        #expect(
+            await fetch(thread, endpoints, transport)
+                == .found(ThreadDetails(state: .open, event: ThreadEvent(kind: .commented, actor: "bob"))))
+    }
+
+    @Test func readsThePageBeforeWhenTheLastStartsAtTheWindow() async throws {
+        let (thread, endpoints) = try thread(subjectURL: "https://api.github.com/repos/octo/app/issues/7")
+        let last = #"<https://api.github.com/repositories/1/issues/7/timeline?per_page=100&page=5>; rel="last""#
+        let transport = transport(issue: Self.ok(issue)) { page in
+            switch page {
+            case 1: Self.ok(TimelineJSON.page([]), link: last)
+            // 近さの幅のちょうど始まり（12:00 の 180 秒前）
+            case 4: Self.ok(TimelineJSON.page([TimelineJSON.commented(at: "2026-10-08T11:57:00Z", by: "carol")]))
+            default: Self.ok(TimelineJSON.page([TimelineJSON.event("labeled", at: "2026-10-08T11:57:00Z")]))
+            }
+        }
+        #expect(
+            await fetch(thread, endpoints, transport)
+                == .found(ThreadDetails(state: .open, event: ThreadEvent(kind: .commented, actor: "carol"))))
     }
 
     @Test func doesNotRefetchTheFirstPage() async throws {

@@ -85,7 +85,12 @@ extension GitHubAPIClient {
         // その前のページが 1 ページ目なら、取ってある 1 ページ目を使う
         guard lastPage - 1 > 1 else { return .success(firstItems + lastItems) }
         guard let previousURL = Self.timelineURL(firstURL, page: lastPage - 1) else { return .success(lastItems) }
-        return await getPage(previousURL, endpoints: endpoints, token: token).map { $0.items + lastItems }
+        switch await getPage(previousURL, endpoints: endpoints, token: token) {
+        case .success(let previous): return .success(previous.items + lastItems)
+        // 取っている間に項目が減ってページが無くなったなど。取ってある最後のページで決める
+        case .failure(let stop) where stop.result == .unavailable: return .success(lastItems)
+        case .failure(let stop): return .failure(stop)
+        }
     }
 
     /// Timeline の 1 ページを取り、項目と `Link` ヘッダーを返す。

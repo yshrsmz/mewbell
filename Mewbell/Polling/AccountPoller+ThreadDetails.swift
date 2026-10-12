@@ -39,17 +39,15 @@ extension AccountPoller {
     }
 
     /// `operation` を、再読み込み（`refreshNow` が `detailsTask` を止める）とループの停止で止められるように走らせる。
-    /// 止められたら nil（途中までの結果は捨てる）。
+    /// 止められたら、取り終えた分だけを返す。始めなかったら nil。
     private func interruptibleByRefresh(
         _ operation: @escaping @Sendable () async -> ThreadDetailsFetcher.Results
     ) async -> ThreadDetailsFetcher.Results? {
         // 次の取得を待つ再読み込みがあるなら始めない（押したのが通知の取得の最中で、まだ止めるタスクが無かったとき）。
         // 再読み込みで始めた今の取得を待っている人は数えない（その取得の新着の分は取る）
         guard !refreshWaitsForNextFetch else { return nil }
-        let task = Task { () -> ThreadDetailsFetcher.Results? in
-            let results = await operation()
-            return Task.isCancelled ? nil : results
-        }
+        // 止められても、それまでに取り終えた分は返す（`ThreadDetailsFetcher` は止めたことで終わった分を返さない）
+        let task = Task { () -> ThreadDetailsFetcher.Results? in await operation() }
         detailsTask = task
         // 止めた古いループの後片付けで、新しいループの取得を消さないように、自分のものだけ消す
         defer { if detailsTask == task { detailsTask = nil } }

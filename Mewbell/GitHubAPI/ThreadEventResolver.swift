@@ -96,13 +96,13 @@ enum ThreadEventResolver {
         return ThreadEvent(kind: .closed, actor: chosen.actor)
     }
 
-    /// `items` に、時刻が近さの幅の始まり（`updated_at` − `windowBefore`）以前の項目があるか。あれば、それより前のページの
+    /// `items` に、時刻が近さの幅の始まり（`updated_at` − `windowBefore`）より前の項目があるか。あれば、それより前のページの
     /// 項目は近さの幅に入らない（Timeline は古い順に並ぶ）。コミットの時刻（`committer.date`）は Timeline の並びと
     /// 合わない（古い日付のまま後から push される）ので使わない。
     static func reachesBeforeWindow(_ items: [TimelineItem], updatedAt: Date) -> Bool {
         items.contains { item in
             [item.createdAt, item.submittedAt].compactMap { $0.flatMap(date) }.contains {
-                $0 <= updatedAt - windowBefore
+                $0 < updatedAt - windowBefore
             }
         }
     }
