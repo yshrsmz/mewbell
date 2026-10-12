@@ -15,7 +15,7 @@ macOS のメニューバーに常駐し、複数の GitHub アカウント（git
 - 新しい機能・設計変更・リファクタ → `/opsx:propose <change-name>` で変更を起こす。1 マイルストーン（M0〜M5）を 1〜数個の change に分ける
 - 実装 → `/opsx:apply <change-name>`。tasks.md のチェックボックスを進めながら実装し、完了ごとにチェックを付ける
 - 実装完了 → `/opsx:archive <change-name>`。delta spec が `openspec/specs/` にマージされる
-- 迷ったら `/opsx:explore` で先に考える。タイポ修正や 1 行の修正は change 不要
+- 迷ったら `/opsx:explore` で先に考える。タイポ修正や 1 行の修正は change 不要。ただし `openspec/specs/` に書かれた振る舞い（大きさ・配置・読み上げなど）を変える修正は、行数にかかわらず change を起こす
 - change 名は `add-`, `update-`, `fix-`, `remove-` 始まりの kebab-case（例: `add-gh-account-discovery`）
 - プロジェクト文脈と artifact ごとのルールは `openspec/config.yaml` にある。CLAUDE.md と重複させない
 
@@ -59,6 +59,9 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEW
 - プロジェクトは Xcode 27.2 以降の JSON 形式（`project.xcproj`）。`project.pbxproj` には戻さない。ターゲット追加・ビルド設定の変更は `project.xcproj` を直接編集してよいが、編集後は必ず `xcodebuild` で開けることを確認する
 - `DerivedData`・`build/`・`xcuserdata/` はコミットしない
 - `SWIFT_APPROACHABLE_CONCURRENCY` が有効なので、nonisolated の async 関数は呼び出し元の actor の上で動く。テストの fake で `Thread.sleep` などの同期的な待ちを入れると、その actor（`AccountPoller` など）が塞がり、テストが止まる。応答を待たせたいときは async で中断させる（`FakeHTTPTransport` の `pausedMethod` を参照）
+- `openspec` は PATH に無い。プロジェクトの devDependency を `pnpm exec openspec ...` で動かす
+- SwiftUI の `Text` に `.font(.body)` を明示すると、既定の書体と同じ 13pt でも折り返し方が変わる（短い最後の行を避けるように折り返す）。スレッドの件名の `Text` には書体を付けない
+- ユニットテストの `NSHostingView` では SwiftUI のアクセシビリティの要素が作られず、`accessibilityLabel` や `accessibilityHidden` の効き目は確かめられない。読み上げは手元の VoiceOver で確かめる項目として tasks に置く
 
 ## 実装上の約束
 
