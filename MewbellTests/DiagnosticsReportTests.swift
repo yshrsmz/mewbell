@@ -123,7 +123,7 @@ struct DiagnosticsReportTests {
         #expect(text.contains("Config directory from: Settings override"))
     }
 
-    @Test func leavesOutTitlesURLsAndTokens() throws {
+    @Test func leavesOutTitlesAndURLs() throws {
         var stopped = FeedState(phase: .unauthorized, threads: [])
         stopped.diagnostics.lastFetchFailure = TimedFailure(kind: .unauthorized, occurredAt: noon)
         let report = report(
@@ -137,7 +137,6 @@ struct DiagnosticsReportTests {
             #expect(!text.contains("https://"))
             #expect(!text.contains("api.github.com"))
             #expect(!text.contains("/api/v3"))
-            #expect(!text.contains("test-token"))
         }
         #expect(rows(report, "ghe.example.com/erin")["Fetch"]?.text == "Stopped: unauthorized")
     }

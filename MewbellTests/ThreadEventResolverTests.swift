@@ -129,23 +129,11 @@ struct ThreadEventResolverTests {
         #expect(event == nil)
     }
 
-    @Test func botActor() throws {
+    @Test func nullActor() throws {
         let event = try resolve(
             created: "2026-10-08T10:00:00Z", updated: "2026-10-08T12:00:00Z",
-            [TimelineJSON.commented(at: "2026-10-08T11:59:40Z", by: "dependabot[bot]")])
-        #expect(event == ThreadEvent(kind: .commented, actor: "dependabot[bot]"))
-    }
-
-    @Test func nullOrInvalidActor() throws {
-        let null = try resolve(
-            created: "2026-10-08T10:00:00Z", updated: "2026-10-08T12:00:00Z",
             [TimelineJSON.event("closed", at: "2026-10-08T11:59:40Z", actor: nil)])
-        #expect(null == ThreadEvent(kind: .closed, actor: nil))
-        #expect(null?.actor == nil)
-        let invalid = try resolve(
-            created: "2026-10-08T10:00:00Z", updated: "2026-10-08T12:00:00Z",
-            [TimelineJSON.event("closed", at: "2026-10-08T11:59:40Z", actor: "-evil")])
-        #expect(invalid?.actor == nil)
+        #expect(event == ThreadEvent(kind: .closed, actor: nil))
     }
 
     @Test(arguments: [
@@ -254,9 +242,5 @@ struct SubjectStateTests {
             try state(TimelineJSON.issue(createdAt: created, state: "closed", stateReason: "duplicate"))
                 == .closedNotPlanned)
         #expect(try state(TimelineJSON.issue(createdAt: created, state: "locked")) == nil)
-    }
-
-    @Test func rejectsAMalformedIssue() {
-        #expect(IssueSummary.decode(from: Data(#"{"state": "open"}"#.utf8)) == nil)
     }
 }

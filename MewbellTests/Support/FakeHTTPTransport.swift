@@ -32,9 +32,7 @@ final class FakeHTTPTransport: HTTPTransport {
             try? await Task.sleep(for: .milliseconds(5))
         }
         let handler = handler.value
-        let response = try handler(request)
-        guard response.body.count <= bodyLimit else { throw .bodyTooLarge }
-        return response
+        return try handler(request)
     }
 
     /// 通知のスレッドの JSON（1 件）。

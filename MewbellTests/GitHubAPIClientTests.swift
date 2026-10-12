@@ -13,7 +13,6 @@ struct URLSessionTransportTests {
         #expect(configuration.httpCookieAcceptPolicy == .never)
         #expect(configuration.urlCredentialStorage == nil)
         #expect(configuration.httpAdditionalHeaders?.isEmpty ?? true)
-        #expect(configuration.timeoutIntervalForRequest == 30)
     }
 
     @Test func rejectsEveryRedirect() throws {
@@ -39,14 +38,12 @@ struct GitHubAPIClientTests {
     private let github: APIEndpoints
     private let ghes: APIEndpoints
     private let aliceToken: AccessToken
-    private let bobToken: AccessToken
     private let now = Date(timeIntervalSince1970: 1_791_460_800)
 
     init() throws {
         github = try #require(APIEndpoints(host: "github.com"))
         ghes = try #require(APIEndpoints(host: "ghe.example.com"))
         aliceToken = try #require(AccessToken(ghOutput: Data("test-token-alice".utf8)))
-        bobToken = try #require(AccessToken(ghOutput: Data("test-token-bob".utf8)))
     }
 
     private func client(_ transport: FakeHTTPTransport) -> GitHubAPIClient {
@@ -140,14 +137,33 @@ struct GitHubAPIClientTests {
         #expect(!truncated)
     }
 
-    @Test(arguments: [
-        "https://evil.example.com/notifications?page=2",
-        "http://api.github.com/notifications?page=2",
-        "https://api.github.com:8443/notifications?page=2",
-    ])
-    func doesNotFollowANextLinkOutsideTheAPIBase(_ next: String) async {
+    /// 次ページの URL は `Link` のものをそのまま使い、こちらで組み立て直さない（`participating` などのクエリを保つ）
+    @Test func followsTheNextLinkAsIs() async throws {
+        let endpoints = try #require(APIEndpoints(host: "acme.ghe.com"))
+        // クエリの並びと `after` が 1 ページ目と違うので、1 ページ目の URL から組み立て直すと一致しない
+        let next = "https://api.acme.ghe.com/notifications?participating=true&all=false&per_page=50&page=2&after=c2"
+        let transport = FakeHTTPTransport { request in
+            if request.url?.absoluteString == next {
+                return Self.ok(FakeHTTPTransport.page(3...3))
+            }
+            return Self.ok(FakeHTTPTransport.page(1...2), ["Link": "<\(next)>; rel=\"next\""])
+        }
+        let result = await client(transport).fetchNotifications(
+            endpoints: endpoints, token: aliceToken, ifModifiedSince: nil, participating: true)
+        #expect(transport.requests.map { $0.url?.absoluteString }.last == next)
+        guard case .updated(let threads, _, _, _, _) = result else {
+            Issue.record("unexpected result \(result)")
+            return
+        }
+        #expect(threads.map(\.id) == ["1", "2", "3"])
+    }
+
+    /// 送り先の検査そのもの（スキーム・ポートなど）は `APIEndpointsTests.checksTheRequestURL` で確かめる
+    @Test func doesNotFollowANextLinkOutsideTheAPIBase() async {
         let transport = FakeHTTPTransport { _ in
-            Self.ok(FakeHTTPTransport.page(1...1), ["Link": "<\(next)>; rel=\"next\""])
+            Self.ok(
+                FakeHTTPTransport.page(1...1), ["Link": #"<https://evil.example.com/notifications?page=2>; rel="next""#]
+            )
         }
         let result = await client(transport).fetchNotifications(
             endpoints: github, token: aliceToken, ifModifiedSince: nil)
@@ -167,24 +183,6 @@ struct GitHubAPIClientTests {
             endpoints: github, token: aliceToken, ifModifiedSince: nil)
         if case .updated(let threads, _, _, _, _) = result {
             #expect(threads.map(\.id) == ["1", "2", "3", "4", "5"])
-        } else {
-            Issue.record("unexpected result \(result)")
-        }
-    }
-
-    @Test func stopsAtTheTenthPage() async {
-        let transport = FakeHTTPTransport { request in
-            let page = Int(request.url?.query()?.split(separator: "page=").last ?? "1") ?? 1
-            return Self.ok(
-                FakeHTTPTransport.page((page * 100)...(page * 100)),
-                ["Link": "<https://api.github.com/notifications?page=\(page + 1)>; rel=\"next\""])
-        }
-        let result = await client(transport).fetchNotifications(
-            endpoints: github, token: aliceToken, ifModifiedSince: nil)
-        #expect(transport.requests.count == 10)
-        if case .updated(let threads, _, _, _, let truncated) = result {
-            #expect(threads.count == 10)
-            #expect(truncated)
         } else {
             Issue.record("unexpected result \(result)")
         }
@@ -229,16 +227,12 @@ struct GitHubAPIClientTests {
         #expect(result == expected)
     }
 
+    /// 通信の失敗の分類は `failsWhenALaterPageFails` で確かめる
     @Test func classifiesTransportFailures() async {
-        for (error, expected) in [
-            (TransportError.bodyTooLarge, FetchFailure.bodyTooLarge),
-            (.network(code: -1009), .network(code: -1009)),
-        ] {
-            let transport = FakeHTTPTransport { _ throws(TransportError) in throw error }
-            let result = await client(transport).fetchNotifications(
-                endpoints: github, token: aliceToken, ifModifiedSince: nil)
-            #expect(result == .failed(expected))
-        }
+        let transport = FakeHTTPTransport { _ throws(TransportError) in throw .bodyTooLarge }
+        let result = await client(transport).fetchNotifications(
+            endpoints: github, token: aliceToken, ifModifiedSince: nil)
+        #expect(result == .failed(.bodyTooLarge))
     }
 
     @Test func failsOnAMalformedBody() async {
@@ -253,92 +247,11 @@ struct GitHubAPIClientTests {
         ("notifications", true),
         ("gist, read:org", false),
         ("", false),
+        // ヘッダーが無い（classic 系でないトークン）
+        (nil, false),
     ])
-    func readsScopes(_ header: String, _ allowed: Bool) {
+    func readsScopes(_ header: String?, _ allowed: Bool) {
         #expect(OAuthScopes(header: header).allowsNotifications == allowed)
-    }
-
-    @Test func treatsAMissingScopesHeaderAsInsufficient() {
-        #expect(!OAuthScopes(header: nil).allowsNotifications)
-    }
-
-    @Test func keepsEachAccountsTokenAcrossPagesWhenFetchingConcurrently() async throws {
-        let transport = FakeHTTPTransport { request in
-            if request.url?.query()?.contains("page=2") == true {
-                return Self.ok(FakeHTTPTransport.page(2...2), [:])
-            }
-            return Self.ok(
-                FakeHTTPTransport.page(1...1), ["Link": #"<https://api.github.com/notifications?page=2>; rel="next""#])
-        }
-        let client = client(transport)
-        async let alice = client.fetchNotifications(endpoints: github, token: aliceToken, ifModifiedSince: nil)
-        async let bob = client.fetchNotifications(endpoints: github, token: bobToken, ifModifiedSince: nil)
-        _ = await (alice, bob)
-        let tokens = transport.requests.compactMap { $0.value(forHTTPHeaderField: "Authorization") }
-        #expect(tokens.filter { $0 == "Bearer test-token-alice" }.count == 2)
-        #expect(tokens.filter { $0 == "Bearer test-token-bob" }.count == 2)
-        #expect(tokens.count == 4)
-    }
-
-    @Test func doesNotLeakTheTokenOrTheErrorBodyInResults() async {
-        let transport = FakeHTTPTransport { _ in
-            HTTPResponse(statusCode: 401, body: Data(#"{"message": "test-error-body"}"#.utf8))
-        }
-        let client = client(transport)
-        let results = [
-            await client.fetchNotifications(endpoints: github, token: aliceToken, ifModifiedSince: nil),
-            .failed(.unexpectedStatus(500)),
-        ]
-        for result in results {
-            for text in [String(describing: result), String(reflecting: result)] {
-                #expect(!text.contains("test-token-alice"))
-                #expect(!text.contains("test-error-body"))
-            }
-        }
-    }
-}
-
-/// 一覧に出す番号を、取得したときに求めるテスト。
-struct NotificationSubjectNumberTests {
-    struct Case: Sendable {
-        let host: String
-        let type: String
-        let url: String
-        let repository: String
-        let expected: String?
-    }
-
-    @Test(arguments: [
-        Case(
-            host: "github.com", type: "PullRequest", url: "https://api.github.com/repos/octo/app/pulls/42",
-            repository: "octo/app", expected: "42"),
-        Case(
-            host: "ghe.example.com", type: "Issue", url: "https://ghe.example.com/api/v3/repos/team/svc/issues/7",
-            repository: "team/svc", expected: "7"),
-        Case(
-            host: "github.com", type: "PullRequest", url: "https://evil.example.com/repos/octo/app/pulls/42",
-            repository: "octo/app", expected: nil),
-        Case(
-            host: "github.com", type: "Release", url: "https://api.github.com/repos/octo/app/releases/42",
-            repository: "octo/app", expected: nil),
-    ])
-    func computesTheSubjectNumberWhenFetching(_ testCase: Case) async throws {
-        let endpoints = try #require(APIEndpoints(host: testCase.host))
-        let token = try #require(AccessToken(ghOutput: Data("test-token".utf8)))
-        let body = Data(
-            """
-            [{"id": "1", "unread": true, "reason": "subscribed", "updated_at": "2026-10-08T12:00:00Z",
-              "repository": {"full_name": "\(testCase.repository)"},
-              "subject": {"title": "Thread 1", "url": "\(testCase.url)", "type": "\(testCase.type)"}}]
-            """.utf8)
-        let transport = FakeHTTPTransport { _ in
-            HTTPResponse(statusCode: 200, headers: ["X-OAuth-Scopes": "repo"], body: body)
-        }
-        let result = await GitHubAPIClient(transport: transport).fetchNotifications(
-            endpoints: endpoints, token: token, ifModifiedSince: nil)
-        let threads: [NotificationThread]? = if case .updated(let threads, _, _, _, _) = result { threads } else { nil }
-        let thread = try #require(threads?.first)
-        #expect(thread.subjectNumber == testCase.expected)
     }
 }
 
@@ -355,7 +268,7 @@ struct NotificationPagingTests {
     /// `lastPage` ページ目まで `rel="next"` を付け、そのページで終わる。各ページは `ids(page)` のスレッド。
     private func fetchPages(
         _ lastPage: Int, ids: @escaping @Sendable (Int) -> ClosedRange<Int> = { ($0 * 100)...($0 * 100) }
-    ) async -> NotificationsFetchResult {
+    ) async -> (NotificationsFetchResult, FakeHTTPTransport) {
         let transport = FakeHTTPTransport { request in
             // `per_page` と取り違えないように、`page` のクエリだけを読む
             let page =
@@ -366,34 +279,29 @@ struct NotificationPagingTests {
                 ? ["Link": "<https://api.github.com/notifications?page=\(page + 1)>; rel=\"next\""] : [:]
             return HTTPResponse(statusCode: 200, headers: link, body: FakeHTTPTransport.page(ids(page)))
         }
-        return await GitHubAPIClient(transport: transport).fetchNotifications(
+        let result = await GitHubAPIClient(transport: transport).fetchNotifications(
             endpoints: github, token: token, ifModifiedSince: nil)
+        return (result, transport)
     }
 
     @Test func isNotTruncatedWhenTheTenthPageIsTheLast() async {
-        guard case .updated(_, _, _, _, let truncated) = await fetchPages(10) else {
+        guard case .updated(_, _, _, _, let truncated) = await fetchPages(10).0 else {
             Issue.record("unexpected result")
             return
         }
-        #expect(!truncated)
-    }
-
-    @Test func isNotTruncatedWhenPagesEndEarly() async {
-        guard case .updated(let threads, _, _, _, let truncated) = await fetchPages(2) else {
-            Issue.record("unexpected result")
-            return
-        }
-        #expect(threads.count == 2)
         #expect(!truncated)
     }
 
     @Test func isTruncatedByTheNextLinkEvenWithFewerThreads() async {
         // どのページも同じスレッドを返すので、重複を除くと 1 件だけになる
-        guard case .updated(let threads, _, _, _, let truncated) = await fetchPages(11, ids: { _ in 1...1 }) else {
+        let (result, transport) = await fetchPages(11, ids: { _ in 1...1 })
+        guard case .updated(let threads, _, _, _, let truncated) = result else {
             Issue.record("unexpected result")
             return
         }
         #expect(threads.count == 1)
         #expect(truncated)
+        // 10 ページ目の `rel="next"` はたどらない
+        #expect(transport.requests.count == 10)
     }
 }

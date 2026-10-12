@@ -67,18 +67,16 @@ struct ThreadDetailsRequestTests {
         )
     }
 
-    @Test(arguments: [
-        ("ghe.example.com", "https://ghe.example.com/api/v3/repos/team/svc/pulls/42", "https://ghe.example.com/api/v3"),
-        ("acme.ghe.com", "https://api.acme.ghe.com/repos/team/svc/pulls/42", "https://api.acme.ghe.com"),
-    ])
-    func usesTheIssuesPathForPullRequests(_ host: String, _ subjectURL: String, _ base: String) async throws {
+    @Test func usesTheIssuesPathForPullRequests() async throws {
         let (thread, endpoints) = try thread(
-            host: host, repository: "team/svc", subjectURL: subjectURL, type: "PullRequest")
+            host: "ghe.example.com", repository: "team/svc",
+            subjectURL: "https://ghe.example.com/api/v3/repos/team/svc/pulls/42", type: "PullRequest")
         let transport = transport(issue: Self.ok(issue)) { _ in Self.ok(comment) }
         _ = await fetch(thread, endpoints, transport)
         #expect(
             transport.requests.map { $0.url?.absoluteString } == [
-                "\(base)/repos/team/svc/issues/42", "\(base)/repos/team/svc/issues/42/timeline?per_page=100",
+                "https://ghe.example.com/api/v3/repos/team/svc/issues/42",
+                "https://ghe.example.com/api/v3/repos/team/svc/issues/42/timeline?per_page=100",
             ])
     }
 
@@ -89,13 +87,9 @@ struct ThreadDetailsRequestTests {
         #expect(transport.requests.first?.url?.absoluteString == "https://api.github.com/repos/octo/app/issues/7")
     }
 
-    @Test(arguments: [
-        (nil as String?, "Release"), ("https://evil.example.com/repos/octo/app/issues/7", "Issue"),
-        ("https://api.github.com/repos/octo/app/commits/abcdef1", "Commit"),
-        ("https://api.github.com/repos/other/app/issues/7", "Issue"),
-    ])
-    func sendsNothingWithoutANumber(_ subjectURL: String?, _ type: String) async throws {
-        let (thread, endpoints) = try thread(subjectURL: subjectURL, type: type)
+    /// 番号を持つかどうかの判定は `ThreadWebURL.subjectNumber` のテストで確かめる
+    @Test func sendsNothingWithoutANumber() async throws {
+        let (thread, endpoints) = try thread(subjectURL: "https://evil.example.com/repos/octo/app/issues/7")
         let transport = transport(issue: Self.ok(issue)) { _ in Self.ok(comment) }
         #expect(await fetch(thread, endpoints, transport) == .unavailable)
         #expect(transport.requests.isEmpty)
@@ -217,13 +211,11 @@ extension ThreadDetailsRequestTests {
         #expect(transport.requests.count == 3)
     }
 
-    @Test(arguments: [
-        "https://evil.example.com/timeline?page=5", "http://api.github.com/repos/octo/app/issues/7/timeline?page=5",
-    ])
-    func sendsNothingToTheLinkedHost(_ lastURL: String) async throws {
+    @Test func sendsNothingToTheLinkedHost() async throws {
         let (thread, endpoints) = try thread(subjectURL: "https://api.github.com/repos/octo/app/issues/7")
+        let last = #"<https://evil.example.com/timeline?page=5>; rel="last""#
         let transport = transport(issue: Self.ok(issue)) { [comment] page in
-            page == 1 ? Self.ok(TimelineJSON.page([]), link: "<\(lastURL)>; rel=\"last\"") : Self.ok(comment)
+            page == 1 ? Self.ok(TimelineJSON.page([]), link: last) : Self.ok(comment)
         }
         // `Link` からはページ番号だけを読み、URL は 1 ページ目から組み立てる
         #expect(

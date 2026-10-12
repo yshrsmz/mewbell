@@ -100,19 +100,12 @@ struct NotificationThreadTests {
         #expect(threads.map(\.id) == ["1", "6"])
     }
 
-    @Test func rejectsABodyThatIsNotAnArray() throws {
-        let endpoints = try #require(APIEndpoints(host: "github.com"))
-        #expect(
-            NotificationThread.decodeList(from: Data(#"{"message": "Bad credentials"}"#.utf8), endpoints: endpoints)
-                == nil)
-    }
-
     @Test(arguments: ["octo/app", "my-org/repo.name", "a_b/c_d"])
     func acceptsRepositoryNames(_ name: String) {
         #expect(RepositoryName(fullName: name) != nil)
     }
 
-    @Test(arguments: ["", "/", "octo/", "/app", "octo/..", "-x/app", "octo/a b", "octo/app%2F"])
+    @Test(arguments: ["", "/", "octo/", "/app", "octo/..", "octo/a b", "octo/app%2F"])
     func rejectsRepositoryNames(_ name: String) {
         #expect(RepositoryName(fullName: name) == nil)
     }

@@ -63,6 +63,9 @@ struct LaunchAtLoginTests {
         let launch = LaunchAtLogin(service: service)
         launch.set(true)
         #expect(launch.status == .requiresApproval)
+        // 承認待ちでも登録はしているので、スイッチは ON のまま
+        #expect(launch.isOn)
+        #expect(!launch.failed)
         launch.openSystemSettings()
         #expect(service.calls == ["register", "openSystemSettings"])
     }
