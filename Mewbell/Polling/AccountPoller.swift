@@ -3,60 +3,73 @@ import Synchronization
 import os
 
 /// 1 アカウントの通知をポーリングする。ループは 1 つだけ走らせる。
+/// スレッドへの操作（`AccountPoller+ThreadActions.swift`）と状態とイベントの取得（`AccountPoller+ThreadDetails.swift`）が使う
+/// プロパティは、別のファイルから見えるように private にしていない
+/// （actor に閉じているので、外からは書き換えられない）。
 actor AccountPoller {
     typealias Sleep = @Sendable (Duration) async throws -> Void
 
-    private static let logger = Logger(category: "Polling")
+    static let logger = Logger(category: "Polling")
     /// 条件なしの取得の間隔。`Last-Modified` は未読の `updated_at` の最新値なので、それより古いスレッドの増減は
     /// `304` に隠れる。その分のずれを、この間隔で取り直して直す
     static let unconditionalFetchInterval: TimeInterval = 300
 
     let accountID: AccountID
-    private let endpoints: APIEndpoints
-    private let client: GitHubAPIClient
-    private let tokens: any TokenProviding
+    let endpoints: APIEndpoints
+    let client: GitHubAPIClient
+    let tokens: any TokenProviding
     private let participating: Bool  // `participating=true` で取得する（切り替えたらポーラーを作り直す）
     private let firstFetchNotBefore: Date?  // 最初の取得をこの時刻まで待つ（`CarriedWait.until`）
+    let detailsTimeout: Duration  // 1 回にまとめて状態とイベントを取るのにかける時間の上限
     private let sleep: Sleep
-    private let now: @Sendable () -> Date
+    let now: @Sendable () -> Date
     private let onUpdate: @Sendable (FeedState) async -> Void
 
     /// 走っているループ。actor に入らずに起動・停止できるように、ロックで持つ
     /// `discarded` は `stop()` で立て、その後は起動も再開もしない（取り除いたアカウントのトークンで取得し続けないため）
     private nonisolated let loop = Mutex<(task: Task<Void, Never>?, discarded: Bool)>((nil, false))
     /// 次の取得を条件なしにする印（再読み込み）。actor に入らずに立てられるように、アトミックに持つ
-    private nonisolated let unconditionalRequested = Atomic(false)
+    nonisolated let unconditionalRequested = Atomic(false)
 
-    private var state = FeedState.loading
+    var state = FeedState.loading
     /// 最後にすべてのページを取り終えた 200 の `Last-Modified`
     private var lastModified: String?
     /// 最後に 200 で全ページを取り終えた時刻（`If-Modified-Since` を付けた取得でも 200 なら一覧はすべて取り直される）
     private var lastFullFetch: Date?
     /// 今のトークンでスコープを確かめたか
-    private var scopesVerified = false
+    var scopesVerified = false
     private var consecutiveFailures = 0
     /// 始めた取得の数（次に始める取得の番号）
-    private var fetchCount = 0
+    var fetchCount = 0
     /// 既読・Done にしたので、取得の結果から取り除いているスレッド
-    private var hidden: [String: HiddenUntil] = [:]
+    var hidden: [String: HiddenUntil] = [:]
     /// すべて既読にしたので、取得の結果から `updated_at` で取り除いている範囲（すべて既読の番号ごと）
-    private var readThroughs: [Int: ReadThrough] = [:]
+    var readThroughs: [Int: ReadThrough] = [:]
     /// 次のすべて既読に振る番号
-    private var readThroughCount = 0
+    var readThroughCount = 0
+    /// スレッドの件名の状態とイベント
+    var details = ThreadDetailsCache()
+    /// この回の、一覧を知らせる前に状態とイベントを取ったスレッド
+    var prefetched: (fetchNumber: Int, ids: Set<String>)?
     /// 打ち切り・Diagnostics の値・知らせる操作の失敗の記録
-    private var recorder = FeedRecorder()
+    var recorder = FeedRecorder()
     /// 走っているループの番号（止めたループが後から終わったときに、新しいループの状態を消さないため）
     private var runningLoop: Int?
     private var loopCount = 0
     /// 次の取得までの待ち。再読み込みで止めて起こす
     private var sleepTask: Task<Void, any Error>?
+    /// 待ち始める前の状態とイベントの取得。再読み込みで止める
+    var detailsTask: Task<ThreadDetailsFetcher.Results?, Never>?
     private var refreshWaiters = RefreshWaiters()
     var pendingRefreshCount: Int { refreshWaiters.count }  // テスト用
+    /// 今の取得の後にもう 1 回取得する再読み込みを待っているか（状態とイベントの取得を始めるかの判断に使う）
+    var refreshWaitsForNextFetch: Bool { refreshWaiters.waitsForLaterAttempt }
 
     init(
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,
         participating: Bool = false, initialPhase: FeedPhase? = nil, carriedWait: CarriedWait? = nil,
-        sleep: @escaping Sleep = { try await Task.sleep(for: $0) }, now: @escaping @Sendable () -> Date = { Date() },
+        detailsTimeout: Duration = .seconds(20), sleep: @escaping Sleep = { try await Task.sleep(for: $0) },
+        now: @escaping @Sendable () -> Date = { Date() },
         onUpdate: @escaping @Sendable (FeedState) async -> Void
     ) {
         self.accountID = accountID
@@ -67,6 +80,7 @@ actor AccountPoller {
         // 作り直す前の止まった状態（再読み込みでの再開を待つ）か、取得の待ち（`CarriedWait`）を持ち越す
         state = (initialPhase ?? carriedWait?.initialPhase).map { FeedState(phase: $0, threads: []) } ?? .loading
         firstFetchNotBefore = carriedWait?.until
+        self.detailsTimeout = detailsTimeout
         refreshWaiters = RefreshWaiters(lastAttemptStartedAt: carriedWait?.lastAttemptStartedAt)
         self.sleep = sleep
         self.now = now
@@ -109,6 +123,7 @@ actor AccountPoller {
             refreshWaiters.add(continuation)
             guard stopped else {
                 sleepTask?.cancel()
+                detailsTask?.cancel()
                 return
             }
             // 止めたループがまだ終わっていなくても、その終わりで新しい待ちを起こさないように、先に外す
@@ -154,7 +169,9 @@ actor AccountPoller {
                 }
                 await announceNextFetch(after: delay)
                 refreshWaiters.finish()
-                guard await pause(for: delay) else { return }
+                // 取ったら、次の取得の予定時刻を実際に待ち始める時刻から出し直す
+                if await fillDetails() { await announceNextFetch(after: delay) }
+                guard !Task.isCancelled, await pause(for: delay) else { return }
             }
         }
     }
@@ -208,12 +225,20 @@ actor AccountPoller {
             endpoints: endpoints, token: token, ifModifiedSince: ifModifiedSince, participating: participating)
         // 止められた（再開で新しいループに替わった）後に返った結果では、状態を書き換えない
         guard !Task.isCancelled else { return (result, number) }
-        if case .updated(let threads, let lastModified, let pollInterval, let scopes, let truncated) = result {
+        if case .updated(let fetched, let lastModified, let pollInterval, let scopes, let truncated) = result {
+            // 隠すスレッドは取らない。取っている間に既読・Done・すべて既読にしたスレッドも一覧に戻さないよう、
+            // 取った後に同じ番号と開始時刻でもう一度除く
+            var threads = HiddenThreads.revealOrHide(
+                fetched, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt)
+            await prefetchNewDetails(in: threads, token: token, fetchNumber: number)
+            guard !Task.isCancelled else { return (result, number) }
+            threads = HiddenThreads.revealOrHide(
+                threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt)
+            // 隠したスレッドの記録も残す（既読にできずに一覧に戻ったときに、新着として取り直さないため）
+            details.listed(fetched)
             result = .updated(
-                threads: HiddenThreads.revealOrHide(
-                    threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt),
-                lastModified: lastModified,
-                pollInterval: pollInterval, scopes: scopes, truncated: truncated)
+                threads: threads, lastModified: lastModified, pollInterval: pollInterval, scopes: scopes,
+                truncated: truncated)
         }
         if case .updated = result {
             // 条件付きでも 200 なら全ページを取り直しているので、条件なしと同じく一覧は最新になる
@@ -245,7 +270,7 @@ actor AccountPoller {
                 scopesVerified = true
             }
             self.lastModified = lastModified
-            state.threads = threads
+            state.threads = details.attach(to: threads)
             return .wait(succeeded(pollInterval: pollInterval))
         case .notModified(let pollInterval):
             return .wait(succeeded(pollInterval: pollInterval))
@@ -278,6 +303,14 @@ actor AccountPoller {
         }
     }
 
+    func publish(_ state: FeedState) async {
+        self.state = state
+        await onUpdate(state)
+    }
+}
+
+// トークンの取り直しと、取得の結果による状態の更新
+extension AccountPoller {
     /// トークンを取り直し、条件付きリクエストとスコープの確認をやり直す。取れなければ「認証エラー」で止める。
     private func refreshToken() async -> Bool {
         // 前のトークンのスコープは、取り直せたかどうかにかかわらず捨てる
@@ -303,19 +336,15 @@ actor AccountPoller {
     private func stop(as phase: FeedPhase) async {
         state = recorder.stopped(as: phase, from: state)
         readThroughs.removeAll()
+        details.reset()
         lastModified = nil
         scopesVerified = false
         consecutiveFailures = 0
         await publish(state)
     }
-
-    private func publish(_ state: FeedState) async {
-        self.state = state
-        await onUpdate(state)
-    }
 }
 
-// 最初の取得の待ち、一覧のスレッドへの操作と、操作したスレッドを取得の結果から隠す処理
+// 最初の取得の待ち
 extension AccountPoller {
     /// ループの最初。再開ならトークンを取り直し、そうでなければ `firstFetchNotBefore` まで待つ（ループの中で待つので、
     /// レート制限の待ちでなければ再読み込みで早められる）。止めるなら nil、続けるならトークンを取り直したか。
@@ -330,71 +359,5 @@ extension AccountPoller {
         let delay = Duration.seconds(firstFetchNotBefore.timeIntervalSince(now()))
         await announceNextFetch(after: delay)
         return await pause(for: delay) ? false : nil
-    }
-
-    /// 操作の失敗をログに書き、記録して UI に知らせる。
-    fileprivate func recordActionFailure(_ action: ThreadActionKind, _ kind: FailureKind) async {
-        Self.logger.error(
-            "Could not apply \(String(describing: action)) to \(self.accountID): \(String(describing: kind))")
-        recorder.recordActionFailure(action, kind, at: now(), fetchCount: fetchCount, in: &state)
-        await publish(state)
-    }
-
-    /// スレッドを既読か Done にする。一覧からすぐに外し、リクエストを送り、次の取得を条件なしにする。
-    /// 止まっているときとトークンが無いときは送らない（次の条件なしの取得で、未読のままなら一覧に戻る）。
-    func perform(_ action: ThreadAction) async {
-        let threadID = action.threadID
-        HiddenThreads.beginRequest(for: threadID, in: &hidden)
-        if state.threads.contains(where: { $0.id == threadID }) {
-            state.threads.removeAll { $0.id == threadID }
-            await publish(state)
-        }
-        // 止まっているかはトークンを待った後に見る。止まっていれば送らず、失敗も記録しない（取得の状態で伝わる）
-        let token = await tokens.currentToken(for: accountID)
-        var failure: FailureKind?
-        if !state.phase.isStopped {
-            failure =
-                if let token { FailureKind(await client.perform(action, endpoints: endpoints, token: token)) } else {
-                    .noToken
-                }
-        }
-        // 結果が 304 に隠れないように、また失敗したスレッドが一覧に戻るように、次は条件なしで取り直す
-        // （失敗を知らせる前に済ませる。知らせている間に始まった取得で、スレッドが戻らないまま知らせが消えないように）
-        HiddenThreads.endRequest(for: threadID, fetchCount: fetchCount, in: &hidden)
-        unconditionalRequested.store(true, ordering: .relaxed)
-        if let failure { await recordActionFailure(ThreadActionKind(action), failure) }
-    }
-
-    /// `newest`（ユーザーが押したときに表示していた一覧の `updated_at` の最大値）までを、すべて既読にする。
-    /// 一覧からすぐに外し、`PUT /notifications` を送り、次の取得を条件なしにする。取得できていないとき、
-    /// 一覧が空のときは何もしない。トークンが無いときは送らずに失敗として知らせる。押した後に届いたスレッドは外さない。
-    func markAllRead(through newest: Date) async {
-        // 取得の状態は、トークンを待っている間に変わることがあるので待った後に見る
-        let token = await tokens.currentToken(for: accountID)
-        guard case .loaded = state.phase, !state.threads.isEmpty else {
-            Self.logger.info("Skipped marking all threads of \(self.accountID) as read: no loaded list")
-            return
-        }
-        guard let token else {
-            await recordActionFailure(.markAllRead, .noToken)
-            return
-        }
-        // `last_read_at` は秒までしか送らないので、隠す範囲も秒に揃える
-        let cutoff = Date(timeIntervalSince1970: newest.timeIntervalSince1970.rounded(.down))
-        let serial = readThroughCount
-        readThroughCount += 1
-        readThroughs[serial] = ReadThrough(cutoff: cutoff, until: .requestInFlight)
-        state.threads.removeAll { $0.updatedAt <= cutoff }
-        await publish(state)
-
-        let result = await client.markAllRead(endpoints: endpoints, token: token, lastReadAt: cutoff)
-        // 止まって消されていたら、戻さない
-        readThroughs[serial]?.finish(
-            succeeded: result == .succeeded, fetchCount: fetchCount, at: now(), holdFor: Self.unconditionalFetchInterval
-        )
-        unconditionalRequested.store(true, ordering: .relaxed)
-        if let failure = FailureKind(result) {
-            await recordActionFailure(.markAllRead, failure)
-        }
     }
 }

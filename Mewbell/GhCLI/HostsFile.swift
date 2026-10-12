@@ -74,6 +74,11 @@ enum GhIdentifier {
         }
     }
 
+    /// API が返すイベントの実行者として表示してよいログイン名（`isValidUser`、またはそれに `[bot]` を付けた値）。
+    static func isValidActor(_ login: String) -> Bool {
+        isValidUser(login) || (login.hasSuffix("[bot]") && isValidUser(String(login.dropLast("[bot]".count))))
+    }
+
     private static func isDigitOrHyphen(_ scalar: Unicode.Scalar) -> Bool {
         ("0"..."9").contains(scalar) || scalar == "-"
     }

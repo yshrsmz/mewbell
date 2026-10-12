@@ -136,4 +136,17 @@ struct LinkHeaderTests {
         #expect(LinkHeader.nextURL(in: "garbage") == nil)
         #expect(LinkHeader.nextURL(in: #"https://x.test/2; rel="next""#) == nil)
     }
+    @Test func readsTheLastLink() {
+        let header =
+            #"<https://api.github.com/repositories/1/issues/7/timeline?page=2>; rel="next", <https://api.github.com/repositories/1/issues/7/timeline?page=5>; rel="last""#
+        #expect(
+            LinkHeader.lastURL(in: header)?.absoluteString
+                == "https://api.github.com/repositories/1/issues/7/timeline?page=5")
+        #expect(LinkHeader.lastURL(in: #"<https://x.test/9>; rel="last""#)?.absoluteString == "https://x.test/9")
+    }
+
+    @Test func returnsNilWithoutALastLink() {
+        #expect(LinkHeader.lastURL(in: #"<https://x.test/2>; rel="next""#) == nil)
+        #expect(LinkHeader.lastURL(in: nil) == nil)
+    }
 }

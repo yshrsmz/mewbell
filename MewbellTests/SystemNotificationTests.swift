@@ -82,6 +82,14 @@ struct ThreadNotificationContentTests {
             ])
     }
 
+    @Test func putsTheEventBeforeTheReason() throws {
+        var issue = try thread("9", subjectURL: "https://api.github.com/repos/octo/app/issues/9")
+        issue.details = ThreadDetails(state: .closedCompleted, event: ThreadEvent(kind: .closed, actor: "bob"))
+        let content = ThreadNotificationContent(thread: issue, account: alice)
+        #expect(content.body == "Closed by bob · Watching · alice (github.com)")
+        #expect(!content.userInfo.values.contains { $0.contains("bob") })
+    }
+
     @Test func leaksNeitherTheTokenNorAPIURLs() throws {
         let content = ThreadNotificationContent(
             thread: try thread("7", subjectURL: "https://ghe.example.com/api/v3/repos/octo/app/issues/7"),

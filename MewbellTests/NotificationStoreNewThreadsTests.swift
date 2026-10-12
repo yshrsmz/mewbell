@@ -250,6 +250,25 @@ struct NotificationStoreNewThreadsTests {
         store.stopAll()
     }
 
+    @Test func postsTheEventAndDoesNotRepostWhenDetailsArrive() async throws {
+        let notifier = SystemNotifier(center: center)
+        let store = makeStore(notifier: notifier)
+        await send(feed([try thread("1")]))
+        var new = try thread("2")
+        new.details = ThreadDetails(state: .open, event: ThreadEvent(kind: .commented, actor: "bob"))
+        await send(feed([try thread("1"), new]))
+        await notifier.waitForPendingWork()
+        #expect(center.added.value.map(\.body) == ["Commented by bob · Watching · alice (github.com)"])
+        // 知らせた後に取った状態とイベントを付け直しても、出し直さない
+        var old = try thread("1")
+        old.details = ThreadDetails(state: .closedCompleted, event: ThreadEvent(kind: .closed, actor: "carol"))
+        await send(feed([old, new]))
+        await notifier.waitForPendingWork()
+        #expect(center.added.value.count == 1)
+        #expect(store.feeds[alice]?.threads.first?.details == old.details)
+        store.stopAll()
+    }
+
     @Test func reportsEvenWhenNotificationsAreOff() async throws {
         let notifier = SystemNotifier(center: center, notifies: { _ in false })
         let store = makeStore(notifier: notifier)

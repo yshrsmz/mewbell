@@ -25,25 +25,20 @@ struct ThreadRow: View {
         // 操作のボタンは行のボタンの中に入れず、上に重ねる（行のクリックと奪い合わないように）
         Button(action: open) {
             HStack(alignment: .firstTextBaseline, spacing: ListLayout.spacing) {
-                Image(systemName: symbol)
-                    .foregroundStyle(.secondary)
+                Image(systemName: icon.symbol)
+                    .foregroundStyle(icon.color.map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
                     .frame(width: ListLayout.chevronWidth)
+                    .accessibilityLabel(icon.label)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(thread.title)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
-                    HStack(spacing: 4) {
-                        if let number = thread.subjectNumber {
-                            Text("#\(number)")
-                                .monospacedDigit()
-                            Text("·")
-                        }
-                        Text(ThreadReason.text(thread.reason))
-                        Text("·")
-                        RelativeTimeText(date: thread.updatedAt)
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    // 1 つの文にして、狭いときは部分ごとではなく文として折り返す
+                    RelativeTimeText(date: thread.updatedAt, prefix: details)
+                        .monospacedDigit()
+                        .multilineTextAlignment(.leading)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
             }
@@ -79,15 +74,16 @@ struct ThreadRow: View {
         .accessibilityAction(named: "Mark as Done", markDone)
     }
 
-    private var symbol: String {
-        switch thread.kind {
-        case .pullRequest: "arrow.triangle.pull"
-        case .issue: "smallcircle.filled.circle"
-        case .commit: "point.3.connected.trianglepath.dotted"
-        case .release: "tag"
-        case .discussion: "bubble.left.and.bubble.right"
-        case .checkSuite, .other: "bell"
-        }
+    /// 件名の下の行の、更新日時の前の部分（番号、イベント、理由）。
+    private var details: [String] {
+        [
+            thread.subjectNumber.map { "#\($0)" }, thread.details?.event.map(ThreadEventText.text),
+            ThreadReason.text(thread.reason),
+        ].compactMap { $0 }
+    }
+
+    private var icon: ThreadIcon {
+        ThreadIcon(kind: thread.kind, state: thread.details?.state)
     }
 }
 
@@ -240,11 +236,16 @@ struct MarkAllReadLabels: Equatable {
 /// 「5 min. ago」のような相対時刻。ポップオーバーを開いている間も 30 秒ごとに更新する。
 struct RelativeTimeText: View {
     let date: Date
+    /// 時刻の前に ` · ` でつないで出す文
+    var prefix: [String] = []
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
-            // 文字列にしてから渡す（時刻が進むと文字列が変わり、描き直される）
-            Text(date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))
+            // 文字列にしてから渡す（時刻が進むと文字列が変わり、描き直される）。折り返すのは ` · ` の後だけにする
+            Text(
+                (prefix + [date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated))])
+                    .map { $0.replacing(" ", with: "\u{00A0}") }
+                    .joined(separator: " · "))
         }
     }
 }
@@ -259,6 +260,33 @@ struct RelativeTimeText: View {
         MarkAllReadButton(count: 500, newest: .now, isEnabled: true, isTruncated: true, confirming: true) {}
     }
     .padding()
+}
+
+#Preview("Thread row states") {
+    func thread(_ id: String, _ kind: SubjectKind, _ state: SubjectState?, _ event: ThreadEvent?) -> NotificationThread?
+    {
+        RepositoryName(owner: "octo", name: "app").map { repository in
+            NotificationThread(
+                id: id, reason: "subscribed", updatedAt: Date().addingTimeInterval(-180), title: "Fix the login flow",
+                kind: kind, subjectURL: nil, repository: repository, subjectNumber: "42",
+                details: ThreadDetails(state: state, event: event))
+        }
+    }
+    let threads = [
+        thread("1", .pullRequest, .open, ThreadEvent(kind: .pushedCommits, actor: nil)),
+        thread("2", .pullRequest, .draft, ThreadEvent(kind: .convertedToDraft, actor: "alice")),
+        thread("3", .pullRequest, .merged, ThreadEvent(kind: .merged, actor: "dependabot[bot]")),
+        thread("4", .pullRequest, .closed, ThreadEvent(kind: .closed, actor: "alice")),
+        thread("5", .issue, .open, ThreadEvent(kind: .commented, actor: "bob")),
+        thread("6", .issue, .closedCompleted, ThreadEvent(kind: .closed, actor: "alice")),
+        thread("7", .issue, .closedNotPlanned, nil),
+        thread("8", .issue, nil, nil),
+    ].compactMap { $0 }
+    return VStack(alignment: .leading) {
+        ForEach(threads) { ThreadRow(thread: $0, open: {}, markRead: {}, markDone: {}) }
+    }
+    .padding()
+    .frame(width: 348)
 }
 
 #Preview("Thread row hovered") {

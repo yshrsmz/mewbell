@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import Mewbell
@@ -40,6 +41,54 @@ struct ThreadReasonTests {
     ])
     func namesReasons(_ reason: String, _ text: String) {
         #expect(ThreadReason.text(reason) == text)
+    }
+}
+
+struct ThreadEventTextTests {
+    @Test func namesEveryEvent() {
+        let names = ThreadEvent.Kind.allCases.map(ThreadEventText.name)
+        #expect(Set(names).count == ThreadEvent.Kind.allCases.count)
+        #expect(names.allSatisfy { !$0.isEmpty })
+    }
+
+    @Test(arguments: [
+        (ThreadEvent(kind: .closed, actor: "alice"), "Closed by alice"),
+        (ThreadEvent(kind: .approved, actor: "bob"), "Approved by bob"),
+        (ThreadEvent(kind: .changesRequested, actor: "bob"), "Requested changes by bob"),
+        (ThreadEvent(kind: .commented, actor: "dependabot[bot]"), "Commented by dependabot[bot]"),
+        (ThreadEvent(kind: .opened, actor: "carol"), "Opened by carol"),
+        (ThreadEvent(kind: .pushedCommits, actor: nil), "Pushed commits"),
+        (ThreadEvent(kind: .merged, actor: nil), "Merged"),
+        (ThreadEvent(kind: .closed, actor: "-evil"), "Closed"),
+    ])
+    func describesEvents(_ event: ThreadEvent, _ text: String) {
+        #expect(ThreadEventText.text(event) == text)
+    }
+}
+
+struct ThreadIconTests {
+    @Test func distinguishesStatesByShape() {
+        let pulls = [SubjectState.open, .draft, .merged, .closed].map { ThreadIcon(kind: .pullRequest, state: $0) }
+        #expect(Set(pulls.map(\.symbol)).count == pulls.count)
+        let issues = [SubjectState.open, .closedCompleted, .closedNotPlanned].map {
+            ThreadIcon(kind: .issue, state: $0)
+        }
+        #expect(Set(issues.map(\.symbol)).count == issues.count)
+    }
+
+    @Test func labelsTheKindAndState() {
+        #expect(ThreadIcon(kind: .pullRequest, state: .merged).label == "Pull request, merged")
+        #expect(ThreadIcon(kind: .issue, state: .closedNotPlanned).label == "Issue, closed as not planned")
+        #expect(ThreadIcon(kind: .pullRequest, state: .merged).color == .purple)
+    }
+
+    @Test func fallsBackToTheKindWithoutAState() {
+        let unknown = ThreadIcon(kind: .pullRequest, state: nil)
+        #expect(unknown.symbol == "arrow.triangle.pull")
+        #expect(unknown.color == nil)
+        #expect(unknown.label == "Pull request")
+        #expect(ThreadIcon(kind: .release, state: .open) == ThreadIcon(kind: .release, state: nil))
+        #expect(ThreadIcon(kind: .issue, state: .merged).symbol == "smallcircle.filled.circle")
     }
 }
 

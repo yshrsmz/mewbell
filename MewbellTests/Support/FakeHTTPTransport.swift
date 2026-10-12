@@ -17,6 +17,8 @@ final class FakeHTTPTransport: HTTPTransport {
 
     /// この HTTP メソッドのリクエストの応答を、nil に戻すまで止める（スレッドを塞がずに待つので、呼び出し元の actor に入れる）
     let pausedMethod = LockedValue<String?>(nil)
+    /// 条件に合うリクエストの応答を、nil に戻すまで止める（`pausedMethod` と同じく async で待つ）
+    let pausedWhere = LockedValue<(@Sendable (URLRequest) -> Bool)?>(nil)
 
     func setHandler(_ handler: @escaping Handler) {
         self.handler.value = handler
@@ -24,7 +26,9 @@ final class FakeHTTPTransport: HTTPTransport {
 
     func send(_ request: URLRequest, bodyLimit: Int) async throws(TransportError) -> HTTPResponse {
         recorded.withLock { $0.append(request) }
-        while let method = pausedMethod.value, method == request.httpMethod {
+        while pausedMethod.value == request.httpMethod || pausedWhere.value?(request) == true {
+            // 打ち切られたリクエスト（タスクグループの取り消しなど）は、本物と同じく通信の失敗で終える
+            guard !Task.isCancelled else { throw .network(code: URLError.Code.cancelled.rawValue) }
             try? await Task.sleep(for: .milliseconds(5))
         }
         let handler = handler.value
@@ -34,13 +38,15 @@ final class FakeHTTPTransport: HTTPTransport {
     }
 
     /// 通知のスレッドの JSON（1 件）。
-    static func threadJSON(id: String, repository: String = "octo/app", updatedAt: String = "2026-10-08T12:00:00Z")
-        -> String
-    {
+    /// `subjectURL` を渡すと、そのスレッドは番号を持つ（状態とイベントを取る対象になる）。
+    static func threadJSON(
+        id: String, repository: String = "octo/app", updatedAt: String = "2026-10-08T12:00:00Z",
+        subjectURL: String? = nil, type: String = "Issue"
+    ) -> String {
         """
         {"id": "\(id)", "unread": true, "reason": "subscribed", "updated_at": "\(updatedAt)",
          "repository": {"full_name": "\(repository)"},
-         "subject": {"title": "Thread \(id)", "url": null, "type": "Issue"}}
+         "subject": {"title": "Thread \(id)", "url": \(subjectURL.map { "\"\($0)\"" } ?? "null"), "type": "\(type)"}}
         """
     }
 
