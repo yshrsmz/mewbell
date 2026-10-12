@@ -146,6 +146,11 @@ struct RedactionTests {
         #expect(Redaction.redactTokens(in: "error: \(token).") == "error: <redacted>.")
     }
 
+    @Test func redactsEveryTokenInTheText() {
+        let text = "a=\(Self.tokens[0]) b=\(Self.tokens[3])"
+        #expect(Redaction.redactTokens(in: text) == "a=<redacted> b=<redacted>")
+    }
+
     @Test func leavesOtherTextAlone() {
         let text = "HTTP 401: Bad credentials (https://api.github.com/user)"
         #expect(Redaction.redactTokens(in: text) == text)

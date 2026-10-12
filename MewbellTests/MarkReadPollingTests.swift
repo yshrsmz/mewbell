@@ -28,6 +28,7 @@ struct MarkReadPollingTests {
         #expect(
             sent.map { "\($0.httpMethod ?? "") \($0.url?.absoluteString ?? "")" }
                 == ["\(method) https://api.github.com/notifications/threads/2"])
+        #expect(sent.first?.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
         // 次の取得は条件なしで、取得は早まらない
         #expect(fixture.sleeper.durations == [.seconds(60)])
         fixture.sleeper.advance()
