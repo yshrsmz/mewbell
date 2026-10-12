@@ -182,7 +182,7 @@
   - `bash scripts/lint.sh` と `npx openspec validate --all --strict` を通す。
   - `bash scripts/tests/verify-app-test.sh` を通す。
   - テストの実行時間を変更の前後で比べて、PR に書く。
-- [ ] 5.2 `bash scripts/run.sh` で起動し、手元で確かめる。
+- [x] 5.2 `bash scripts/run.sh` で起動し、手元で確かめる。
   - 一覧の表示、既読、再読み込みが今までどおり動くこと。
   - この change は本体の振る舞いを変えないので、動作確認として行う。
 - [x] 5.3 `git grep` で、security.md の性質を確かめる最後の 1 本が残っていることを確かめる（design.md の「セキュリティ」の表）。
