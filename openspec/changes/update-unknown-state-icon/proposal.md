@@ -2,17 +2,20 @@
 
 ## Why
 
-スレッドの行の種類のアイコンで、状態が分からない Pull request と Issue は、開いている Pull request・Issue と同じ記号（`arrow.triangle.pull`、`smallcircle.filled.circle`）を使っている。違うのは色だけ（開いているときは緑、分からないときは薄い色）なので、色の区別がつきにくい人には「開いている」と「分からない」を見分けられない。ui の Requirement「スレッドの行の状態のアイコン」は状態どうしを形と色の両方で区別するよう求めているが、「分からない」は状態として扱っておらず、この食い違いが fix-thread-icon-column のレビューで続けて指摘された。
+ui の Requirement「スレッドの行の状態のアイコン」は、状態を記号の形と色の両方で区別するよう求めている。一方で、状態が分からない Pull request・Issue には、開いている状態と同じ記号を薄い色で出している（違うのは色だけ）。「分からない」がこの決まりの対象の状態に入るのかが書かれていないので、この食い違いが fix-thread-icon-column のレビューで何周も続けて指摘された。
 
-この change は、M4（設定と操作）の UI の改善にあたる（M5 の v0.1.0 の公開後）。
+状態が分からなくても、スレッドの種類（Pull request か Issue か）は通知から必ず分かる。種類を表すアイコンを中立の薄い色で出す今の振る舞いは、そのままでよい。この change は、それを spec にはっきり書き、同じ指摘が出ないようにする。
+
+この change は、M4（設定と操作）の UI の仕様の整理にあたる（M5 の v0.1.0 の公開後）。
 
 ## What Changes
 
-- 状態が分からない（イベントをまだ取っていない、取れなかった、種類に合わない状態が付いている）Pull request の記号を `arrow.triangle.branch` に、Issue の記号を中が空の `circle` にする。色は今までどおり薄い色
-- 開いている・下書き・マージした・閉じたなどの状態の記号と色は変えない
-- 状態を持たない種類（Commit、Release、Discussion、Check suite、その他）のアイコンは変えない
-- VoiceOver の名前は今までどおり種類だけ（「Pull request」「Issue」）
-- ui の Requirement「スレッドの行の状態のアイコン」の「状態が分からないときは今までどおり種類だけを表すアイコン」を書き直し、状態が分からない Pull request・Issue は、どの状態のアイコンとも形が違う記号で出すことにする（MODIFIED）
+- ui の Requirement「スレッドの行の状態のアイコン」を書き直す（MODIFIED）
+  - 「分からない」・状態が付いていない・種類に合わない状態は、状態として扱わず、種類だけを表すアイコンを薄い色で出す
+  - 形と色の両方で区別する決まりは、状態どうしにだけ適用する。種類だけのアイコンは、開いている状態のアイコンと形が同じで色だけが違ってもよい
+  - VoiceOver では種類だけを読む
+  - 状態が分からない Issue と、種類に合わない状態の Scenario を足す
+- コードは変えない。今の `ThreadIcon` とそのテストが、書き直した Requirement を満たしている
 
 ## Capabilities
 
@@ -22,12 +25,12 @@
 
 ### Modified Capabilities
 
-- `ui`: Requirement「スレッドの行の状態のアイコン」の、状態が分からないときのアイコンの決まりと Scenario を書き直す（MODIFIED）
+- `ui`: Requirement「スレッドの行の状態のアイコン」の、状態が分からないときのアイコンの決まりをはっきりさせ、Scenario を足す（MODIFIED）。表示は変わらない
 
 ## Impact
 
-- 変わるコード: `Mewbell/UI/ThreadEventText.swift`（`ThreadIcon`）、`MewbellTests/ThreadPresentationTests.swift`（`ThreadIconTests`）
-- 見た目: 状態が分からない Pull request・Issue の行のアイコンの形だけが変わる。新しい記号は 13pt で `arrow.triangle.branch` が 16pt 幅（倍率 2 で 15pt）、`circle` が 15pt 幅で、24pt のアイコンの列に収まる（`IconColumnTests` がすべての記号を測る）
+- 変わるコード: なし（`openspec/specs/ui/spec.md` だけ）
+- 見た目: 変わらない
 - トークン: 扱わない。何も永続化しない
 - gh サブプロセス: 触れない
 - ネットワーク: 触れない

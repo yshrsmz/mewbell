@@ -2,9 +2,9 @@
 
 ### Requirement: スレッドの行の状態のアイコン
 
-スレッドに件名の状態（github-api「スレッドの状態の決定」、polling「スレッドのイベントの取得」）が付いているとき、スレッドの行の種類のアイコンは、種類に加えて状態が分かるものにしなければならない（SHALL）。状態は、記号の形と色の両方で区別しなければならず（MUST）、色だけで区別してはならない（MUST NOT）。VoiceOver では、アイコンを種類と状態（例: 「Pull request, merged」）として読ませなければならない（SHALL）。
+スレッドに件名の状態（github-api「スレッドの状態の決定」、polling「スレッドのイベントの取得」）が付いているとき、スレッドの行の種類のアイコンは、種類に加えて状態が分かるものにしなければならない（SHALL）。状態どうしは、記号の形と色の両方で区別しなければならず（MUST）、色だけで区別してはならない（MUST NOT）。VoiceOver では、アイコンを種類と状態（例: 「Pull request, merged」）として読ませなければならない（SHALL）。
 
-状態が「分からない」か付いていない Pull request と Issue のアイコンは、種類が分かり、その種類のどの状態のアイコンとも記号の形が違うものにしなければならず（SHALL）、薄い色で出さなければならない（SHALL）。開いている状態と形が同じで色だけが違う記号を使ってはならない（MUST NOT）。VoiceOver では、種類だけ（例: 「Pull request」）として読ませなければならない（SHALL）。状態を持たない種類（Commit、Release、Discussion、Check suite、その他）は、今までどおり種類だけを表すアイコンを出さなければならない（SHALL）。
+状態が「分からない」か付いていないとき、またはスレッドの種類に合わない状態が付いているときは、状態として扱わず、種類だけを表すアイコンを薄い色で出さなければならない（SHALL）。このアイコンは、種類が分かるものであればよく、その種類の状態のアイコン（例: 開いている Pull request の緑のアイコン）と記号の形が同じで色だけが違ってもよい。形と色の両方で区別する決まりは、状態どうしにだけ適用する。VoiceOver では、種類だけ（例: 「Pull request」）として読ませなければならない（SHALL）。
 
 #### Scenario: マージした Pull request
 
@@ -20,19 +20,20 @@
 
 #### Scenario: 状態が分からない
 
-- **GIVEN** Pull request のスレッドが 2 つあり、1 つは状態が Open、もう 1 つはイベントをまだ取っていない
+- **GIVEN** Pull request のスレッドのイベントをまだ取っていない
 - **WHEN** ユーザーがポップオーバーを開く
-- **THEN** イベントを取っていない行のアイコンは、Pull request と分かる薄い色の記号で、Open の行のアイコンとは記号の形が違う
+- **THEN** 行のアイコンは、Pull request を表す記号を薄い色で出したものになる
 - **AND** VoiceOver では「Pull request」と読まれる
 
 #### Scenario: 状態が分からない Issue
 
 - **GIVEN** Issue のスレッドのイベントを取れなかった
 - **WHEN** ユーザーがポップオーバーを開く
-- **THEN** 行のアイコンは、Issue と分かる薄い色の記号で、Open・Closed as completed・Closed as not planned のどのアイコンとも記号の形が違う
+- **THEN** 行のアイコンは、Issue を表す記号を薄い色で出したものになる
+- **AND** VoiceOver では「Issue」と読まれる
 
-#### Scenario: 状態を持たない種類
+#### Scenario: 種類に合わない状態
 
-- **GIVEN** 種類が Release のスレッドがある
+- **GIVEN** Issue のスレッドに、Pull request にしか無い状態（Merged）が付いている
 - **WHEN** ユーザーがポップオーバーを開く
-- **THEN** 行のアイコンは今までどおり Release を表すものになる
+- **THEN** 行のアイコンは、状態が分からない Issue と同じになる
