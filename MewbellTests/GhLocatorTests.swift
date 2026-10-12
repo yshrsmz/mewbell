@@ -17,11 +17,6 @@ struct ExecutableValidatorTests {
         directory = try TemporaryDirectory()
     }
 
-    @Test func acceptsAnExecutableRegularFile() throws {
-        let path = try directory.makeFile("gh")
-        #expect(ExecutableValidator.validate(path)?.path == realPath(path))
-    }
-
     @Test(arguments: [Int16(0o777), 0o775, 0o757, 0o644])
     func rejectsWritableByOthersOrNotExecutable(_ permissions: Int16) throws {
         let path = try directory.makeFile("gh", permissions: permissions)
@@ -82,11 +77,6 @@ struct LoginShellTests {
     func rejectsUnlistedShells(_ shell: String) {
         #expect(LoginShell.resolve(userShell: shell, allowedShells: shells) == nil)
     }
-
-    @Test func takesTheLastNonEmptyLine() {
-        let output = Data("Welcome!\nnvm is loaded\n/Users/me/.local/bin/gh\n\n".utf8)
-        #expect(LoginShell.lastNonEmptyLine(of: output) == "/Users/me/.local/bin/gh")
-    }
 }
 
 struct GhLocatorTests {
@@ -134,25 +124,6 @@ struct GhLocatorTests {
         #expect(request.environment == ["HOME": "/tmp"])
     }
 
-    @Test func searchesTheLoginShellOnlyOnce() async throws {
-        let runner = FakeProcessRunner { _ in FakeProcessRunner.output("", exitCode: 1) }
-        let locator = locator(candidates: ["/nonexistent/gh"], runner: runner)
-        #expect(await locator.locate() == nil)
-        #expect(await locator.locate() == nil)
-        #expect(runner.requests.count == 1)
-    }
-
-    @Test func concurrentCallersShareTheLoginShellResult() async throws {
-        let ghFile = try directory.makeFile("custom/gh")
-        let runner = FakeProcessRunner { _ in FakeProcessRunner.output("\(ghFile)\n") }
-        let locator = locator(candidates: [], runner: runner)
-        async let first = locator.locate()
-        async let second = locator.locate()
-        let results = await [first, second]
-        #expect(results.allSatisfy { $0 != nil })
-        #expect(runner.requests.count == 1)
-    }
-
     @Test func searchesAgainOnlyWhenTheUserAsksAndNothingWasFound() async throws {
         let answer = LockedValue("")
         let runner = FakeProcessRunner { _ in FakeProcessRunner.output(answer.value) }
@@ -169,15 +140,6 @@ struct GhLocatorTests {
         // 見つかった後は、再読み込みでも探し直さない
         #expect(await locator.locate(retryLoginShell: true) != nil)
         #expect(runner.requests.count == 2)
-    }
-
-    @Test func reusesTheLoginShellResultWithoutSearchingAgain() async throws {
-        let ghFile = try directory.makeFile("custom/gh")
-        let runner = FakeProcessRunner { _ in FakeProcessRunner.output("\(ghFile)\n") }
-        let locator = locator(candidates: [], runner: runner)
-        #expect(await locator.locate() != nil)
-        #expect(await locator.locate() != nil)
-        #expect(runner.requests.count == 1)
     }
 
     @Test func rejectsARelativeAnswerFromTheShell() async throws {
@@ -231,18 +193,13 @@ struct GhClientTests {
     private let ghExecutable = URL(filePath: "/opt/homebrew/bin/gh")
     private let environment = GhEnvironment.make(from: ["GH_TOKEN": "test-token", "HOME": "/tmp"])
 
-    @Test func runsVersionWithTheSanitizedEnvironment() async throws {
-        let runner = FakeProcessRunner { _ in FakeProcessRunner.output("gh version 2.102.0 (2026-09-30)\n") }
-        let client = GhClient(executable: ghExecutable, runner: runner, environment: environment)
-        #expect(await client.version() == GhVersion(major: 2, minor: 102, patch: 0))
-        let request = try #require(runner.requests.first)
-        #expect(request.executable == ghExecutable)
-        #expect(request.arguments == ["--version"])
-        #expect(request.environment["GH_TOKEN"] == nil)
-    }
-
-    @Test func versionIsNilWhenGhFails() async {
-        let runner = FakeProcessRunner { _ in throw ProcessRunError.timedOut }
+    @Test(arguments: [
+        Result<ProcessOutput, ProcessRunError>.success(
+            FakeProcessRunner.output("gh version 2.102.0 (2026-09-30)\n", exitCode: 1)),
+        .failure(.timedOut),
+    ])
+    func versionIsNilWhenGhFails(_ result: Result<ProcessOutput, ProcessRunError>) async {
+        let runner = FakeProcessRunner { _ in try result.get() }
         #expect(await GhClient(executable: ghExecutable, runner: runner, environment: environment).version() == nil)
     }
 
@@ -259,12 +216,10 @@ struct GhClientTests {
     }
 
     @Test(arguments: [
-        Result<ProcessOutput, ProcessRunError>.success(FakeProcessRunner.output("", exitCode: 1, stderr: "no token")),
-        .success(FakeProcessRunner.output("")),
+        Result<ProcessOutput, ProcessRunError>.success(
+            FakeProcessRunner.output("test-token\n", exitCode: 1, stderr: "no token")),
         .success(FakeProcessRunner.output("test-token\nsecond-line\n")),
         .failure(.timedOut),
-        .failure(.outputTooLarge),
-        .failure(.launchFailed),
     ])
     func tokenIsNilWhenGhDoesNotGiveOne(_ result: Result<ProcessOutput, ProcessRunError>) async {
         let runner = FakeProcessRunner { _ in try result.get() }

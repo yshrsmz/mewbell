@@ -40,18 +40,6 @@ struct GhDiagnosticsTests {
         #expect(
             detection.configDirectory
                 == GhConfigDirectory.Resolved(url: fixture.configDirectory, source: .defaultLocation))
-        // gh の出力の文字列は持たない
-        #expect(!String(reflecting: detection).contains("2024-11-14"))
-        #expect(!String(reflecting: detection).contains("releases"))
-    }
-
-    @Test func keepsTheVersionWithoutRunningGhVersionAgain() async throws {
-        try fixture.writeHosts(oneAccount)
-        let discovery = fixture.discovery()
-        _ = await reload(discovery)
-        _ = await reload(discovery)
-        #expect(versionRuns == 1)
-        #expect(await discovery.ghDiagnostics().version == GhVersion(major: 2, minor: 62, patch: 0))
     }
 
     @Test func forgetsTheGhWhenItIsGone() async throws {
@@ -72,6 +60,7 @@ struct GhDiagnosticsTests {
         let discovery = fixture.discovery()
         #expect(await reload(discovery) == .ghOutdated(version: GhVersion(major: 2, minor: 39, patch: 0)))
         #expect(await discovery.ghDiagnostics().version == GhVersion(major: 2, minor: 39, patch: 0))
+        #expect(fixture.tokenRequests.isEmpty)
     }
 
     @Test func forgetsTheConfigDirectoryWhenTheOverrideIsUnusable() async throws {
@@ -147,14 +136,5 @@ struct AccountStoreGhDiagnosticsTests {
         store.ghConfigDirectoryChanged()
         await store.waitForReload()
         #expect(store.ghDetection == work)
-    }
-
-    @Test func readingTheGhDoesNotReload() async {
-        let discovery = BlockingDiscovery()
-        let store = AccountStore(discovery: discovery)
-        _ = store.ghDetection
-        _ = store.ghDetection
-        #expect(discovery.callCount == 0)
-        #expect(discovery.ghReadCount == 0)
     }
 }

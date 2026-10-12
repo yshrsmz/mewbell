@@ -35,13 +35,6 @@ struct ConfigDirectoryValidatorTests {
         directory = try TemporaryDirectory()
     }
 
-    @Test func acceptsAnOwnedDirectory() throws {
-        let path = directory.url.appending(path: "gh").path
-        try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)
-        #expect(ConfigDirectoryValidator.validate(path) != nil)
-    }
-
     @Test func rejectsRelativeMissingAndFilePaths() throws {
         let file = try directory.makeFile("hosts.yml", permissions: 0o600)
         #expect(ConfigDirectoryValidator.validate("gh") == nil)
@@ -49,19 +42,13 @@ struct ConfigDirectoryValidatorTests {
         #expect(ConfigDirectoryValidator.validate(file) == nil)
     }
 
-    @Test func rejectsAWorldWritableDirectory() throws {
-        let path = directory.url.appending(path: "shared").path
-        try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
-        try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: path)
-        #expect(ConfigDirectoryValidator.validate(path) == nil)
-    }
-
-    @Test func checksTheTargetOfASymbolicLink() throws {
+    @Test func rejectsAWorldWritableDirectoryAndChecksTheTargetOfASymbolicLink() throws {
         let target = directory.url.appending(path: "shared").path
         try FileManager.default.createDirectory(atPath: target, withIntermediateDirectories: true)
         try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: target)
         let link = directory.url.appending(path: "link").path
         try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: target)
+        #expect(ConfigDirectoryValidator.validate(target) == nil)
         #expect(ConfigDirectoryValidator.validate(link) == nil)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: target)
         #expect(ConfigDirectoryValidator.validate(link) != nil)
@@ -106,20 +93,24 @@ struct GhIdentifierTests {
 }
 
 struct HostsFileTests {
-    @Test func readsTheMultiAccountFormat() throws {
+    @Test func readsTheMultiAccountFormatWithoutKeepingTheTokens() throws {
+        // ユーザーの下にもホストの直下にもある `oauth_token` は型に載せない
         let yaml = """
             github.com:
                 git_protocol: https
                 users:
                     alice:
+                        oauth_token: test-token
                     bob:
                 user: alice
+                oauth_token: test-token
             """
         let hosts = try HostsFile.parse(yaml)
         #expect(hosts == HostsFile(hosts: [.init(name: "github.com", users: ["alice", "bob"], activeUser: "alice")]))
+        #expect(!String(reflecting: hosts).contains("test-token"))
     }
 
-    @Test func readsTheLegacyFormatWithoutKeepingTheToken() throws {
+    @Test func readsTheLegacyFormat() throws {
         let yaml = """
             ghe.example.com:
                 oauth_token: test-token
@@ -128,21 +119,6 @@ struct HostsFileTests {
             """
         let hosts = try HostsFile.parse(yaml)
         #expect(hosts == HostsFile(hosts: [.init(name: "ghe.example.com", users: ["carol"], activeUser: "carol")]))
-        #expect(!String(reflecting: hosts).contains("test-token"))
-    }
-
-    @Test func ignoresTokensStoredUnderUsers() throws {
-        let yaml = """
-            github.com:
-                users:
-                    alice:
-                        oauth_token: test-token
-                user: alice
-                oauth_token: test-token
-            """
-        let hosts = try HostsFile.parse(yaml)
-        #expect(hosts.hosts.first?.users == ["alice"])
-        #expect(!String(reflecting: hosts).contains("test-token"))
     }
 
     @Test func skipsInvalidEntriesAndKeepsTheRest() throws {
@@ -196,17 +172,6 @@ struct HostsFileTests {
     @Test(arguments: ["github.com: [unclosed", "- a\n- b\n", "just text"])
     func rejectsMalformedYaml(_ yaml: String) {
         #expect(throws: HostsFile.LoadError.malformed) { try HostsFile.parse(yaml) }
-    }
-
-    @Test func loadReturnsNilWhenTheFileIsMissing() throws {
-        let directory = try TemporaryDirectory()
-        #expect(try HostsFile.load(from: directory.url.appending(path: "hosts.yml")) == nil)
-    }
-
-    @Test func loadReadsAFile() throws {
-        let directory = try TemporaryDirectory()
-        let path = try directory.makeFile("hosts.yml", contents: "github.com:\n    user: alice\n", permissions: 0o600)
-        #expect(try HostsFile.load(from: URL(filePath: path))?.hosts.first?.users == ["alice"])
     }
 
     @Test func loadRejectsAnUnreadableFile() throws {

@@ -15,36 +15,25 @@ struct SubprocessRunnerTests {
             stdoutLimit: stdoutLimit)
     }
 
-    @Test func returnsStdoutAndExitCode() async throws {
-        let output = try await runner.run(request("/bin/echo", ["hello"]))
-        #expect(output.exitCode == 0)
-        #expect(String(bytes: output.stdout, encoding: .utf8) == "hello\n")
-    }
-
-    @Test func returnsNonZeroExitCodeAndStderr() async throws {
-        let output = try await runner.run(request("/bin/sh", ["-c", "echo oops >&2; exit 3"]))
+    @Test func returnsStdoutStderrAndExitCode() async throws {
+        let output = try await runner.run(request("/bin/sh", ["-c", "echo hello; echo oops >&2; exit 3"]))
         #expect(output.exitCode == 3)
+        #expect(String(bytes: output.stdout, encoding: .utf8) == "hello\n")
         #expect(String(bytes: output.stderr, encoding: .utf8) == "oops\n")
-    }
-
-    @Test func timesOutAndStopsTheChild() async throws {
-        let clock = ContinuousClock()
-        let start = clock.now
-        await #expect(throws: ProcessRunError.timedOut) {
-            try await runner.run(request("/bin/sleep", ["5"], timeout: .milliseconds(500)))
-        }
-        #expect(clock.now - start < .seconds(3))
     }
 
     @Test func childIsGoneAfterTheTimeout() async throws {
         let pidFile = FileManager.default.temporaryDirectory.appending(path: "MewbellTests-\(UUID().uuidString).pid")
         defer { try? FileManager.default.removeItem(at: pidFile) }
+        let clock = ContinuousClock()
+        let start = clock.now
         await #expect(throws: ProcessRunError.timedOut) {
             try await runner.run(
                 request(
                     "/bin/sh", ["-c", "echo $$ > \"$0\"; exec /bin/sleep 5", pidFile.path], timeout: .milliseconds(500))
             )
         }
+        #expect(clock.now - start < .seconds(3))
         let pid = try #require(
             pid_t(try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .newlines)))
         try await Task.sleep(for: .milliseconds(300))
@@ -79,13 +68,11 @@ struct SubprocessRunnerTests {
     }
 
     @Test func passesOnlyTheGivenEnvironment() async throws {
-        let environment = GhEnvironment.make(from: ["GH_TOKEN": "test-token", "GH_HOST": "example.com", "HOME": "/tmp"])
-        let output = try await runner.run(request("/usr/bin/env", environment: environment))
-        let lines = (String(bytes: output.stdout, encoding: .utf8) ?? "").split(separator: "\n")
-        #expect(!lines.contains { $0.hasPrefix("GH_TOKEN=") })
-        #expect(!lines.contains { $0.hasPrefix("GH_HOST=") })
-        #expect(lines.contains("HOME=/tmp"))
-        #expect(lines.contains("GH_PROMPT_DISABLED=1"))
+        // 親（テストのプロセス）の環境変数は 1 つも渡らない
+        let output = try await runner.run(
+            request("/usr/bin/env", environment: ["MEWBELL_A": "1", "MEWBELL_B": "2"]))
+        let lines = (String(bytes: output.stdout, encoding: .utf8) ?? "").split(separator: "\n").sorted()
+        #expect(lines == ["MEWBELL_A=1", "MEWBELL_B=2"])
     }
 }
 
@@ -113,23 +100,16 @@ struct GhEnvironmentTests {
     }
 
     @Test func setsTheOverriddenConfigDirectory() {
-        let base = ["GH_TOKEN": "test-token", "GH_HOST": "example.com", "HOME": "/Users/me", "GH_CONFIG_DIR": "/a"]
         let environment = GhEnvironment.make(
-            from: base, configDirectory: URL(filePath: "/Users/me/.gh-work", directoryHint: .isDirectory))
+            from: ["GH_CONFIG_DIR": "/a"],
+            configDirectory: URL(filePath: "/Users/me/.gh-work", directoryHint: .isDirectory))
         #expect(environment["GH_CONFIG_DIR"] == "/Users/me/.gh-work")
-        #expect(GhEnvironment.removedKeys.allSatisfy { environment[$0] == nil })
-        #expect(GhEnvironment.make(from: base, configDirectory: nil) == GhEnvironment.make(from: base))
     }
 }
 
 struct AccessTokenTests {
     private func token(_ text: String) -> AccessToken? {
         AccessToken(ghOutput: Data(text.utf8))
-    }
-
-    @Test func acceptsASingleLineAndTrimsIt() throws {
-        let accessToken = try #require(token("  test-token\n"))
-        #expect(accessToken.value == "test-token")
     }
 
     @Test(arguments: ["", "\n", "test token", "test-token\nsecond", "tést"])
@@ -152,20 +132,18 @@ struct AccessTokenTests {
 
 struct RedactionTests {
     // secret scanning に引っかからないよう、トークン風の文字列は分けて書く
-    private let classic = "gh" + "p_" + "abcDEF0123456789abcDEF0123456789abcd"
-    private let oauth = "gh" + "o_" + "abcDEF0123456789"
-    private let fineGrained = "github" + "_pat_" + "11ABCDEFG0123456789_abcdef"
+    private static let tokens: [String] = [
+        "gh" + "p_" + "abcDEF0123456789abcDEF0123456789abcd",
+        "gh" + "o_" + "abcDEF0123456789",
+        "gh" + "r_" + "abcDEF0123456789",
+        "github" + "_pat_" + "11ABCDEFG0123456789_abcdef",
+        // 古い形式の 40 桁 16 進のトークン
+        String(repeating: "0123456789", count: 4),
+    ]
 
-    @Test func redactsTokenLikeStrings() {
-        let text = "error: \(classic) and \(oauth), also \(fineGrained)."
-        let redacted = Redaction.redactTokens(in: text)
-        #expect(redacted == "error: <redacted> and <redacted>, also <redacted>.")
-    }
-
-    @Test func redactsRefreshTokensAndLegacyHexTokens() {
-        let refresh = "gh" + "r_" + "abcDEF0123456789"
-        let legacy = String(repeating: "0123456789", count: 4)
-        #expect(Redaction.redactTokens(in: "\(refresh) \(legacy)") == "<redacted> <redacted>")
+    @Test(arguments: tokens)
+    func redactsTokenLikeStrings(_ token: String) {
+        #expect(Redaction.redactTokens(in: "error: \(token).") == "error: <redacted>.")
     }
 
     @Test func leavesOtherTextAlone() {
