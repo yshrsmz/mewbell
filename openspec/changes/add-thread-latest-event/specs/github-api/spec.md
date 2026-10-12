@@ -67,7 +67,7 @@ Mewbell は、番号を持つスレッド（ui「アカウント一覧の表示�
 Mewbell は、イベントを取るときに得た Issue のレスポンスから、スレッドの件名の今の状態を次の規則で決めなければならない（MUST）。Issue のレスポンスを得られなかったスレッドの状態は「分からない」にしなければならない（MUST）。
 
 - Pull request（`pull_request` がある）: `pull_request.merged_at` があれば Merged、`state` が `closed` なら Closed、`draft` が `true` なら Draft、それ以外の `open` なら Open
-- Issue: `state` が `open` なら Open、`closed` で `state_reason` が `not_planned` なら Closed as not planned、それ以外の `closed` なら Closed as completed
+- Issue: `state` が `open` なら Open、`closed` で `state_reason` が `completed` か無いなら Closed as completed、それ以外（`not_planned`・`duplicate` など）の `closed` なら Closed as not planned
 - 上のどれにも当たらない値（知らない `state` など）は「分からない」
 
 #### Scenario: マージした Pull request

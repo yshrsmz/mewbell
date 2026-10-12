@@ -250,6 +250,9 @@ struct SubjectStateTests {
             try state(TimelineJSON.issue(createdAt: created, state: "closed", stateReason: "completed"))
                 == .closedCompleted)
         #expect(try state(TimelineJSON.issue(createdAt: created, state: "closed")) == .closedCompleted)
+        #expect(
+            try state(TimelineJSON.issue(createdAt: created, state: "closed", stateReason: "duplicate"))
+                == .closedNotPlanned)
         #expect(try state(TimelineJSON.issue(createdAt: created, state: "locked")) == nil)
     }
 

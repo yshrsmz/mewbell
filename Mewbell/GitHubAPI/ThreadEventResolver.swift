@@ -34,7 +34,8 @@ struct IssueSummary: Decodable, Sendable {
         }
         switch state {
         case "open": return .open
-        case "closed": return stateReason == "not_planned" ? .closedNotPlanned : .closedCompleted
+        // 完了以外の理由（`not_planned`・`duplicate` など、知らない値も）は、完了として出さない
+        case "closed": return stateReason == nil || stateReason == "completed" ? .closedCompleted : .closedNotPlanned
         default: return nil
         }
     }

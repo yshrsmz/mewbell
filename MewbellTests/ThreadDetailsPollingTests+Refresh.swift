@@ -116,6 +116,19 @@ extension ThreadDetailsPollingTests {
         fixture.poller.stop()
     }
 
+    @Test func prefetchesNewThreadsOfARefreshedFetch() async throws {
+        let fixture = try PollerFixture()
+        respond(fixture, notifications: [Self.list([1]), Self.list([1, 2])])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        // 待っている間に再読み込みを押す。その取得で届いた新着の 2 は、状態とイベントを付けて知らせる
+        fixture.moveClock(by: 60)
+        await fixture.poller.refreshNow()
+        let published = try #require(firstUpdate(containing: "2", fixture))
+        #expect(published.threads.first { $0.id == "2" }?.details == Self.commented)
+        fixture.poller.stop()
+    }
+
     @Test func skipsDetailsWhileARefreshIsWaiting() async throws {
         let fixture = try PollerFixture()
         respond(fixture, notifications: [Self.list([1]), Self.list([1, 2]), Self.list([1, 2])])

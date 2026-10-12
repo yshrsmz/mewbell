@@ -43,8 +43,9 @@ extension AccountPoller {
     private func interruptibleByRefresh(
         _ operation: @escaping @Sendable () async -> ThreadDetailsFetcher.Results
     ) async -> ThreadDetailsFetcher.Results? {
-        // 再読み込みを待っているなら始めない（押したのが通知の取得の最中で、まだ止めるタスクが無かったとき）
-        guard pendingRefreshCount == 0 else { return nil }
+        // 次の取得を待つ再読み込みがあるなら始めない（押したのが通知の取得の最中で、まだ止めるタスクが無かったとき）。
+        // 再読み込みで始めた今の取得を待っている人は数えない（その取得の新着の分は取る）
+        guard !refreshWaitsForNextFetch else { return nil }
         let task = Task { () -> ThreadDetailsFetcher.Results? in
             let results = await operation()
             return Task.isCancelled ? nil : results
