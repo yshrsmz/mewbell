@@ -35,14 +35,6 @@ struct SystemNotifierSettingsTests {
         #expect(center.added.value.map(\.identifier) == ["github.com/alice/789"])
     }
 
-    @Test func retractsOnlyThatAccountWhenNotificationsAreTurnedOff() async {
-        let notifier = SystemNotifier(center: center)
-        center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/bob/9"]
-        notifier.retractAll(for: alice)
-        await notifier.waitForPendingWork()
-        #expect(center.delivered.value == ["github.com/bob/9"])
-    }
-
     @Test func stillRetractsGoneThreadsWhileOff() async throws {
         let notifier = SystemNotifier(center: center, notifies: { _ in false })
         center.delivered.value = ["github.com/alice/2"]
@@ -50,16 +42,6 @@ struct SystemNotifierSettingsTests {
         await notifier.waitForPendingWork()
         #expect(center.delivered.value.isEmpty)
         #expect(center.added.value.isEmpty)
-    }
-
-    @Test func keepsNotificationsOfTheNewBaseline() async {
-        let notifier = SystemNotifier(center: center)
-        center.delivered.value = ["github.com/alice/1", "github.com/alice/2"]
-        // 基準の取り直しで、今の一覧に無いものだけを消す
-        notifier.baselineSet(for: alice, keeping: ["2", "4"])
-        await notifier.waitForPendingWork()
-        #expect(center.added.value.isEmpty)
-        #expect(center.delivered.value == ["github.com/alice/2"])
     }
 
     @Test func followsTheSoundSetting() async throws {

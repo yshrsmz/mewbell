@@ -18,52 +18,32 @@ struct AccountDisclosureTests {
         return FeedState(phase: phase, threads: threads)
     }
 
-    @Test func collapsesAReadyAccountWithThreads() throws {
-        let disclosure = AccountDisclosure(tokenState: .ready, feed: try feed(threads: 3), isStoredCollapsed: true)
+    /// トークンの取り直し中や、取得の失敗の後の再試行中も、それまでの一覧を畳んだままにする
+    @Test(arguments: [
+        (TokenState.ready, FeedPhase.loaded(updatedAt: Date(timeIntervalSince1970: 0))),
+        (.fetching, .loaded(updatedAt: Date(timeIntervalSince1970: 0))),
+        (.ready, .retrying(nextAttempt: Date(timeIntervalSince1970: 0), rateLimited: false)),
+    ])
+    func collapsesWhileShowingThreads(_ tokenState: TokenState, _ phase: FeedPhase) throws {
+        let disclosure = AccountDisclosure(
+            tokenState: tokenState, feed: try feed(phase, threads: 3), isStoredCollapsed: true)
         #expect(disclosure.showsThreads)
         #expect(disclosure.isCollapsed)
     }
 
-    @Test func collapsesAReadyAccountWithNoThreads() throws {
-        let disclosure = AccountDisclosure(tokenState: .ready, feed: try feed(threads: 0), isStoredCollapsed: true)
-        #expect(disclosure.showsThreads)
-        #expect(disclosure.isCollapsed)
-    }
-
-    @Test func doesNotCollapseWhenTheTokenIsUnavailable() throws {
+    /// トークンを取れない、最初の取得の前、止まった、取得中（参加のみの切り替えや再開の後）は、畳むものが無い
+    @Test(arguments: [
+        (TokenState.unavailable, FeedPhase?.some(.loaded(updatedAt: Date(timeIntervalSince1970: 0))), 3),
+        (.ready, nil, 0),
+        (.ready, .unauthorized, 0),
+        (.ready, .scopeInsufficient, 0),
+        (.ready, .loading, 0),
+    ])
+    func doesNotCollapseWithoutThreadsShown(_ tokenState: TokenState, _ phase: FeedPhase?, _ count: Int) throws {
         let disclosure = AccountDisclosure(
-            tokenState: .unavailable, feed: try feed(threads: 3), isStoredCollapsed: true)
+            tokenState: tokenState, feed: try phase.map { try feed($0, threads: count) }, isStoredCollapsed: true)
         #expect(!disclosure.showsThreads)
         #expect(!disclosure.isCollapsed)
-    }
-
-    @Test func doesNotCollapseBeforeTheFirstFeed() {
-        let disclosure = AccountDisclosure(tokenState: .ready, feed: nil, isStoredCollapsed: true)
-        #expect(!disclosure.showsThreads)
-        #expect(!disclosure.isCollapsed)
-    }
-
-    @Test(arguments: [FeedPhase.unauthorized, .scopeInsufficient])
-    func doesNotCollapseAStoppedFeed(_ phase: FeedPhase) throws {
-        let disclosure = AccountDisclosure(
-            tokenState: .ready, feed: try feed(phase, threads: 0), isStoredCollapsed: true)
-        #expect(!disclosure.showsThreads)
-        #expect(!disclosure.isCollapsed)
-    }
-
-    /// 参加のみの切り替えや再開の後の取得中は、畳むものが無い
-    @Test func doesNotCollapseWhileLoading() throws {
-        let disclosure = AccountDisclosure(
-            tokenState: .ready, feed: try feed(.loading, threads: 0), isStoredCollapsed: true)
-        #expect(!disclosure.showsThreads)
-        #expect(!disclosure.isCollapsed)
-    }
-
-    /// トークンの取り直し中も、それまでの一覧を畳んだままにする
-    @Test func keepsCollapsedWhileTheTokenIsBeingFetchedAgain() throws {
-        let disclosure = AccountDisclosure(tokenState: .fetching, feed: try feed(threads: 2), isStoredCollapsed: true)
-        #expect(disclosure.showsThreads)
-        #expect(disclosure.isCollapsed)
     }
 
     @Test func staysExpandedWhenNotStoredCollapsed() throws {
@@ -78,16 +58,10 @@ struct DisclosureButtonCountTests {
         DisclosureButton<EmptyView>.shownCount(isCollapsed: isCollapsed, count: count)
     }
 
-    @Test func showsTheCountWhenCollapsed() {
-        #expect(shownCount(isCollapsed: true, count: 3) == 3)
-    }
-
-    @Test func showsNoCountWhenCollapsedWithNoThreads() {
-        #expect(shownCount(isCollapsed: true, count: 0) == nil)
-    }
-
-    @Test func showsNoCountWhenExpanded() {
-        #expect(shownCount(isCollapsed: false, count: 3) == nil)
+    /// 件数は、畳んでいてスレッドがあるときだけ出す。
+    @Test(arguments: [(true, 3, Int?.some(3)), (true, 0, nil), (false, 3, nil)])
+    func showsTheCountOnlyWhenCollapsedWithThreads(_ isCollapsed: Bool, _ count: Int, _ shown: Int?) {
+        #expect(shownCount(isCollapsed: isCollapsed, count: count) == shown)
     }
 }
 

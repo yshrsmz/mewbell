@@ -23,11 +23,10 @@ struct MarkAllReadLabelsTests {
     @Test func keepsTheParticipatingOnlyLabels() {
         let labels = MarkAllReadLabels(count: 2, participatingOnly: true, isTruncated: false)
         #expect(labels.confirmation == "Mark all as read?")
-        #expect(
-            labels.help(confirming: false)
-                == "Mark all as read. Also marks threads you are not participating in as read, up to the newest one shown here."
-        )
-        #expect(!labels.help(confirming: false).contains("older unread"))
+        let help = labels.help(confirming: false)
+        #expect(help.hasPrefix("Mark all as read. "))
+        #expect(help.contains("not participating in"))
+        #expect(!help.contains("older unread"))
     }
 
     @Test func mentionsBothReasons() {

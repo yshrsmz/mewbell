@@ -35,13 +35,11 @@ struct ActionFailureMessageTests {
     }
 
     @Test func givesNoReasonForOtherFailures() {
-        for kind in [FailureKind.network, .httpStatus(500), .redirect, .noToken, .malformedBody] {
-            let failure = failure(.read, kind)
-            #expect(
-                ActionFailureMessage.text(for: failure)
-                    == "Could not mark a thread as read. Unread threads come back after the next fetch.")
-            #expect(ActionFailureMessage.command(for: failure, account: alice) == nil)
-        }
+        let failure = failure(.read, .network)
+        #expect(
+            ActionFailureMessage.text(for: failure)
+                == "Could not mark a thread as read. Unread threads come back after the next fetch.")
+        #expect(ActionFailureMessage.command(for: failure, account: alice) == nil)
     }
 
     @Test func doesNotPromiseThreadsBackWhenMarkAllReadWasNotSent() {

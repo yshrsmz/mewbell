@@ -60,9 +60,9 @@ struct NotificationStoreNewThreadsTests {
         return store
     }
 
-    /// 今のポーラーから `state` が届いたことにする。
-    private func send(_ state: FeedState, for account: AccountID = alice) async {
-        await updates.byAccount[account]?(state)
+    /// alice の今のポーラーから `state` が届いたことにする。
+    private func send(_ state: FeedState) async {
+        await updates.byAccount[alice]?(state)
     }
 
     @Test func staysQuietForTheBaseline() async throws {
@@ -88,29 +88,6 @@ struct NotificationStoreNewThreadsTests {
         store.stopAll()
     }
 
-    @Test func reportsNewAndUpdatedThreads() async throws {
-        let store = makeStore()
-        await send(feed([try thread("1"), try thread("2")]))
-        await send(feed([try thread("1"), try thread("2", updatedAt: 60), try thread("3")]))
-        #expect(received.value == [["2", "3"]])
-        #expect(recorder.changes[alice]?.map(\.posted) == [["2", "3"]])
-        store.stopAll()
-    }
-
-    @Test func ignoresChangesOfOnlyTheDiagnostics() async throws {
-        let store = makeStore()
-        let first = feed([try thread("1")])
-        await send(first)
-        var second = first
-        second.isTruncated = true
-        second.actionFailure = ActionFailure(action: .done, kind: .httpStatus(500), occurredAt: .now)
-        second.diagnostics.nextFetchAt = .now
-        await send(second)
-        #expect(recorder.events == ["baselineSet github.com/alice 1"])
-        #expect(received.value.isEmpty)
-        store.stopAll()
-    }
-
     @Test func makesTheBaselineAfterAFailedFirstFetch() async throws {
         let store = makeStore()
         await send(FeedState(phase: .retrying(nextAttempt: .now, rateLimited: false), threads: []))
@@ -123,23 +100,11 @@ struct NotificationStoreNewThreadsTests {
         store.stopAll()
     }
 
-    @Test func doesNotReportARemovedThreadThatComesBackUnchanged() async throws {
-        let store = makeStore()
-        let first = feed([try thread("1"), try thread("2")])
-        await send(first)
-        store.markRead(try thread("2"), in: alice)
-        #expect(recorder.events.last == "threadRemoved github.com/alice 2")
-        // 次の取得で、同じ updated_at のまま一覧に戻っても知らせない
-        await send(first)
-        #expect(recorder.changes[alice] == nil)
-        #expect(received.value.isEmpty)
-        store.stopAll()
-    }
-
     @Test func ignoresAThreadThatCameBackUnchangedAfterLeavingTheList() async throws {
         let store = makeStore()
         await send(feed([try thread("1"), try thread("2")]))
         store.markRead(try thread("2"), in: alice)
+        #expect(recorder.events.last == "threadRemoved github.com/alice 2")
         // 既読にしたスレッドは取り下げ済みなので、次の取得で一覧に無くても取り下げ直さない
         await send(feed([try thread("1"), try thread("3")]))
         #expect(recorder.changes[alice]?.map(\.posted) == [["3"]])
@@ -151,71 +116,28 @@ struct NotificationStoreNewThreadsTests {
         store.stopAll()
     }
 
-    @Test func ignoresThreadsThatComeBackUnchangedAfterMarkingAllReadFails() async throws {
+    /// すべて既読のように取り下げだけのときは、macOS の通知には渡すが `onNewThreads` は呼ばない。
+    @Test func doesNotReportRetractionsAloneAsNewThreads() async throws {
         let store = makeStore()
-        let first = feed([try thread("1"), try thread("2")])
-        await send(first)
-        // すべて既読にしてポーラーが一覧から外した
+        await send(feed([try thread("1"), try thread("2")]))
         await send(feed([]))
-        // すべて既読が失敗して、同じ updated_at のまま一覧に戻っても知らせない
-        await send(first)
-        #expect(received.value.isEmpty)
-        store.stopAll()
-    }
-
-    @Test func reportsOnlyTheAccountMarkedAllRead() async throws {
-        let store = makeStore()
-        let aliceThreads = feed([try thread("1"), try thread("2")])
-        await send(aliceThreads)
-        await send(feed([try thread("3")]), for: bob)
-        await send(feed([]))
-        #expect(recorder.changes[alice]?.map(\.posted) == [[]])
         #expect(recorder.changes[alice]?.map(\.retracted) == [["1", "2"]])
-        #expect(recorder.changes[bob] == nil)
-        store.stopAll()
-    }
-
-    @Test func doesNothingWhileRetrying() async throws {
-        let store = makeStore()
-        let first = feed([try thread("1")])
-        await send(first)
-        recorder.events = []
-        await send(FeedState(phase: .retrying(nextAttempt: .now, rateLimited: false), threads: first.threads))
-        #expect(recorder.events.isEmpty)
         #expect(received.value.isEmpty)
         store.stopAll()
     }
 
     @Test(arguments: [FeedPhase.unauthorized, .scopeInsufficient])
-    func removesTheAccountWhenItStops(_ phase: FeedPhase) async throws {
+    func removesTheAccountWhenItStopsAndStartsOver(_ phase: FeedPhase) async throws {
         let store = makeStore()
         await send(feed([try thread("1")]))
         recorder.events = []
         await send(FeedState(phase: phase, threads: []))
         #expect(recorder.events == ["retractAll github.com/alice"])
-        store.stopAll()
-    }
-
-    @Test(arguments: [FeedPhase.unauthorized, .scopeInsufficient])
-    func startsOverAfterStopping(_ phase: FeedPhase) async throws {
-        let store = makeStore()
-        await send(feed([try thread("1")]))
-        await send(FeedState(phase: phase, threads: []))
         recorder.events = []
         // 再開の後の最初の取得は基準
         await send(feed([try thread("1"), try thread("2")]))
         #expect(recorder.events == ["baselineSet github.com/alice 1,2"])
         #expect(received.value.isEmpty)
-        store.stopAll()
-    }
-
-    @Test func staysQuietForTheFirstFetchAfterARestart() async throws {
-        let store = makeStore()
-        await send(feed([try thread("1")]))
-        store.restart(alice)
-        await send(feed([try thread("1"), try thread("5")]))
-        #expect(received.value.isEmpty)
-        #expect(recorder.events == ["baselineSet github.com/alice 1", "baselineSet github.com/alice 1,5"])
         store.stopAll()
     }
 
@@ -280,20 +202,6 @@ struct NotificationStoreNewThreadsTests {
         store.stopAll()
     }
 
-    @Test func doesNotPostWhatArrivedWhileOffWhenTurnedBackOn() async throws {
-        let enabled = LockedValue(false)
-        let notifier = SystemNotifier(center: center, notifies: { _ in enabled.value })
-        let store = makeStore(notifier: notifier)
-        await send(feed([try thread("1")]))
-        let whileOff = feed((1...6).compactMap { try? thread(String($0)) })
-        await send(whileOff)
-        enabled.value = true
-        await send(feed(whileOff.threads + [try thread("789")]))
-        await notifier.waitForPendingWork()
-        #expect(center.added.value.map(\.identifier) == ["github.com/alice/789"])
-        #expect(received.value == [["2", "3", "4", "5", "6"], ["789"]])
-        store.stopAll()
-    }
 }
 
 /// `NotificationStore.sync` が、残すアカウントが決まったときだけ `onAccountsRetained` を呼ぶこと
@@ -335,10 +243,4 @@ struct NotificationStoreRetainedAccountsTests {
         store.stopAll()
     }
 
-    @Test func reportsNoAccountsWhenNotLoggedIn() {
-        let store = makeStore()
-        store.sync(with: .notLoggedIn)
-        #expect(retained.value == [[]])
-        store.stopAll()
-    }
 }

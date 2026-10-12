@@ -6,7 +6,6 @@ import Foundation
 final class FakeUserNotificationCenter: UserNotificationCenter {
     let delivered = LockedValue<Set<String>>([])
     let added = LockedValue<[ThreadNotificationContent]>([])
-    let removed = LockedValue<[String]>([])
     let status = LockedValue(NotificationAuthorization.notDetermined)
 
     func requestAuthorization() async -> NotificationAuthorization {
@@ -24,7 +23,6 @@ final class FakeUserNotificationCenter: UserNotificationCenter {
     }
 
     func removeDelivered(identifiers: [String]) async {
-        removed.withLock { $0 += identifiers }
         delivered.withLock { $0.subtract(identifiers) }
     }
 
