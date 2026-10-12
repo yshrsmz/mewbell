@@ -65,9 +65,9 @@ jobs:
         with:
           version: 2026.9.16
           sha256: b6f8757201f6a2ee799f45f3f52ef7ca0b4071523637dc3b0b24264dd3333518 # mise-v2026.9.16-linux-x64
-          install_args: node
+          install_args: node pnpm
 
       - name: Validate OpenSpec
         run: |
-          npm ci --ignore-scripts
-          npx openspec validate --all --strict
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm exec openspec validate --all --strict
