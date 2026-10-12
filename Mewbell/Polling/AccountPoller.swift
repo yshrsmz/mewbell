@@ -61,7 +61,8 @@ actor AccountPoller {
     /// 待ち始める前の状態とイベントの取得。再読み込みで止める
     var detailsTask: Task<ThreadDetailsFetcher.Results?, Never>?
     private var refreshWaiters = RefreshWaiters()
-    var pendingRefreshCount: Int { refreshWaiters.count }  // テスト用
+    /// 待っている再読み込みの数（状態とイベントの取得を始めるかの判断とテストで使う）
+    var pendingRefreshCount: Int { refreshWaiters.count }
 
     init(
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,

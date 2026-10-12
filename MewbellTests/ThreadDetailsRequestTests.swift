@@ -116,7 +116,7 @@ struct ThreadDetailsRequestTests {
         #expect(result == .found(ThreadDetails(state: .open, event: ThreadEvent(kind: .commented, actor: "bob"))))
         #expect(
             transport.requests.map { $0.url?.absoluteString }.last
-                == "https://api.github.com/repositories/1/issues/7/timeline?per_page=100&page=5")
+                == "https://api.github.com/repos/octo/app/issues/7/timeline?per_page=100&page=5")
         #expect(transport.requests.count == 3)
     }
 
@@ -185,14 +185,25 @@ struct ThreadDetailsRequestTests {
     @Test(arguments: [
         "https://evil.example.com/timeline?page=5", "http://api.github.com/repos/octo/app/issues/7/timeline?page=5",
     ])
-    func refusesALastPageOutsideTheAPIBase(_ lastURL: String) async throws {
+    func sendsNothingToTheLinkedHost(_ lastURL: String) async throws {
         let (thread, endpoints) = try thread(subjectURL: "https://api.github.com/repos/octo/app/issues/7")
-        let transport = transport(issue: Self.ok(issue)) { _ in
-            Self.ok(TimelineJSON.page([]), link: "<\(lastURL)>; rel=\"last\"")
+        let transport = transport(issue: Self.ok(issue)) { [comment] page in
+            page == 1 ? Self.ok(TimelineJSON.page([]), link: "<\(lastURL)>; rel=\"last\"") : Self.ok(comment)
         }
-        #expect(await fetch(thread, endpoints, transport) == .failed(.rejectedURL))
-        #expect(transport.requests.count == 2)
+        // `Link` からはページ番号だけを読み、URL は 1 ページ目から組み立てる
+        #expect(
+            await fetch(thread, endpoints, transport)
+                == .found(ThreadDetails(state: .open, event: ThreadEvent(kind: .commented, actor: "bob"))))
         #expect(transport.requests.allSatisfy { $0.url?.host() == "api.github.com" && $0.url?.scheme == "https" })
+        let urls = transport.requests.compactMap { $0.url?.absoluteString }
+        #expect(urls.contains("https://api.github.com/repos/octo/app/issues/7/timeline?per_page=100&page=5"))
+    }
+
+    @Test func treatsASecondaryRateLimitAsARateLimit() async throws {
+        let (thread, endpoints) = try thread(subjectURL: "https://api.github.com/repos/octo/app/issues/7")
+        let body = Data(#"{"message": "You have exceeded a secondary rate limit. Please wait a few minutes."}"#.utf8)
+        let transport = transport(issue: HTTPResponse(statusCode: 403, body: body)) { _ in Self.ok(comment) }
+        #expect(await fetch(thread, endpoints, transport) == .rateLimited(retryAt: now))
     }
 
     @Test(arguments: [404, 410, 422])

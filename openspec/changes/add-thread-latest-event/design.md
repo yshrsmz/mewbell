@@ -40,7 +40,7 @@
 - イベントは Timeline の最後ではなく、`updated_at` の −180 秒〜+60 秒（近さの幅）に入る候補のうち、`updated_at` にいちばん近いものにする（Gitify と同じく近さで選ぶ）。通知は通知を生まない出来事（`cross-referenced` など）の後でも最後の通知の時刻のままなので、基準を付けないと後の出来事を拾う。幅の下側を広く取るのは、`updated_at` がイベントより遅れるため
 - 近さの幅に候補が無ければ、遠い候補で代用せずに「無い」にする（Gitify はいちばん近いものを距離に関係なく使う）。`committed` の時刻はコミットの時刻で push の時刻ではないので、作ってから時間を置いて push したコミットのスレッドで、古いコメントなどを拾わないため。その代わり、そうした push は「Pushed commits」と出ずに理由だけになる。rebase して直後に push する場合（Renovate など）は、コミットの時刻が push の直前になるので拾える
 - 作成日時 + 60 秒以前の候補を除くことで、Pull request の作成に付随する `review_requested` や作成前のコミットを「Opened」として扱える
-- Timeline は古い順にしか返らないので、`per_page=100` の 1 ページ目を取り、`rel="last"` があれば最後のページを取る。最後のページが近さの幅の始まりより前まで届いていなければ（より近い候補が前のページにありうるので）、その前のページも使う（最大 3 ページ）。ほとんどのスレッドは 100 件未満で、Issue と合わせて 2 リクエストで済む
+- Timeline は古い順にしか返らないので、`per_page=100` の 1 ページ目を取り、`rel="last"` があれば最後のページを取る（`Link` からはページ番号だけを読み、URL は 1 ページ目から組み立てる。API が返した URL にトークンを送らず、プロキシの下の GHES で `Link` が内部のホスト名を指していても取れるように）。最後のページが近さの幅の始まりより前まで届いていなければ（より近い候補が前のページにありうるので）、その前のページも使う（最大 3 ページ）。ほとんどのスレッドは 100 件未満で、Issue と合わせて 2 リクエストで済む
 - 候補が見つからず、まだ読んでいないページがあり、`updated_at` が作成直後でもないときは、「Opened」と決めつけずに「無い」にする
 
 ### 2. 型と置き場所
@@ -69,7 +69,7 @@
 
 複数のスレッドを同時 4 件まで取り、打ち切りの時間を過ぎたら残りを止める処理は、状態を持たない `Polling/ThreadDetailsFetcher.swift` に置く（`prefetchLimit`・`fillLimit`・`concurrency` の定数もここ）。
 
-イベントの取得のつなぎ（`prefetchNewDetails`・`fillDetails`）も、同じ理由で `AccountPoller+ThreadDetails.swift` に置き、`details`・`prefetchedIDs`・`fillTask`・`scopesVerified`・`detailsTimeout` の `private` を外した。レート制限は、ヘッダーの無い 429 でもすぐ取り直さないよう、最短 60 秒止める。
+イベントの取得のつなぎ（`prefetchNewDetails`・`fillDetails`）も、同じ理由で `AccountPoller+ThreadDetails.swift` に置き、`details`・`prefetchedIDs`・`fillTask`・`scopesVerified`・`detailsTimeout` の `private` を外した。レート制限は、ヘッダーの無い 429 でもすぐ取り直さないよう、最短 60 秒止める。ヘッダーの無い二次レート制限の 403 は、本文の `message` で見分けてレート制限として扱う（本文は見分けるのにだけ使い、残さない）。
 
 `AccountPoller.swift` は main の時点で lint のファイルの行数の上限（400 行）ちょうどだったので、既存のスレッドへの操作（`perform`・`markAllRead`・`recordActionFailure`）を `AccountPoller+ThreadActions.swift` に移し、それが使うプロパティとメソッド（`state`・`hidden`・`readThroughs`・`readThroughCount`・`recorder`・`fetchCount`・`unconditionalRequested`・`client`・`endpoints`・`tokens`・`now`・`logger`・`publish`）の `private` を外した（ユーザーの判断）。actor の中に閉じているので、外から書き換えることはできない。型の本体の行数の上限（250 行）は、`refreshToken`・`succeeded`・`stop(as:)` を同じファイルの extension に移して収めた。
 
@@ -78,7 +78,7 @@
 1. `fetch(with:)` の中で、`.updated` の一覧から隠すスレッドを除き、`prefetchNewDetails(in:token:)` を呼び、同じ番号と開始時刻でもう一度除く（`run` の分岐を増やさないため。前で除くのは隠しているスレッドを取らないため、後で除くのは取っている間に既読・Done・すべて既読にしたスレッドを一覧に戻さないため）。スコープを確かめる前（トークンを取り直した直後）は取らない。`previous` があるときだけ、新着のうち待っている最大 10 件を取る。`withTaskGroup` で同時 4 件まで、全体を 20 秒で打ち切る（打ち切りは `Task.sleep` の子タスクと競わせ、終わらなかった分は結果を捨てる）。`Task.isCancelled` なら結果を捨てる
 2. `fetch(with:)` で、隠す前の API の一覧で `previous` を更新し、一覧に無い ID をキャッシュから捨てる（既読にできずに戻ったスレッドの記録を残すため）。`handle` が `state.threads` に一覧を入れるところで、キャッシュを付ける
 3. `.wait` で待ち始める前（`announceNextFetch` で一覧を知らせ、再読み込みの待ちを起こした後。最初の一覧と再読み込みのボタンがイベントの取得まで待たないように）に `fillDetails()` で、待っているものを最大 30 件取り、取れたものがあれば今の `state.threads` に `attach` して `publish` する。今の `state.threads` に付けるので、取っている間に `perform` / `markAllRead` で外したスレッドは戻らない
-   1. とこの取得は別の `Task`（`detailsTask`）で走らせ、再読み込み（`refreshNow`）で `sleepTask` と同じく止める。止めた取得の途中の結果は捨て、失敗として数えない（`ThreadDetailsFetcher` は止められたことを打ち切りと区別する）。止めた古いループの後片付けで新しいループの `detailsTask` を消さないよう、自分のものだけを消す。1. で取ったスレッドは、取得の番号と組にして覚える（`prefetched`）（CLAUDE.md の「再読み込みは間隔を待たずにすぐ取り直す」を守るため）。この取得にも 20 秒の打ち切りを付け（遅い回線で再読み込みと次の取得が待たされ続けないように）、1. で取ったスレッドは取り直さない（失敗の回数を 1 回の取得で 2 回数えないように）。打ち切ったスレッドは、`ThreadDetailsFetcher` が一時的な失敗として返す。何か取ったら `announceNextFetch` をもう一度呼び、次の取得の予定時刻を実際に待ち始める時刻から出し直す（取得の間隔は、取っていた時間の分だけ延びる）
+   1. とこの取得は別の `Task`（`detailsTask`）で走らせ、再読み込み（`refreshNow`）で `sleepTask` と同じく止める。止めた取得の途中の結果は捨て、失敗として数えない（`ThreadDetailsFetcher` は止められたことを打ち切りと区別する）。止めた古いループの後片付けで新しいループの `detailsTask` を消さないよう、自分のものだけを消す。1. で取ったスレッドは、取得の番号と組にして覚える（`prefetched`。止められて結果を捨てた分は含めない）。通知の取得の最中に押された再読み込みは、まだ止めるタスクが無いので、再読み込みを待っている間（`pendingRefreshCount > 0`）は取得を始めない（CLAUDE.md の「再読み込みは間隔を待たずにすぐ取り直す」を守るため）。この取得にも 20 秒の打ち切りを付け（遅い回線で再読み込みと次の取得が待たされ続けないように）、1. で取ったスレッドは取り直さない（失敗の回数を 1 回の取得で 2 回数えないように）。打ち切ったスレッドは、`ThreadDetailsFetcher` が一時的な失敗として返す。何か取ったら `announceNextFetch` をもう一度呼び、次の取得の予定時刻を実際に待ち始める時刻から出し直す（取得の間隔は、取っていた時間の分だけ延びる）
 4. 一時的な失敗・認証の失敗は、同じ `updated_at` で 3 回続いたら「無い」として記録し、取り直すのをやめる（移したリポジトリの 301 のように失敗し続けるスレッドで、1 回の取得ごとに最大 30 スレッド × 4 リクエストを送り続けないため）
 5. `stop(as:)` でキャッシュを空にする（`previous` も捨てるので、`resume` の後の次の一覧は最初の一覧として扱う）
 

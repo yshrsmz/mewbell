@@ -8,11 +8,12 @@ extension AccountPoller {
         guard scopesVerified else { return }
         let targets = details.pending(in: threads, newOnly: true, limit: ThreadDetailsFetcher.prefetchLimit, now: now())
         guard !targets.isEmpty else { return }
-        prefetched = (fetchNumber, Set(targets.map(\.id)))
         let fetcher = ThreadDetailsFetcher(client: client, endpoints: endpoints)
         let timeout = detailsTimeout
         let results = await interruptibleByRefresh { await fetcher.fetch(targets, token: token, timeout: timeout) }
         guard let results, !Task.isCancelled else { return }
+        // 取れた（結果を記録した）スレッドだけを、同じ回に取り直さないものとして覚える
+        prefetched = (fetchNumber, Set(results.map(\.0.id)))
         details.record(results, now: now())
     }
 
@@ -42,6 +43,8 @@ extension AccountPoller {
     private func interruptibleByRefresh(
         _ operation: @escaping @Sendable () async -> ThreadDetailsFetcher.Results
     ) async -> ThreadDetailsFetcher.Results? {
+        // 再読み込みを待っているなら始めない（押したのが通知の取得の最中で、まだ止めるタスクが無かったとき）
+        guard pendingRefreshCount == 0 else { return nil }
         let task = Task { () -> ThreadDetailsFetcher.Results? in
             let results = await operation()
             return Task.isCancelled ? nil : results

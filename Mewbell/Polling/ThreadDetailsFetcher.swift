@@ -28,7 +28,7 @@ struct ThreadDetailsFetcher: Sendable {
     /// （始めていない分は返さない）。呼び出し元のタスクごと止められたら、それまでに終わった分だけを返す。レート制限が返ったら、まだ始めていない分は取らない。
     func fetch(
         _ threads: [NotificationThread], token: AccessToken, timeout: Duration
-    ) async -> [(NotificationThread, ThreadDetailsFetchResult)] {
+    ) async -> Results {
         let client = client
         let endpoints = endpoints
         return await withTaskGroup(of: Outcome.self) { group in
@@ -49,7 +49,7 @@ struct ThreadDetailsFetcher: Sendable {
             for _ in 0..<Self.concurrency {
                 startNext()
             }
-            var results: [(NotificationThread, ThreadDetailsFetchResult)] = []
+            var results: Results = []
             while !running.isEmpty, let outcome = await group.next() {
                 switch outcome {
                 case .timedOut:

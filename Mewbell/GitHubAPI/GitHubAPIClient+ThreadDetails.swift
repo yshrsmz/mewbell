@@ -61,8 +61,8 @@ extension GitHubAPIClient {
                 event: ThreadEventResolver.event(issue: issue, timeline: timeline, updatedAt: thread.updatedAt)))
     }
 
-    /// Timeline の 1 ページ目と、`rel="last"` があれば最後のページ、そこに候補が無ければその前のページを取り、古い順につなげる。
-    /// その前のページが 1 ページ目なら取り直さない（取るのは最大 3 ページ）。
+    /// Timeline の 1 ページ目と、`rel="last"` があれば最後のページ、最後のページが近さの幅の始まりまで届いていなければ
+    /// その前のページを取り、古い順につなげる。その前のページが 1 ページ目なら取り直さない（取るのは最大 3 ページ）。
     private func fetchTimeline(
         path: String, updatedAt: Date, endpoints: APIEndpoints, token: AccessToken
     ) async -> Result<[TimelineItem], DetailsStop> {
@@ -71,10 +71,11 @@ extension GitHubAPIClient {
         }
         let first = await getPage(firstURL, endpoints: endpoints, token: token)
         guard case .success(let (firstItems, link)) = first else { return first.map(\.items) }
-        guard let lastURL = LinkHeader.lastURL(in: link), let lastPage = Self.page(of: lastURL), lastPage > 1 else {
-            return .success(firstItems)
-        }
-        // 最後のページの URL は API が返したものなので、`send` のオリジン検査を通るものだけに送る
+        // `Link` からはページ番号だけを読み、URL は 1 ページ目から組み立てる（API が返した URL には送らない。
+        // プロキシの下の GHES で `Link` が内部のホスト名を指していても取れるように）
+        guard let lastPage = LinkHeader.lastURL(in: link).flatMap(Self.page(of:)), lastPage > 1,
+            let lastURL = Self.timelineURL(firstURL, page: lastPage)
+        else { return .success(firstItems) }
         let last = await getPage(lastURL, endpoints: endpoints, token: token)
         guard case .success(let (lastItems, _)) = last else { return last.map(\.items) }
         // 最後のページが近さの幅の始まりより前まで届いていれば、前のページに近い候補は無い
@@ -118,6 +119,13 @@ extension GitHubAPIClient {
             .first { $0.name == "page" }?.value.flatMap { Int($0) }
     }
 
+    /// 二次レート制限の 403 か（本文の `message` が「secondary rate limit」を含む）。本文は見分けるのにだけ使い、残さない。
+    private static func isSecondaryRateLimit(_ response: HTTPResponse) -> Bool {
+        struct Message: Decodable { let message: String? }
+        let message = (try? JSONDecoder().decode(Message.self, from: response.body))?.message
+        return message?.localizedCaseInsensitiveContains("secondary rate limit") == true
+    }
+
     /// 状態とイベントの取得の `GET` を送り、`200` ならレスポンスを、そうでなければ結果を返す。
     private func get(
         _ url: URL, endpoints: APIEndpoints, token: AccessToken
@@ -134,6 +142,8 @@ extension GitHubAPIClient {
             return .failure(DetailsStop(.unauthorized))
         case 403, 429:
             if let retryAt = rateLimitedUntil(response) { return .failure(DetailsStop(.rateLimited(retryAt: retryAt))) }
+            // 待ち時間のヘッダーが無い二次レート制限は、本文で見分けて止める（待つ時間は呼び出し元の最短の時間）
+            if Self.isSecondaryRateLimit(response) { return .failure(DetailsStop(.rateLimited(retryAt: now()))) }
             return .failure(DetailsStop(.unavailable))
         case 404, 410, 422:
             return .failure(DetailsStop(.unavailable))

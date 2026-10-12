@@ -49,7 +49,7 @@ struct ThreadDetailsCache {
 
     /// 取得の結果をまとめて記録する。1 つでも記録したら true（一覧に付け直す必要がある）。
     @discardableResult
-    mutating func record(_ results: [(NotificationThread, ThreadDetailsFetchResult)], now: Date) -> Bool {
+    mutating func record(_ results: ThreadDetailsFetcher.Results, now: Date) -> Bool {
         results.map { thread, result in
             guard case .rateLimited(let retryAt) = result else { return record(result, for: thread) }
             return record(.rateLimited(retryAt: max(retryAt, now + Self.minimumPause)), for: thread)
