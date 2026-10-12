@@ -73,9 +73,11 @@ struct ThreadIconTests {
     }
 
     @Test func fallsBackToTheKindWithoutAMatchingState() {
-        let unknown = ThreadIcon(kind: .pullRequest, state: nil)
-        #expect(unknown.color == nil)
-        #expect(unknown.label == "Pull request")
+        for (kind, name) in [(SubjectKind.pullRequest, "Pull request"), (.issue, "Issue")] {
+            let unknown = ThreadIcon(kind: kind, state: nil)
+            #expect(unknown.color == nil)
+            #expect(unknown.label == name)
+        }
         // 種類に合わない状態は、状態が無いときと同じ
         #expect(ThreadIcon(kind: .release, state: .open) == ThreadIcon(kind: .release, state: nil))
         #expect(ThreadIcon(kind: .issue, state: .merged) == ThreadIcon(kind: .issue, state: nil))
