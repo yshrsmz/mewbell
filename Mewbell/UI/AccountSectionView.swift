@@ -157,7 +157,7 @@ struct AccountSectionView: View {
     private var title: some View {
         HStack(spacing: ListLayout.spacing) {
             tokenIcon
-                .frame(width: ListLayout.chevronWidth)
+                .frame(width: ListLayout.iconColumnWidth)
             // 幅が足りないときはホスト名から縮め、それでも足りなければユーザー名の末尾を省略する（active の印は省略しない）
             OneLineText(text: account.user, truncation: .tail)
                 .font(.headline)
