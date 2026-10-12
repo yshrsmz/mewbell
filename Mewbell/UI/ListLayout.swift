@@ -2,12 +2,13 @@ import SwiftUI
 
 /// 一覧の寸法（見出しの字下げと、区画の中の文の行の間隔）。
 enum ListLayout {
-    /// 見出しの山形の幅
-    static let chevronWidth: CGFloat = 16
-    /// 山形と見出しの中身の間隔
+    /// アイコンの列の幅。見出しの山形、アカウントの見出しのトークンの状態、スレッドの行の種類のアイコンを、この幅の列の中央に置く。
+    /// 記号は書体の大きさのまま描くので、どの記号の配置の枠も倍率 1 と 2 の画面で収まる幅にする（`IconColumnTests`）
+    static let iconColumnWidth: CGFloat = 24
+    /// アイコンの列と、見出しや行の中身の間隔
     static let spacing: CGFloat = 6
-    /// 見出しの下に置く中身の字下げ（山形の幅と間隔の分）
-    static let contentIndent = chevronWidth + spacing
+    /// 見出しの下に置く中身の字下げ（アイコンの列の幅と間隔の分）
+    static let contentIndent = iconColumnWidth + spacing
     /// 区画の中の文（取得とトークンの状態、未読が無いこと、操作の失敗、案内とコマンドの行）の、行と行の間隔
     static let noteSpacing: CGFloat = 6
 }

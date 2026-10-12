@@ -84,7 +84,7 @@ struct DisclosureButton<Label: View>: View {
     }
 }
 
-/// 開閉を示す山形。開いているときは下を向く。幅はスレッドの行の種類のアイコンと揃える。
+/// 開閉を示す山形。開いているときは下を向く。アイコンの列（`ListLayout.iconColumnWidth`）の中央に置く。
 private struct DisclosureChevron: View {
     let isCollapsed: Bool
 
@@ -93,7 +93,7 @@ private struct DisclosureChevron: View {
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.secondary)
             .rotationEffect(.degrees(isCollapsed ? 0 : 90))
-            .frame(width: ListLayout.chevronWidth)
+            .frame(width: ListLayout.iconColumnWidth)
             .accessibilityHidden(true)
     }
 }

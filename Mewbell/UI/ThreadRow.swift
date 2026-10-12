@@ -27,7 +27,7 @@ struct ThreadRow: View {
             HStack(alignment: .firstTextBaseline, spacing: ListLayout.spacing) {
                 Image(systemName: icon.symbol)
                     .foregroundStyle(icon.color.map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
-                    .frame(width: ListLayout.chevronWidth)
+                    .frame(width: ListLayout.iconColumnWidth)
                     .accessibilityLabel(icon.label)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(thread.title)
