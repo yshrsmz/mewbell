@@ -91,11 +91,11 @@ Releases から入れた場合は、`/Applications/Mewbell.app` をゴミ箱に�
 
 ### 前提ツール
 
-- [mise](https://mise.jdx.dev/): swiftlint と Node.js（仕様管理の [OpenSpec](https://github.com/Fission-AI/OpenSpec) CLI に使う）のバージョンを固定しています
+- [mise](https://mise.jdx.dev/): swiftlint と Node.js・pnpm（仕様管理の [OpenSpec](https://github.com/Fission-AI/OpenSpec) CLI に使う）のバージョンを固定しています
 
 ```bash
-mise install                 # mise.toml / mise.lock の swiftlint と Node.js を入れる
-npm ci --ignore-scripts      # OpenSpec CLI をプロジェクトローカルに入れる
+mise install                                      # mise.toml / mise.lock の swiftlint と Node.js・pnpm を入れる
+pnpm install --frozen-lockfile --ignore-scripts   # OpenSpec CLI をプロジェクトローカルに入れる
 ```
 
 ### ビルド・テスト・lint

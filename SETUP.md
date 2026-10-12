@@ -8,14 +8,14 @@
 mkdir Mewbell && cd Mewbell && git init
 cp <このフォルダ>/CLAUDE.md .
 mkdir -p openspec && cp <このフォルダ>/openspec/config.yaml openspec/
-cp <このフォルダ>/package.json <このフォルダ>/package-lock.json .
+cp <このフォルダ>/package.json <このフォルダ>/pnpm-lock.yaml .
 
 # OpenSpec CLI はグローバルに入れず、package.json でバージョン固定してプロジェクトローカルに入れる
-npm ci --ignore-scripts
-npx openspec init --tools claude  # .claude/skills/openspec-* と openspec/specs, changes を生成。config.yaml は上書きされない
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm exec openspec init --tools claude  # .claude/skills/openspec-* と openspec/specs, changes を生成。config.yaml は上書きされない
 ```
 
-以降 `openspec` コマンドは `npx openspec` で呼ぶ。artifact を日本語で書く設定は `config.yaml` の `context` に入っている（`openspec init --language Japanese` が書き込むのと同じ行）。
+以降 `openspec` コマンドは `pnpm exec openspec` で呼ぶ。artifact を日本語で書く設定は `config.yaml` の `context` に入っている（`openspec init --language Japanese` が書き込むのと同じ行）。
 
 `openspec init` が `config.yaml` を上書きするか聞いてきたら「No」。生成後 `openspec/config.yaml` に `context:` と `rules:` が残っていることを確認する。
 
@@ -59,7 +59,7 @@ Claude Code を repo 直下で開き、まず探索せずに change を起こす
 
 ## 4. 運用メモ
 
-- `npx openspec status --change <name>` で artifact の進捗、`npx openspec validate --all --strict` で spec の形式チェック
+- `pnpm exec openspec status --change <name>` で artifact の進捗、`pnpm exec openspec validate --all --strict` で spec の形式チェック
 - `CLAUDE.md` は「どう作るか」の約束、`openspec/specs/` は「何を満たすか」の正本。重複させない
 - Claude Code の `/compact` 前に tasks.md のチェックを更新しておくと、文脈が切れても再開しやすい
 - 設計判断の経緯は claude.ai 側のドキュメント「Mac 用 GitHub 通知アプリ：既存プロダクト調査と要件整理」にある。必要なら README から参照する
