@@ -78,7 +78,6 @@ struct MarkAllReadPollingTests {
     /// 12:00 の `1`、12:30 の `2`、12:45 の `3`
     private static let threeThreads = ok([("1", noon), ("2", half), ("3", quarterTo)])
 
-    private var gets: [URLRequest] { fixture.requests("GET") }
     private var puts: [URLRequest] { fixture.requests("PUT") }
     private var lastIDs: [String] { fixture.lastIDs }
 
@@ -125,7 +124,7 @@ struct MarkAllReadPollingTests {
         // 次の取得は条件なしで、取得の待ち時間は変わらない
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
-        #expect(gets.map { $0.value(forHTTPHeaderField: "If-Modified-Since") } == [nil, nil])
+        #expect(fixture.ifModifiedSince == [nil, nil])
         #expect(fixture.sleeper.durations == [.seconds(60), .seconds(60)])
         fixture.poller.stop()
     }

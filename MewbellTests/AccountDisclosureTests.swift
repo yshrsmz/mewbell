@@ -5,7 +5,9 @@ import Testing
 @testable import Mewbell
 
 struct AccountDisclosureTests {
-    private func feed(_ phase: FeedPhase = .loaded(updatedAt: Date(timeIntervalSince1970: 0)), threads count: Int)
+    private static let loaded = FeedPhase.loaded(updatedAt: Date(timeIntervalSince1970: 0))
+
+    private func feed(_ phase: FeedPhase = loaded, threads count: Int)
         throws -> FeedState
     {
         let repository = try #require(RepositoryName(fullName: "octo/app"))
@@ -20,8 +22,8 @@ struct AccountDisclosureTests {
 
     /// トークンの取り直し中や、取得の失敗の後の再試行中も、それまでの一覧を畳んだままにする
     @Test(arguments: [
-        (TokenState.ready, FeedPhase.loaded(updatedAt: Date(timeIntervalSince1970: 0))),
-        (.fetching, .loaded(updatedAt: Date(timeIntervalSince1970: 0))),
+        (TokenState.ready, loaded),
+        (.fetching, loaded),
         (.ready, .retrying(nextAttempt: Date(timeIntervalSince1970: 0), rateLimited: false)),
     ])
     func collapsesWhileShowingThreads(_ tokenState: TokenState, _ phase: FeedPhase) throws {
@@ -33,7 +35,7 @@ struct AccountDisclosureTests {
 
     /// トークンを取れない、最初の取得の前、止まった、取得中（参加のみの切り替えや再開の後）は、畳むものが無い
     @Test(arguments: [
-        (TokenState.unavailable, FeedPhase?.some(.loaded(updatedAt: Date(timeIntervalSince1970: 0))), 3),
+        (TokenState.unavailable, FeedPhase?.some(loaded), 3),
         (.ready, nil, 0),
         (.ready, .unauthorized, 0),
         (.ready, .scopeInsufficient, 0),

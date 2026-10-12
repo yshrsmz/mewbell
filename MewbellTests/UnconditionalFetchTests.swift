@@ -48,7 +48,7 @@ struct UnconditionalFetchTests {
         await fixture.sleeper.waitForSleeps(2)
         fixture.advance(by: 60)
         await fixture.sleeper.waitForSleeps(3)
-        #expect(fixture.requests("GET").map { $0.value(forHTTPHeaderField: "If-Modified-Since") } == [nil, nil, nil])
+        #expect(fixture.ifModifiedSince == [nil, nil, nil])
         fixture.poller.stop()
     }
 

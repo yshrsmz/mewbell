@@ -17,14 +17,13 @@ struct MarkReadPollingTests {
 
     private static let actions = [ThreadAction.read(threadID: "2"), .done(threadID: "2")]
 
-    @Test(arguments: actions)
-    func removesTheThreadAndSendsTheRequest(_ action: ThreadAction) async {
+    @Test(arguments: zip(actions, ["PATCH", "DELETE"]))
+    func removesTheThreadAndSendsTheRequest(_ action: ThreadAction, method: String) async {
         fixture.route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3), PollerFixture.notModified])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         await fixture.poller.perform(action)
         #expect(lastIDs == ["1", "3"])
-        let method = if case .read = action { "PATCH" } else { "DELETE" }
         let sent = fixture.transport.requests.filter { $0.httpMethod != "GET" }
         #expect(
             sent.map { "\($0.httpMethod ?? "") \($0.url?.absoluteString ?? "")" }
@@ -36,8 +35,8 @@ struct MarkReadPollingTests {
         // 取り終えたら、その次はまた条件付きに戻る
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(3)
-        #expect(gets.map { $0.value(forHTTPHeaderField: "If-Modified-Since") } == [nil, nil, "LM-1"])
-        #expect(fixture.sleeper.durations == [60, 60, 60].map { .seconds($0) })
+        #expect(fixture.ifModifiedSince == [nil, nil, "LM-1"])
+        #expect(fixture.sleeper.durations == Array(repeating: .seconds(60), count: 3))
         fixture.poller.stop()
     }
 
@@ -71,7 +70,7 @@ struct MarkReadPollingTests {
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(3)
         #expect(lastIDs == ["1"])
-        #expect(gets.last?.value(forHTTPHeaderField: "If-Modified-Since") == nil)
+        #expect(fixture.ifModifiedSince.last == .some(nil))
         fixture.poller.stop()
     }
 }

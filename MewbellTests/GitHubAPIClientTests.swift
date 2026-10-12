@@ -268,7 +268,7 @@ struct NotificationPagingTests {
     /// `lastPage` ページ目まで `rel="next"` を付け、そのページで終わる。各ページは `ids(page)` のスレッド。
     private func fetchPages(
         _ lastPage: Int, ids: @escaping @Sendable (Int) -> ClosedRange<Int> = { ($0 * 100)...($0 * 100) }
-    ) async -> (NotificationsFetchResult, FakeHTTPTransport) {
+    ) async -> (result: NotificationsFetchResult, transport: FakeHTTPTransport) {
         let transport = FakeHTTPTransport { request in
             // `per_page` と取り違えないように、`page` のクエリだけを読む
             let page =
@@ -285,7 +285,7 @@ struct NotificationPagingTests {
     }
 
     @Test func isNotTruncatedWhenTheTenthPageIsTheLast() async {
-        guard case .updated(_, _, _, _, let truncated) = await fetchPages(10).0 else {
+        guard case .updated(_, _, _, _, let truncated) = await fetchPages(10).result else {
             Issue.record("unexpected result")
             return
         }
