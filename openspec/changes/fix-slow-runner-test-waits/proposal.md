@@ -30,7 +30,7 @@ PR の CI では `xcodebuild` を回さないので、こうしたテストの�
 ## Impact
 
 - マイルストーン: M5（配布）のリリースのワークフローを安定させるための保守の change。
-- 変更するもの: `MewbellTests/Support/PollingFakes.swift`、`MewbellTests/Support/FakeDiscovery.swift`、`MewbellTests/SubprocessRunnerTests.swift`、`MewbellTests/SettingsPollingTests.swift`（上限で Issue を記録するようにして見つかった、条件が満たされないまま通っていた待ち。design.md D3）。本体（`Mewbell/`）とワークフローは変えない。
+- 変更するもの: `MewbellTests/Support/PollingFakes.swift`、`MewbellTests/Support/FakeDiscovery.swift`、`MewbellTests/SubprocessRunnerTests.swift`、`MewbellTests/SettingsPollingTests.swift`（上限で Issue を記録するようにして見つかった、条件が満たされないまま通っていた待ちと、`advance(until:)` の Issue の記録。design.md D3・D4）。本体（`Mewbell/`）とワークフローは変えない。
 - トークン・gh サブプロセス・ネットワーク・URL を開く処理: 本体の処理には触れない。gh サブプロセスのタイムアウトと子プロセスの終了を確かめるテスト（`SubprocessRunnerTests`）の待ち方を変えるが、確かめる性質（タイムアウトで子が消える、出力が途中かもしれないときは結果を受け取らない）は変えない。
 - トークンの永続化に関わる変更は無い。
 - v0.2.0 の draft のリリースは、この change とは別に、失敗したジョブの再実行で出す。

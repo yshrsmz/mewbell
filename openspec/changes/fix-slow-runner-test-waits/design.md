@@ -62,6 +62,10 @@ D1 で上限に達したら Issue を記録するようにしたところ、`Not
 
 同じファイルの `stopsADisabledAccount` と同じく `advance()` を 2 回呼んで、両方の待ちを起こす。bob の取得も `pausedMethod` で止まるが、確かめる内容には関わらない。
 
+### D4. `advance(until:)` も切れたら Issue を記録する
+
+`NotificationStoreSettingsTests` の private な `advance(until:)` は、待ちを 6 回（30ms ごと）進めても条件が満たされないと黙って戻る。D1 で直したのと同じく、後続の `#expect` の値の食い違いとして落ちるので、試行が尽きたら呼び出し元の位置に Issue を記録する。試行の回数と間隔は変えない（固定の sleep で順序を作るテストの見直しは Non-Goals のまま）。code-review の指摘を受けて、ユーザーの判断で入れた。
+
 ### 採らなかった案: ランナーの負荷を減らす
 
 `waitUntil` の 1ms と `FakeHTTPTransport.send` の 5ms のポーリングが、並行に動く多数のテストで CPU を取り合っている可能性はある。ただし手元で再現できず、効き目を確かめる方法が無い。Swift Testing の並行実行を止める設定も、`xcodebuild` から何が効くかを確かめないまま入れることになる。上限を広げて失敗を見える形にすれば、次に落ちたときに原因を絞れるので、今回は入れない。
