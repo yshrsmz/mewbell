@@ -26,6 +26,19 @@ private func listsEvery(_ state: SubjectState?) {
     }
 }
 
+/// 確かめるトークンの状態。`TokenState` に case を足すと `listsEvery(_:)` でコンパイルが止まるので、ここにも足す
+private let tokenStates: [TokenState] = [.fetching, .ready, .unavailable, .disabled]
+
+private func listsEvery(_ tokenState: TokenState) {
+    // default を置かない（case を足したら一覧に足すまでコンパイルを止める）
+    switch tokenState {
+    case .fetching, .ready, .unavailable, .disabled: break
+    }
+}
+
+/// 確かめる取得の状態。止まっているか（`FeedPhase.isStopped`）で記号が変わるので、両方を含める
+private let phases: [FeedPhase?] = [nil, .loaded(updatedAt: .distantPast), .unauthorized]
+
 /// アイコンの列（`ListLayout.iconColumnWidth`）に置く記号が、書体の大きさのまま列に収まること。
 /// 記号は View と同じ書体で、配置の枠（`fittingSize`）を倍率 1 と 2 の画面で測る。
 @MainActor
@@ -39,9 +52,14 @@ struct IconColumnTests {
     }
 
     /// アカウントの見出しの `tokenIcon` の記号（書体を付けない）。取得中の `ProgressView` は書体で大きさが決まらないので測らない
-    @Test(arguments: ["checkmark.circle.fill", "exclamationmark.triangle.fill", "pause.circle"])
-    func fitsTheTokenIcon(_ symbol: String) {
-        expectFits(Image(systemName: symbol), symbol)
+    @Test func fitsEveryTokenIcon() {
+        let symbols = Set(
+            tokenStates.flatMap { state in
+                phases.compactMap { TokenStateIcon(tokenState: state, phase: $0).symbol }
+            })
+        for symbol in symbols.sorted() {
+            expectFits(Image(systemName: symbol), symbol)
+        }
     }
 
     /// `DisclosureChevron` の山形。90° 回るので、幅と高さの大きいほうが列に収まること

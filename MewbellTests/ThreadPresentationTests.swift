@@ -91,6 +91,43 @@ struct ThreadIconTests {
     }
 }
 
+struct TokenStateIconTests {
+    @Test(arguments: [
+        (TokenState.fetching, FeedPhase?.none, "Getting token"),
+        (.ready, .loaded(updatedAt: .distantPast), "Ready"),
+        (.ready, .scopeInsufficient, "Stopped"),
+        (.ready, .unauthorized, "Stopped"),
+        (.unavailable, nil, "No token"),
+    ])
+    func namesTheState(_ tokenState: TokenState, _ phase: FeedPhase?, _ label: String) {
+        #expect(TokenStateIcon(tokenState: tokenState, phase: phase).label == label)
+    }
+
+    /// 同じ記号と色でも、名前で読み分けられる
+    @Test func keepsStoppedAndNoTokenApartByName() {
+        let stopped = TokenStateIcon(tokenState: .ready, phase: .unauthorized)
+        let noToken = TokenStateIcon(tokenState: .unavailable, phase: nil)
+        #expect(stopped.symbol == noToken.symbol)
+        #expect(stopped.color == noToken.color)
+        #expect(stopped.label != noToken.label)
+    }
+
+    /// 取得中だけ記号が無い（`ProgressView` を出す）。取得中は取得の状態にかかわらない
+    @Test(arguments: [FeedPhase?.none, .loaded(updatedAt: .distantPast), .unauthorized])
+    func showsProgressOnlyWhileFetching(_ phase: FeedPhase?) {
+        #expect(TokenStateIcon(tokenState: .fetching, phase: phase).symbol == nil)
+        #expect(TokenStateIcon(tokenState: .ready, phase: phase).symbol != nil)
+    }
+
+    @Test(arguments: [
+        FeedPhase?.none, .loading, .loaded(updatedAt: .distantPast),
+        .retrying(nextAttempt: .distantFuture, rateLimited: true),
+    ])
+    func isReadyUnlessStopped(_ phase: FeedPhase?) {
+        #expect(TokenStateIcon(tokenState: .ready, phase: phase).label == "Ready")
+    }
+}
+
 struct ThreadWebURLTests {
     private let github: APIEndpoints
     private let gheCloud: APIEndpoints

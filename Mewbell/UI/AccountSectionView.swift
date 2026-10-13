@@ -181,24 +181,19 @@ struct AccountSectionView: View {
         }
     }
 
-    @ViewBuilder private var tokenIcon: some View {
-        switch status.tokenState {
-        case .fetching:
-            ProgressView().controlSize(.mini)
-        case .ready where feed?.phase.isStopped == true:
-            // トークンは持っているが、API に使えなかった
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
-                .help("Stopped")
-        case .ready:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                .help("Ready")
-        case .unavailable:
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
-                .help("No token")
-        case .disabled:
-            Image(systemName: "pause.circle").foregroundStyle(.secondary)
-                .help("Disabled")
+    /// 名前は記号の既定の名前の代わりに読ませ、ツールチップにも出す
+    private var tokenIcon: some View {
+        let icon = TokenStateIcon(tokenState: status.tokenState, phase: feed?.phase)
+        return Group {
+            if let symbol = icon.symbol {
+                Image(systemName: symbol)
+                    .foregroundStyle(icon.color.map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
+            } else {
+                ProgressView().controlSize(.mini)
+            }
         }
+        .help(icon.label)
+        .accessibilityLabel(icon.label)
     }
 
     @ViewBuilder private func threads() -> some View {
