@@ -56,6 +56,15 @@ change をまたいで効く設計の約束は、change ごとの design.md の 
   - `UI/`・`App/` の外で SwiftUI・AppKit を import しない
   - `Authorization` ヘッダーを書くのは API クライアントだけ
   - 書体の大きさをポイント数で指定しない
+- 文書の更新で、変更の漏れや記述の重複が起きないようにする。
+  - `scripts/check-architecture.sh`: 機械的に確かめられることを検査する。対象は次のとおり。
+    - 原則の書式と ID
+    - 他の文書・lint の設定・design.md から引いている ID が実在するか
+    - 根拠の change が実在するか
+    - 文書に書いた型名・パスがコードに実在するか
+    - 原則の文が CLAUDE.md や `.claude/rules/` に重ねて書かれていないか
+  - `scripts/lint.sh` と CI の lint のジョブから、検査を実行する。検査のテストは `scripts/tests/` に置く。
+  - プロジェクトのスキル `update-architecture-doc`（`.claude/skills/`）: 原則を足す・改める・廃止する・逸脱を足す / 消すときの手順を書く。どの約束をどの文書が受け持つかの表を持ち、同じ約束を 2 か所に書かないようにする。ID を引いている箇所の見直しと、lint の規則・既知の逸脱の同期も含める。
 
 アプリの振る舞いは変えない。
 
@@ -72,8 +81,8 @@ change をまたいで効く設計の約束は、change ごとの design.md の 
 ## Impact
 
 - マイルストーン: 特定のマイルストーンには属さない、開発の進め方の change。
-- 追加するもの: `docs/architecture.md`。
-- 変更するもの: `CLAUDE.md`、`openspec/config.yaml`、`.claude/rules/review-process.md`、`.swiftlint.yml`。アプリのコード（`Mewbell/`、`MewbellTests/`）は変えない。lint の新しい規則に今のコードが引っかかる場合は、規則の範囲を見直す。コードを直すのは、原則に合わせる別の change で行う。
+- 追加するもの: `docs/architecture.md`、`scripts/check-architecture.sh` とそのテスト、`.claude/skills/update-architecture-doc/SKILL.md`。
+- 変更するもの: `CLAUDE.md`、`openspec/config.yaml`、`.claude/rules/review-process.md`、`.swiftlint.yml`、`scripts/lint.sh`、`.github/workflows/ci.yml`（検査の実行を足すだけで、権限・シークレット・使う Action は変えない）。アプリのコード（`Mewbell/`、`MewbellTests/`）は変えない。lint の新しい規則に今のコードが引っかかる場合は、規則の範囲を見直す。コードを直すのは、原則に合わせる別の change で行う。
 - 後に続く change: 既知の逸脱を直す change を別に起こす。
   - `ThreadReason`・`ThreadEventText` を `UI/` の外に移す
   - 設定のタブの子の View を値とクロージャだけで組む
