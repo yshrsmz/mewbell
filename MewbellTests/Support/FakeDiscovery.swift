@@ -1,4 +1,5 @@
 import Synchronization
+import Testing
 
 @testable import Mewbell
 
@@ -30,8 +31,8 @@ final class GatedProcessRunner: ProcessRunning {
         }
     }
 
-    func waitUntilWaiting(_ count: Int) async {
-        await waitUntil { self.waitingCount >= count }
+    func waitUntilWaiting(_ count: Int, sourceLocation: SourceLocation = #_sourceLocation) async {
+        await waitUntil(sourceLocation: sourceLocation) { self.waitingCount >= count }
     }
 
     func run(_ request: ProcessRequest) async throws -> ProcessOutput {

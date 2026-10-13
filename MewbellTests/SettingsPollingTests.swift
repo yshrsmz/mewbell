@@ -106,10 +106,16 @@ struct NotificationStoreSettingsTests {
     }
 
     /// 待っているポーラーを古い順に進めながら、`condition` が満たされるまで待つ（作り直したポーラーの最初の取得の待ちを含む）。
-    private func advance(until condition: @MainActor () -> Bool) async {
+    /// 満たされないまま試行が尽きたら、呼び出し元の位置に Issue を記録する。
+    private func advance(
+        until condition: @MainActor () -> Bool, sourceLocation: SourceLocation = #_sourceLocation
+    ) async {
         for _ in 0..<6 where !condition() {
             sleeper.advance()
             try? await Task.sleep(for: .milliseconds(30))
+        }
+        if !condition() {
+            Issue.record("待ちを 6 回進めても条件が満たされなかった", sourceLocation: sourceLocation)
         }
     }
 
@@ -208,6 +214,8 @@ struct NotificationStoreSettingsTests {
         let store = await loadedStore()
         // 前のポーラーの取得の途中で作り直す
         transport.pausedMethod.value = "GET"
+        // alice と bob のどちらが先に寝たかは決まらないので、両方を起こす
+        sleeper.advance()
         sleeper.advance()
         await waitUntil { self.gets("alice").count == 2 }
         settings.setParticipatingOnly(true, for: alice)

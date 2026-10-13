@@ -44,15 +44,28 @@ final class ManualSleeper: Sendable {
     }
 
     /// `count` 回目の待ちが始まるまで待つ。
-    func waitForSleeps(_ count: Int) async {
-        await waitUntil { self.durations.count >= count }
+    func waitForSleeps(_ count: Int, sourceLocation: SourceLocation = #_sourceLocation) async {
+        await waitUntil(sourceLocation: sourceLocation) { self.durations.count >= count }
     }
 }
 
-/// 条件が満たされるまで待つ（2 秒で諦める）。
-func waitUntil(_ condition: @Sendable () -> Bool) async {
-    let deadline = ContinuousClock.now + .seconds(2)
-    while !condition() && ContinuousClock.now < deadline {
+/// 待ちの helper が諦めるまでの時間。遅いランナーでも条件が満たされる前に切れないよう、テスト全体の実行時間より長くする
+private let waitTimeout: Duration = .seconds(30)
+
+/// 条件が満たされるまで待つ。`waitTimeout` で諦め、呼び出し元の位置に Issue を記録する。
+/// 条件は同期のまま受け取る（呼び出し元が `MainActor.assumeIsolated` で読めるように）。
+func waitUntil(sourceLocation: SourceLocation = #_sourceLocation, _ condition: @Sendable () -> Bool) async {
+    await waitUntilAsync(sourceLocation: sourceLocation) { condition() }
+}
+
+/// `waitUntil` の、条件を actor から async で読む版。
+private func waitUntilAsync(sourceLocation: SourceLocation, _ condition: @Sendable () async -> Bool) async {
+    let deadline = ContinuousClock.now + waitTimeout
+    while await !condition() {
+        guard ContinuousClock.now < deadline else {
+            Issue.record("条件が満たされないまま \(waitTimeout) 経った", sourceLocation: sourceLocation)
+            return
+        }
         try? await Task.sleep(for: .milliseconds(1))
     }
 }
@@ -165,12 +178,9 @@ final class PollerFixture: Sendable {
         }
     }
 
-    /// 再読み込みが、今の取得の後の取得を待ち始めるまで待つ（2 秒で諦める）。
-    func waitForPendingRefresh() async {
-        let deadline = ContinuousClock.now + .seconds(2)
-        while await poller.pendingRefreshCount == 0, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(1))
-        }
+    /// 再読み込みが、今の取得の後の取得を待ち始めるまで待つ。
+    func waitForPendingRefresh(sourceLocation: SourceLocation = #_sourceLocation) async {
+        await waitUntilAsync(sourceLocation: sourceLocation) { await self.poller.pendingRefreshCount > 0 }
     }
 
     static func ok(_ ids: ClosedRange<Int>, lastModified: String = "LM-1", scopes: String = "repo") -> HTTPResponse {
