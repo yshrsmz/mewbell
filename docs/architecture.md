@@ -40,7 +40,7 @@
   - 値を作る層に置く: 表示のためだけに作る値（`hostLabel` など）の置き場所を別に決める必要がある
   - 中間の層にも順序を決めて上への参照を禁じる: 設定・アカウント・ポーリング・通知は互いの変化に応じて動き、順序を決めても参照を間接にする部品が増えるだけになる
   - SwiftPM のモジュールに分けて依存の向きをコンパイラで守る: プロジェクトの構成を変える大きさに見合わない。import だけを lint で守る
-- **適用外**: `Polling/NotificationStore.swift` の `import AppKit`（`NSWorkspace` で URL を開く `.live` の組み立てのため）
+- **適用外**: なし
 - **根拠**: add-gh-account-discovery D1、add-notification-fetch D1、add-system-notifications D1、add-settings D1、add-diagnostics D1、update-notification-list D1・D6、update-list-readability D8、add-architecture-principles D6・D7。import は lint の `ui_frameworks_outside_ui` で守る
 
 ### A2. View と store は @MainActor、外部とのやり取りは actor に閉じ込める
@@ -116,7 +116,7 @@
 
 ### A9. 型・抽象・部品は、要件かテストに要るときだけ足す
 
-- **原則**: 新しい型・抽象・ファイルは、どの要件かどのテストのために要るかを言えるときだけ足す。1 行の modifier を型で包まない。独自のデザインシステムのようなコンテナを作らない。まとめるときは、使う回数ではなく役割でまとめる（一覧の寸法を `ListLayout` にまとめる）。change の範囲を超えて足すときは、AskUserQuestion で確かめる。組にして行う操作の取り違えを防ぐ型（`ThreadChangeDispatcher`）は、テストで守る要件があるので足してよい。
+- **原則**: 新しい型・抽象・ファイルは、どの要件かどのテストのために要るかを言えるときだけ足す。1 行の modifier を型で包まない。独自のデザインシステムのようなコンテナを作らない。まとめるときは、使う回数ではなく役割でまとめる（一覧の寸法を `ListLayout` にまとめる）。組にして行う操作の取り違えを防ぐ型（`ThreadChangeDispatcher`）は、テストで守る要件があるので足してよい。
 - **理由**: 指摘を満たすためだけに足した部品は、次のレビューの指摘の種になる。
 - **採らなかった案**:
   - 中身を受け取るコンテナ（`SectionNote` など）に色や間隔を持たせる: SwiftUI では見た目は modifier で重ね、コンテナは並べ方や意味のまとまりに使う
@@ -135,7 +135,7 @@
 
 ### A11. ログは Logger だけで、カテゴリはモジュール名にする
 
-- **原則**: ログは `Logger(category:)` で出し、型ごとに `static let logger` を持つ。カテゴリは、ログを出す型のモジュールのディレクトリ名にする。`print` で標準出力・標準エラー出力に書かない。何を伏せるかは security.md に従う。
+- **原則**: ログは `Logger(category:)` で出し、型ごとに `static let logger` を持つ。カテゴリは、ログを出す型のモジュールのディレクトリ名にする。`print` を使わないことと、何を伏せるかは security.md に従う。
 - **理由**: Console でサブシステムとカテゴリで絞れば、どのモジュールのログかが分かる。
 - **採らなかった案**:
   - 型ごとのカテゴリにする: カテゴリが増え、モジュール単位で絞りにくい
@@ -153,7 +153,7 @@
 
 ### A13. 外部依存は最小限にする
 
-- **原則**: 外部のライブラリは、標準ライブラリと Apple のフレームワークで足りないときだけ足す（YAML の解析の Yams 程度）。UI フレームワークやネットワークのライブラリは足さない。足すときはバージョンを完全に固定する。
+- **原則**: 外部のライブラリは、標準ライブラリと Apple のフレームワークで足りないときだけ足す（YAML の解析の Yams 程度）。UI フレームワークやネットワークのライブラリは足さない。
 - **理由**: 依存はサプライチェーンの攻撃面になり、gh の認証情報を扱うアプリでは影響が大きい。
 - **採らなかった案**:
   - プロジェクトを XcodeGen や Tuist で生成する: 外部依存が増え、`project.xcproj` を正本としてコミットする方針と合わない
@@ -188,6 +188,7 @@
 | A1 | `GitHubAPI/APIEndpoints.swift` が `Accounts/` の `HostKind` を使っている | fix-lower-layer-dependencies（仮） |
 | A1 | `GitHubAPI/GitHubAPIClient.swift` が `Polling/` の `ThreadAction` を使っている | fix-lower-layer-dependencies（仮） |
 | A1 | `GhCLI/` と `GitHubAPI/` が、`App/Logging.swift` の `Logger(category:)` を使っている | fix-lower-layer-dependencies（仮） |
+| A1 | `Polling/NotificationStore.swift` が、`NSWorkspace` で URL を開く `.live` の組み立てのために AppKit を import している（lint はこのファイルだけ除外している） | fix-lower-layer-dependencies（仮） |
 | A1 | `ThreadReason`・`ThreadEventText` が `UI/` にあり、`Notifications/ThreadNotificationContent.swift` から使われている | fix-shared-thread-text-placement（仮） |
 | A4 | 設定ウィンドウの下位の View（`DiagnosticsSettingsView`、`AccountSettingsSection` など）が store を直接受け取っている | fix-settings-view-inputs（仮） |
 | A6 | `GitHubAPIClient.send` の `private` が外れている | fix-api-client-send-privacy（仮） |

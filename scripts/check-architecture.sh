@@ -88,7 +88,7 @@ while IFS= read -r file; do
   [[ -z "$file" ]] && continue
   while IFS=: read -r line match; do
     [[ -z "${line:-}" ]] && continue
-    id="$(sed -E 's/^[^A]*(A[0-9]+).*$/\1/' <<<"$match")"
+    id="${match//[!A0-9]/}"
     if [[ " $ids " != *" $id "* ]]; then
       fail "$file:$line" "ID の参照" "$id は $doc にありません。ID を直すか、原則を足してください"
     elif [[ " $retired " == *" $id "* && "$file" != openspec/changes/archive/* && "$file" != "$doc" ]]; then
@@ -118,10 +118,13 @@ config_files=""
 for file in .swift-format .swiftlint.yml; do
   [[ -f "$file" ]] && config_files="$config_files $file"
 done
+checked_names=" "
 name_exists() {
+  [[ "$checked_names" == *" $1 "* ]] && return 0
   # shellcheck disable=SC2086
   { [[ -n "$code_dirs" ]] && grep -rqw --include='*.swift' -- "$1" $code_dirs; } ||
-    { [[ -n "$config_files" ]] && grep -qw -- "$1" $config_files; }
+    { [[ -n "$config_files" ]] && grep -qw -- "$1" $config_files; } || return 1
+  checked_names="$checked_names$1 "
 }
 in_rejected=0
 while IFS= read -r numbered; do
@@ -136,6 +139,7 @@ while IFS= read -r numbered; do
   else
     in_rejected=0
   fi
+  [[ "$text" == *'`'* ]] || continue
   for token in $(grep -oE '`[^` ]+`' <<<"$text" | tr -d '`' || true); do
     if [[ "$token" == */* ]]; then
       [[ -e "$token" || -e "Mewbell/$token" ]] ||

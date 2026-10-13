@@ -12,9 +12,9 @@ trap 'rm -rf "$work"' EXIT
 
 failures=0
 
-# make_repo <ディレクトリ> → 検査が通る偽のリポジトリを組む
+# make_repo <名前> → 検査が通る偽のリポジトリを $work/<名前> に新しく組み、そのパスを返す
 make_repo() {
-  local repo="$1"
+  local repo="$work/$1"
   mkdir -p "$repo/docs" "$repo/.claude/rules" "$repo/.claude/skills/sample" "$repo/openspec/changes/archive/2026-01-01-add-sample" \
     "$repo/openspec/changes/add-current" "$repo/Mewbell/UI"
   cat >"$repo/docs/architecture.md" <<'EOF'
@@ -49,6 +49,7 @@ EOF
   printf '# Design\n\n### D1. 前の形（A2）\n' >"$repo/openspec/changes/archive/2026-01-01-add-sample/design.md"
   printf '# Design\n\n### D1. 行（A1）\n' >"$repo/openspec/changes/add-current/design.md"
   printf 'struct SampleRow {\n    let title: String\n}\n' >"$repo/Mewbell/UI/SampleRow.swift"
+  echo "$repo"
 }
 
 # expect_pass <名前> <リポジトリ>
@@ -83,13 +84,6 @@ expect_fail() {
   echo "ok: $name"
 }
 
-# case_repo <名前> → 正しい形の偽のリポジトリを新しく組み、そのパスを返す
-case_repo() {
-  local repo="$work/$1"
-  make_repo "$repo"
-  echo "$repo"
-}
-
 # 書き換え。BSD と GNU の sed -i の違いを避けるため、一時ファイルを経由する
 replace() {
   local file="$1" from="$2" to="$3"
@@ -99,56 +93,56 @@ replace() {
 }
 
 # --- 正しい形 ---
-repo="$(case_repo valid)"
+repo="$(make_repo valid)"
 expect_pass "正しい形は通る（廃止の原則は 5 項目が無くてよく、archive からの参照も許す）" "$repo"
 
 # --- 書式 ---
-repo="$(case_repo heading)"
+repo="$(make_repo heading)"
 replace "$repo/docs/architecture.md" "### A1. " "### 1. "
 expect_fail "見出しの形が違う" "$repo" "[書式]" "docs/architecture.md:5"
 
-repo="$(case_repo duplicate-id)"
+repo="$(make_repo duplicate-id)"
 replace "$repo/docs/architecture.md" "### A2. 廃止" "### A1. 廃止"
 expect_fail "ID が重複している" "$repo" "[書式]" "ID A1 が重複"
 
-repo="$(case_repo missing-label)"
+repo="$(make_repo missing-label)"
 replace "$repo/docs/architecture.md" "- **適用外**: なし" ""
 expect_fail "項目が欠けている" "$repo" "[書式]" "**適用外**"
 
-repo="$(case_repo retired-reason)"
+repo="$(make_repo retired-reason)"
 replace "$repo/docs/architecture.md" "- **廃止の理由**: A1 にまとめた" ""
 expect_fail "廃止の理由が無い" "$repo" "[書式]" "廃止の理由"
 
 # --- ID の参照 ---
-repo="$(case_repo unknown-id)"
+repo="$(make_repo unknown-id)"
 printf '原則 A9 を見る。\n' >>"$repo/CLAUDE.md"
 expect_fail "無い ID を引いている" "$repo" "[ID の参照]" "CLAUDE.md:4" "A9"
 
-repo="$(case_repo retired-reference)"
+repo="$(make_repo retired-reference)"
 printf '原則 A2 を見る。\n' >>"$repo/.claude/rules/review.md"
 expect_fail "archive でない文書が廃止した原則を引いている" "$repo" "[ID の参照]" ".claude/rules/review.md" "A2 は廃止"
 
-repo="$(case_repo retired-lint)"
+repo="$(make_repo retired-lint)"
 replace "$repo/.swiftlint.yml" "（A1）" "（A2）"
 expect_fail "lint の規則が廃止した原則を引いている" "$repo" "[ID の参照]" ".swiftlint.yml"
 
 # --- 根拠の change ---
-repo="$(case_repo missing-change)"
+repo="$(make_repo missing-change)"
 replace "$repo/docs/architecture.md" "add-sample D1" "add-missing D1"
 expect_fail "根拠の change が無い" "$repo" "[根拠の change]" "add-missing"
 
 # --- コードの名前 ---
-repo="$(case_repo missing-type)"
+repo="$(make_repo missing-type)"
 replace "$repo/Mewbell/UI/SampleRow.swift" "struct SampleRow" "struct RenamedRow"
 mv "$repo/Mewbell/UI/SampleRow.swift" "$repo/Mewbell/UI/RenamedRow.swift"
 expect_fail "型とパスがコードに無い" "$repo" "[コードの名前]" "SampleRow がコードにありません" "パス Mewbell/UI/SampleRow.swift"
 
 # --- 重複 ---
-repo="$(case_repo duplicate)"
+repo="$(make_repo duplicate)"
 printf '\nプレビューとテストで store を組まずに済み、どの操作が起きるかが引数で読めるようになる。\n' >>"$repo/CLAUDE.md"
 expect_fail "原則の文をそのまま写している" "$repo" "CLAUDE.md: [重複]" "docs/architecture.md:8"
 
-repo="$(case_repo short-sentence)"
+repo="$(make_repo short-sentence)"
 printf '\n状態を二重に持つ。\n' >>"$repo/CLAUDE.md"
 expect_pass "40 文字に満たない文や採らなかった案の名前は、重複にもコードの名前にも数えない" "$repo"
 

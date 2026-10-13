@@ -163,7 +163,7 @@ change によって判断が割れていた点は、ユーザーと決めた（p
 | store を受け取る View | store を直接受け取るのは、シーンのルート（`MenuBarContentView`、`SettingsView`、`MenuBarLabel`）だけ。それ以外の View は値と操作のクロージャを受け取る | `DiagnosticsSettingsView` などの設定のタブの子が store を受け取っている → 逸脱 |
 | 関所の可視性 | 関所は `private` を保つ。行数の上限で分けるときは、関所を分けずにそのファイルの上限を緩める | `GitHubAPIClient.send` の `private` が外れている → 逸脱 |
 
-D10 で、既知の逸脱をさらに 5 つ足した。
+D10 で、既知の逸脱をさらに 6 つ足した。
 
 ### D8. 機械的な検査（`scripts/check-architecture.sh`）
 
@@ -229,6 +229,7 @@ D10 で、既知の逸脱をさらに 5 つ足した。
 
 - **URL を開く処理の既定値（A5）**: add-system-notifications D5 は既定値を `NSWorkspace.shared.open` にしたが、今のコードは既定値を持たない（`NotificationStore` のコメント）。テストで渡し忘れると本物のブラウザが開くので、今の形を原則にする。時刻と待ちは本物を既定値にしてよい。
 - **UI/ の状態（A1・A4）**: `ListExpansion` などの表示だけに使う状態の型は `UI/` に置き、下位の View に渡してよい（update-notification-list D1）。
+- **`NotificationStore` の AppKit（A1）**: `.live` の組み立てを `App/` に移せば import は要らなくなるので、適用外にせず既知の逸脱にする（D6 の規則）。lint の除外は、直すまでこのファイルに限って残す。
 - **ログのカテゴリ（A11）**: `App/SingleInstance.swift` だけがディレクトリ名と違う。これは既知の逸脱にする。
 
 ## Risks / Trade-offs

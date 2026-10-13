@@ -39,7 +39,7 @@ Mewbell/
 └── scripts/                    # build.sh, run.sh など
 ```
 
-モジュールの責務は `openspec/config.yaml` の context と `openspec/specs/` を正とする。
+モジュールの責務は `openspec/config.yaml` の context と `openspec/specs/` を、層と型の置き場所は `docs/architecture.md` の A1 を正とする。
 
 ## ビルドとテスト
 
@@ -65,7 +65,7 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEW
 
 ## 実装上の約束
 
-コードの構造の約束（層と依存の向き、状態の持ち方、actor の境界、部品を足す基準など）は `docs/architecture.md` にまとめている。設計（design.md）・実装・レビューの指摘の仕分けで判断が要るときに読む。文書を変えるときはスキル `update-architecture-doc` の手順に従う。ここに書くのは、振る舞いの約束の要約だけにする。
+コードの構造の約束（層と依存の向き、状態の持ち方、actor と `@MainActor` の境界は A2、外部依存は A13 など）は `docs/architecture.md` にまとめている。設計（design.md）・実装・レビューの指摘の仕分けで判断が要るときに読む。文書を変えるときはスキル `update-architecture-doc` の手順に従う。ここに書くのは、振る舞いの約束の要約だけにする。
 
 - **トークンを永続化しない。** `gh auth token --hostname <host> --user <user>` で取得し、メモリにだけ持つ。ログ・エラーメッセージ・テストフィクスチャにトークン文字列を出さない
 - **リクエストごとにトークンを明示的に付ける。** 共有クライアントのデフォルトヘッダーに入れない（アカウント混在時にページネーションでトークンが入れ替わる Gitify の不具合 #2176 を踏まない）
@@ -77,7 +77,6 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEW
 - 新着通知は 1 スレッド 1 通知。通知 ID は `<host>/<user>/<threadId>`。既読・Done にしたスレッドの通知は取り下げる
 - 通知クリックは「ブラウザで開く → `PATCH /notifications/threads/{id}` で既読」
 - UI の一覧はアカウント → リポジトリの 2 段グルーピング。既定は `participating=false`（設定で切替）
-- コードの構造の約束（actor と `@MainActor` の境界は A2、外部依存は A13 など）は `docs/architecture.md` にある
 
 ## やらないこと（v1）
 
