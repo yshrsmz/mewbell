@@ -11,9 +11,12 @@ cd "$root"
 
 # 文字数を数えるため、UTF-8 のロケールを使う
 utf8_locale="$(locale -a 2>/dev/null | grep -iE '^(C|en_US)\.utf-?8$' | head -1 || true)"
-if [[ -n "$utf8_locale" ]]; then
-  export LC_ALL="$utf8_locale"
+[[ -n "$utf8_locale" ]] || utf8_locale="$(locale -a 2>/dev/null | grep -iE '\.utf-?8$' | head -1 || true)"
+if [[ -z "$utf8_locale" ]]; then
+  echo "UTF-8 のロケールが見つかりません（文の長さを文字数で数えられません）" >&2
+  exit 1
 fi
+export LC_ALL="$utf8_locale"
 
 failures=0
 # fail <ファイル:行> <検査> <内容と直し方>
@@ -36,6 +39,7 @@ fi
 # --- 書式 ---
 ids=""
 retired=""
+retiring_changes=""
 current=""
 current_line=""
 current_labels=""
@@ -64,7 +68,12 @@ while IFS=$'\t' read -r line text; do
         fail "$doc:$line" "書式" "ID $current が重複しています。ID は再利用せず、次の番号を振ります"
       fi
       ids="$ids $current"
-      [[ "${BASH_REMATCH[2]}" == 廃止* ]] && retired="$retired $current"
+      if [[ "${BASH_REMATCH[2]}" == 廃止* ]]; then
+        retired="$retired $current"
+        # 廃止した change の名前（「廃止（<change 名>）」）。その change の文書は、廃止した ID を引いてよい
+        retiring_change="${BASH_REMATCH[2]#*（}"
+        retiring_changes="$retiring_changes ${retiring_change%%）*}"
+      fi
     else
       fail "$doc:$line" "書式" "原則の見出しは「### A<番号>. <名前>」の形にします"
       current=""
@@ -76,25 +85,39 @@ done <<<"$principles"
 check_block
 
 # --- ID の参照 ---
-# archive の design.md は当時の記録なので、廃止した原則を引いていてもよい
+# 廃止した原則を引いてよいのは、当時の記録である archive と、その原則を廃止した change の文書だけ
+# retired_reference_allowed <ファイル>
+retired_reference_allowed() {
+  [[ "$1" == "$doc" || "$1" == openspec/changes/archive/* ]] && return 0
+  local name
+  for name in $retiring_changes; do
+    [[ "$1" == "openspec/changes/$name/"* ]] && return 0
+  done
+  return 1
+}
 reference_files="$(
   {
     ls CLAUDE.md "$doc" openspec/config.yaml .swiftlint.yml 2>/dev/null || true
     ls .claude/rules/*.md .claude/skills/*/SKILL.md 2>/dev/null || true
-    find openspec/changes -name design.md 2>/dev/null || true
+    find openspec/changes openspec/specs -name '*.md' 2>/dev/null || true
   } | sort -u
 )"
 while IFS= read -r file; do
   [[ -z "$file" ]] && continue
-  while IFS=: read -r line match; do
-    [[ -z "${line:-}" ]] && continue
-    id="${match//[!A0-9]/}"
-    if [[ " $ids " != *" $id "* ]]; then
-      fail "$file:$line" "ID の参照" "$id は $doc にありません。ID を直すか、原則を足してください"
-    elif [[ " $retired " == *" $id "* && "$file" != openspec/changes/archive/* && "$file" != "$doc" ]]; then
-      fail "$file:$line" "ID の参照" "$id は廃止した原則です。参照を外すか、今の原則に引き直してください"
-    fi
-  done < <(grep -noE '(^|[^A-Za-z0-9_])A[0-9]+([^A-Za-z0-9_]|$)' "$file" || true)
+  while IFS= read -r numbered; do
+    line="${numbered%%:*}"
+    rest="${numbered#*:}"
+    # 1 行に複数の ID があっても（「A1・A4」など）、すべてを取り出す
+    while [[ "$rest" =~ (^|[^A-Za-z0-9_])(A[0-9]+)([^A-Za-z0-9_]|$) ]]; do
+      id="${BASH_REMATCH[2]}"
+      rest="${rest#*"${BASH_REMATCH[1]}$id"}"
+      if [[ " $ids " != *" $id "* ]]; then
+        fail "$file:$line" "ID の参照" "$id は $doc にありません。ID を直すか、原則を足してください"
+      elif [[ " $retired " == *" $id "* ]] && ! retired_reference_allowed "$file"; then
+        fail "$file:$line" "ID の参照" "$id は廃止した原則です。参照を外すか、今の原則に引き直してください"
+      fi
+    done
+  done < <(grep -nE '(^|[^A-Za-z0-9_])A[0-9]+([^A-Za-z0-9_]|$)' "$file" || true)
 done <<<"$reference_files"
 
 # --- 根拠の change ---
@@ -140,8 +163,13 @@ while IFS= read -r numbered; do
     in_rejected=0
   fi
   [[ "$text" == *'`'* ]] || continue
-  for token in $(grep -oE '`[^` ]+`' <<<"$text" | tr -d '`' || true); do
-    if [[ "$token" == */* ]]; then
+  # トークンを 1 行ずつ読み、シェルにグロブとして展開させない
+  while IFS= read -r token; do
+    [[ -z "$token" ]] && continue
+    if [[ "$token" == *[*?\<\>]* ]]; then
+      # `.claude/rules/*.md` や `<change>/` のようなパターン・プレースホルダーは、実在を確かめない
+      continue
+    elif [[ "$token" == */* ]]; then
       [[ -e "$token" || -e "Mewbell/$token" ]] ||
         fail "$doc:$line" "コードの名前" "パス $token がありません。改名や削除に合わせて直してください"
     elif [[ "$token" =~ ^[A-Z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*)?$ && ! "$token" =~ ^A[0-9]+$ ]]; then
@@ -150,12 +178,13 @@ while IFS= read -r numbered; do
           fail "$doc:$line" "コードの名前" "$part がコードにありません。改名や削除に合わせて直してください"
       done
     fi
-  done
+  done < <(grep -oE '`[^` ]+`' <<<"$text" | tr -d '`' || true)
 done < <(grep -n '' "$doc")
 
 # --- 重複 ---
 # 原則の文（「。」で区切った 40 文字以上の 1 文）を、ほかの文書がそのまま写していないかを見る
-duplicate_targets=""
+# 対象のファイルが無いときに grep が標準入力を読まないよう、/dev/null を必ず渡す
+duplicate_targets="/dev/null"
 for file in CLAUDE.md openspec/config.yaml .claude/rules/*.md; do
   [[ -f "$file" ]] && duplicate_targets="$duplicate_targets $file"
 done

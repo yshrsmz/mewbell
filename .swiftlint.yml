@@ -26,7 +26,7 @@ opt_in_rules:
 custom_rules:
   no_print:
     name: "No print"
-    regex: '\bprint\('
+    regex: '\b(debugP|p)rint\('
     match_kinds: identifier
     message: "ログは Logger(category:) で出す（A11、security.md）"
     severity: error
@@ -43,14 +43,14 @@ custom_rules:
     severity: error
   ui_frameworks_outside_ui:
     name: "UI frameworks outside UI"
-    regex: '^\s*import\s+(SwiftUI|AppKit)\b'
+    regex: '^\s*(@\w+\s+)*import\s+(\w+\s+)?(SwiftUI|AppKit|Cocoa)\b'
     included: 'Mewbell/'
     excluded: 'Mewbell/(UI|App)/|Mewbell/Polling/NotificationStore\.swift'
-    message: "SwiftUI と AppKit を import するのは UI/ と App/ だけ（A1）"
+    message: "SwiftUI・AppKit（Cocoa を含む）を import するのは UI/ と App/ だけ（A1）"
     severity: error
   authorization_header_outside_client:
     name: "Authorization header outside the API client"
-    regex: '"Authorization"'
+    regex: '(?i)"authorization"'
     included: 'Mewbell/'
     excluded: 'Mewbell/GitHubAPI/GitHubAPIClient\.swift'
     message: "Authorization を付けて送るのは GitHubAPIClient.send だけ（A6、security.md）"

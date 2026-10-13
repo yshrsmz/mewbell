@@ -53,7 +53,7 @@ description: Mewbell の設計方針 docs/architecture.md を更新する手順�
 改めるのは、そのための change の中で行う（`openspec/config.yaml` の規則）。
 
 1. 本文を今の形に書き換える。前の形を「採らなかった案」に移すのは、また提案されそうなときだけにし、採らない理由を書く
-2. `grep -rn 'A<番号>' CLAUDE.md .claude openspec .swiftlint.yml docs` で、その ID を引いている箇所をすべて開き、新しい形と食い違わないかを確かめる。archive の design.md は当時の記録なので直さない
+2. `grep -rnw 'A<番号>' CLAUDE.md .claude openspec .swiftlint.yml docs` で、その ID を引いている箇所をすべて開き、新しい形と食い違わないかを確かめる。archive の design.md は当時の記録なので直さない
 3. lint の規則の正規表現と `message` を新しい形にそろえる
 4. 今のコードが新しい形に合わなくなるなら、「既知の逸脱」に足す。合うようになった行は消す
 

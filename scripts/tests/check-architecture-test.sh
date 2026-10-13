@@ -126,6 +126,23 @@ repo="$(make_repo retired-lint)"
 replace "$repo/.swiftlint.yml" "（A1）" "（A2）"
 expect_fail "lint の規則が廃止した原則を引いている" "$repo" "[ID の参照]" ".swiftlint.yml"
 
+repo="$(make_repo adjacent-ids)"
+printf '原則 A1・A9 を見る。\n' >>"$repo/CLAUDE.md"
+expect_fail "1 行の 2 つ目の ID も確かめる" "$repo" "[ID の参照]" "CLAUDE.md:4" "A9"
+
+repo="$(make_repo proposal-reference)"
+printf '# Proposal\n\nA9 を足す。\n' >"$repo/openspec/changes/add-current/proposal.md"
+expect_fail "proposal.md の参照も確かめる" "$repo" "[ID の参照]" "openspec/changes/add-current/proposal.md:3"
+
+repo="$(make_repo retiring-change)"
+printf '\n### D2. A2 を廃止する\n' >>"$repo/openspec/changes/add-current/design.md"
+expect_pass "原則を廃止した change の文書は、廃止した ID を引いてよい" "$repo"
+
+repo="$(make_repo retired-other-change)"
+mkdir -p "$repo/openspec/changes/add-other"
+printf '# Design\n\n### D1. A2 に従う\n' >"$repo/openspec/changes/add-other/design.md"
+expect_fail "ほかの change の文書は、廃止した ID を引けない" "$repo" "[ID の参照]" "openspec/changes/add-other/design.md" "A2 は廃止"
+
 # --- 根拠の change ---
 repo="$(make_repo missing-change)"
 replace "$repo/docs/architecture.md" "add-sample D1" "add-missing D1"
@@ -137,10 +154,18 @@ replace "$repo/Mewbell/UI/SampleRow.swift" "struct SampleRow" "struct RenamedRow
 mv "$repo/Mewbell/UI/SampleRow.swift" "$repo/Mewbell/UI/RenamedRow.swift"
 expect_fail "型とパスがコードに無い" "$repo" "[コードの名前]" "SampleRow がコードにありません" "パス Mewbell/UI/SampleRow.swift"
 
+repo="$(make_repo pattern-token)"
+replace "$repo/docs/architecture.md" "- **適用外**: なし" '- **適用外**: `.claude/rules/*.md` と `openspec/changes/<change>/design.md`'
+expect_pass "グロブやプレースホルダーのパスは、展開も実在の確認もしない" "$repo"
+
 # --- 重複 ---
 repo="$(make_repo duplicate)"
 printf '\nプレビューとテストで store を組まずに済み、どの操作が起きるかが引数で読めるようになる。\n' >>"$repo/CLAUDE.md"
 expect_fail "原則の文をそのまま写している" "$repo" "CLAUDE.md: [重複]" "docs/architecture.md:8"
+
+repo="$(make_repo no-duplicate-targets)"
+rm "$repo/CLAUDE.md" "$repo/openspec/config.yaml" "$repo/.claude/rules/review.md"
+expect_pass "重複を探す先が無くても、標準入力を読まずに通る" "$repo"
 
 repo="$(make_repo short-sentence)"
 printf '\n状態を二重に持つ。\n' >>"$repo/CLAUDE.md"
