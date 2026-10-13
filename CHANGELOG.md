@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.0](https://github.com/yshrsmz/mewbell/compare/v0.1.0...v0.2.0) (2026-10-13)
+
+
+### Features
+
+* collapse accounts and repositories in the list and show issue numbers (update-notification-list) ([#20](https://github.com/yshrsmz/mewbell/issues/20)) ([72b6813](https://github.com/yshrsmz/mewbell/commit/72b68130eafb489b9ebe2f52a6a86d80c9fdaba1))
+* make the popover text larger and easier to read (update-list-readability) ([#23](https://github.com/yshrsmz/mewbell/issues/23)) ([a2955b2](https://github.com/yshrsmz/mewbell/commit/a2955b24920fc469d144b0c4469b75a882e734d3))
+* open the web notifications page from the account header (add-web-notifications-link) ([#22](https://github.com/yshrsmz/mewbell/issues/22)) ([0d07b56](https://github.com/yshrsmz/mewbell/commit/0d07b56ca758e598315a109e049262292e125106))
+* show what happened on each thread and its state (add-thread-latest-event) ([#24](https://github.com/yshrsmz/mewbell/issues/24)) ([232e7ed](https://github.com/yshrsmz/mewbell/commit/232e7ed0542b1b03cb571a37b1451fe53c9708dd))
+
+
+### Bug Fixes
+
+* drop the stale pnpm self-record from pnpm-lock.yaml ([#29](https://github.com/yshrsmz/mewbell/issues/29)) ([9f15cb7](https://github.com/yshrsmz/mewbell/commit/9f15cb7d57b77fe0148b9a3fa9c462e20b808eab))
+* fade the row title under the hover buttons ([#21](https://github.com/yshrsmz/mewbell/issues/21)) ([4c30efa](https://github.com/yshrsmz/mewbell/commit/4c30efa0854db07a20a590b6475ace1748ac3729))
+* keep the row's hover buttons at the first title line ([#15](https://github.com/yshrsmz/mewbell/issues/15)) ([84079e8](https://github.com/yshrsmz/mewbell/commit/84079e88c8d36dcd3e3065720c8a72653aeaf9b1))
+* widen the icon column to 24pt so thread icons are not clipped (fix-thread-icon-column) ([#26](https://github.com/yshrsmz/mewbell/issues/26)) ([8f1a1e9](https://github.com/yshrsmz/mewbell/commit/8f1a1e9305db64a777b3ebc6e39ed28913f37c9d))
+
 ## 0.1.0 (2026-10-10)
 
 
