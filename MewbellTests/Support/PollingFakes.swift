@@ -44,15 +44,22 @@ final class ManualSleeper: Sendable {
     }
 
     /// `count` 回目の待ちが始まるまで待つ。
-    func waitForSleeps(_ count: Int) async {
-        await waitUntil { self.durations.count >= count }
+    func waitForSleeps(_ count: Int, sourceLocation: SourceLocation = #_sourceLocation) async {
+        await waitUntil(sourceLocation: sourceLocation) { self.durations.count >= count }
     }
 }
 
-/// 条件が満たされるまで待つ（2 秒で諦める）。
-func waitUntil(_ condition: @Sendable () -> Bool) async {
-    let deadline = ContinuousClock.now + .seconds(2)
-    while !condition() && ContinuousClock.now < deadline {
+/// 待ちの helper が諦めるまでの時間。遅いランナーでも条件が満たされる前に切れないよう、テスト全体の実行時間より長くする
+let waitTimeout: Duration = .seconds(30)
+
+/// 条件が満たされるまで待つ。`waitTimeout` で諦め、呼び出し元の位置に Issue を記録する。
+func waitUntil(sourceLocation: SourceLocation = #_sourceLocation, _ condition: @Sendable () -> Bool) async {
+    let deadline = ContinuousClock.now + waitTimeout
+    while !condition() {
+        guard ContinuousClock.now < deadline else {
+            Issue.record("条件が満たされないまま \(waitTimeout) 経った", sourceLocation: sourceLocation)
+            return
+        }
         try? await Task.sleep(for: .milliseconds(1))
     }
 }
@@ -165,10 +172,14 @@ final class PollerFixture: Sendable {
         }
     }
 
-    /// 再読み込みが、今の取得の後の取得を待ち始めるまで待つ（2 秒で諦める）。
-    func waitForPendingRefresh() async {
-        let deadline = ContinuousClock.now + .seconds(2)
-        while await poller.pendingRefreshCount == 0, ContinuousClock.now < deadline {
+    /// 再読み込みが、今の取得の後の取得を待ち始めるまで待つ。`waitTimeout` で諦め、呼び出し元の位置に Issue を記録する。
+    func waitForPendingRefresh(sourceLocation: SourceLocation = #_sourceLocation) async {
+        let deadline = ContinuousClock.now + waitTimeout
+        while await poller.pendingRefreshCount == 0 {
+            guard ContinuousClock.now < deadline else {
+                Issue.record("再読み込みが取得を待ち始めないまま \(waitTimeout) 経った", sourceLocation: sourceLocation)
+                return
+            }
             try? await Task.sleep(for: .milliseconds(1))
         }
     }

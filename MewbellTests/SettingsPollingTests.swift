@@ -208,6 +208,8 @@ struct NotificationStoreSettingsTests {
         let store = await loadedStore()
         // 前のポーラーの取得の途中で作り直す
         transport.pausedMethod.value = "GET"
+        // alice と bob のどちらが先に寝たかは決まらないので、両方を起こす
+        sleeper.advance()
         sleeper.advance()
         await waitUntil { self.gets("alice").count == 2 }
         settings.setParticipatingOnly(true, for: alice)

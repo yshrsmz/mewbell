@@ -30,19 +30,20 @@ struct SubprocessRunnerTests {
         await #expect(throws: ProcessRunError.timedOut) {
             try await runner.run(
                 request(
-                    "/bin/sh", ["-c", "echo $$ > \"$0\"; exec /bin/sleep 5", pidFile.path], timeout: .milliseconds(500))
+                    "/bin/sh", ["-c", "echo $$ > \"$0\"; exec /bin/sleep 60", pidFile.path], timeout: .milliseconds(500)
+                )
             )
         }
-        #expect(clock.now - start < .seconds(3))
+        #expect(clock.now - start < .seconds(30))
         let pid = try #require(
             pid_t(try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .newlines)))
-        try await Task.sleep(for: .milliseconds(300))
+        await waitUntil { kill(pid, 0) == -1 && errno == ESRCH }
         #expect(kill(pid, 0) == -1 && errno == ESRCH)
     }
 
     @Test func returnsWhenABackgroundChildKeepsThePipeOpenIfAllowed() async throws {
         // シェルはすぐ終わるが、バックグラウンドの sleep が標準出力を開いたまま残る
-        var lingering = request("/bin/sh", ["-c", "/bin/sleep 3 & echo done"], timeout: .seconds(2))
+        var lingering = request("/bin/sh", ["-c", "/bin/sleep 60 & echo done"], timeout: .seconds(30))
         lingering.allowsLingeringPipes = true
         let output = try await runner.run(lingering)
         #expect(output.exitCode == 0)
@@ -51,7 +52,7 @@ struct SubprocessRunnerTests {
 
     @Test func failsWhenTheOutputMayBeIncomplete() async throws {
         await #expect(throws: ProcessRunError.outputIncomplete) {
-            try await runner.run(request("/bin/sh", ["-c", "/bin/sleep 3 & echo done"], timeout: .seconds(2)))
+            try await runner.run(request("/bin/sh", ["-c", "/bin/sleep 60 & echo done"], timeout: .seconds(30)))
         }
     }
 

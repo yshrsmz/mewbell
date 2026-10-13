@@ -56,6 +56,12 @@
 - `SubprocessRunner` の `drainTimeout` やタイムアウトをテストから差し替えられるようにする: 本体の API をテストのために広げることになる（A10）。
 - これらのテストを手元だけで動かす: タイムアウトと子の終了は security.md の「サブプロセスにはタイムアウトを付ける」を確かめる最後のテストなので、CI でも動かす。
 
+### D3. 条件が満たされないまま通っていた待ちを直す
+
+D1 で上限に達したら Issue を記録するようにしたところ、`NotificationStoreSettingsTests.dropsLateUpdatesFromTheStoppedPoller` の `waitUntil { gets("alice").count == 2 }` がときどき満たされないことがわかった。alice と bob のポーラーは同じ `ManualSleeper` を共有し、`advance()` は先に寝た方の待ちを起こす。bob が先に寝ていると alice の 2 回目の取得が始まらず、今までは 2 秒で黙って抜けて、「取得の途中で作り直す」場面を作れないまま通っていた。
+
+同じファイルの `stopsADisabledAccount` と同じく `advance()` を 2 回呼んで、両方の待ちを起こす。bob の取得も `pausedMethod` で止まるが、確かめる内容には関わらない。
+
 ### 採らなかった案: ランナーの負荷を減らす
 
 `waitUntil` の 1ms と `FakeHTTPTransport.send` の 5ms のポーリングが、並行に動く多数のテストで CPU を取り合っている可能性はある。ただし手元で再現できず、効き目を確かめる方法が無い。Swift Testing の並行実行を止める設定も、`xcodebuild` から何が効くかを確かめないまま入れることになる。上限を広げて失敗を見える形にすれば、次に落ちたときに原因を絞れるので、今回は入れない。
