@@ -79,12 +79,7 @@ private var tokenIcon: some View {
 
 ### D4: 値型のテスト
 
-`MewbellTests/ThreadPresentationTests.swift` の `ThreadIconTests` の隣（同じファイル）に `TokenStateIconTests` を置き、次を確かめる。
-
-- 状態ごとの名前が spec のとおり（`Getting token`、`Ready`、`Stopped`、`No token`）
-- 「止まっている」と「トークンを取れない」は記号と色が同じで、名前が違う
-- 取得中だけ `symbol` が nil
-- 止まっていない取得の状態（取得中・取得できた・失敗して待っている）と取得の状態が無いときは `Ready`
+`MewbellTests/ThreadPresentationTests.swift` の `ThreadIconTests` の隣（同じファイル）に `TokenStateIconTests` を置く。トークンの状態と取得の状態の組ごとに、記号・色・名前のすべてを表で確かめる（取得中、使える、スコープ不足と認証エラーで止まっている、トークンを取れない、無効）。記号と色も固定するのは、spec が見出しの記号と色を変えないことを求めていて、`IconColumnTests` は記号を値型から集めるだけで中身を確かめないため。これで「止まっている」と「トークンを取れない」が記号と色は同じで名前が違うこと、記号が nil なのは取得中だけであることも確かめられる。別に、止まっていない取得の状態（取得中・取得できた・失敗して待っている）と取得の状態が無いときは `Ready` であることを確かめる。
 
 VoiceOver で実際に読まれることは、ユニットテストでは確かめられないので、手元の VoiceOver で確かめるタスクにする（CLAUDE.md）。
 
