@@ -30,7 +30,7 @@
 `Mewbell/UI/TokenStateIcon.swift` に、`ThreadIcon` と同じ形の値型を置く。
 
 ```swift
-struct TokenStateIcon: Equatable {
+struct TokenStateIcon {
     /// nil なら取得中（`ProgressView` を出す）
     let symbol: String?
     /// nil なら補足の色（`.secondary`）

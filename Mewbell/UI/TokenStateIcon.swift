@@ -2,7 +2,7 @@ import SwiftUI
 
 /// アカウントの見出しのトークンの状態のアイコン。トークンの状態と、取得が止まっているかから決める。
 /// 「止まっている」と「トークンを取れない」は同じ記号と色なので、名前で区別する。
-struct TokenStateIcon: Equatable {
+struct TokenStateIcon {
     /// nil なら取得中（`ProgressView` を出す）
     let symbol: String?
     /// nil なら補足の色（`.secondary`）

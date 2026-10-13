@@ -17,6 +17,6 @@
 
 ## 4. レビュー
 
-- [ ] 4.1 別コンテキストの opus サブエージェントで `simplify` を実行する（`.claude/rules/review-process.md`）。変更を確かめてから取り込み、テストが通ることを確かめる
+- [x] 4.1 別コンテキストの opus サブエージェントで `simplify` を実行する（`.claude/rules/review-process.md`）。変更を確かめてから取り込み、テストが通ることを確かめる。結果: 4 件を取り込んだ（`TokenStateIcon` の使われない `Equatable` を外す、重なるテストの組を減らす、`showsProgressOnlyWhileFetching` をトークンの状態ごとに確かめる形にする、design D1 のコード例を合わせる）
 - [ ] 4.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く
 - [ ] 4.3 ロジックの変更を含む修正が多ければ、4.2 を新しいサブエージェントでもう一度実行する

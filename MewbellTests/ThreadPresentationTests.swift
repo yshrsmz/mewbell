@@ -94,8 +94,6 @@ struct ThreadIconTests {
 struct TokenStateIconTests {
     @Test(arguments: [
         (TokenState.fetching, FeedPhase?.none, "Getting token"),
-        (.ready, .loaded(updatedAt: .distantPast), "Ready"),
-        (.ready, .scopeInsufficient, "Stopped"),
         (.ready, .unauthorized, "Stopped"),
         (.unavailable, nil, "No token"),
     ])
@@ -112,11 +110,10 @@ struct TokenStateIconTests {
         #expect(stopped.label != noToken.label)
     }
 
-    /// 取得中だけ記号が無い（`ProgressView` を出す）。取得中は取得の状態にかかわらない
-    @Test(arguments: [FeedPhase?.none, .loaded(updatedAt: .distantPast), .unauthorized])
-    func showsProgressOnlyWhileFetching(_ phase: FeedPhase?) {
-        #expect(TokenStateIcon(tokenState: .fetching, phase: phase).symbol == nil)
-        #expect(TokenStateIcon(tokenState: .ready, phase: phase).symbol != nil)
+    /// 取得中だけ記号が無い（`ProgressView` を出す）
+    @Test(arguments: [TokenState.fetching, .ready, .unavailable, .disabled])
+    func showsProgressOnlyWhileFetching(_ tokenState: TokenState) {
+        #expect((TokenStateIcon(tokenState: tokenState, phase: nil).symbol == nil) == (tokenState == .fetching))
     }
 
     @Test(arguments: [

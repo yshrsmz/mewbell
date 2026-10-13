@@ -37,7 +37,7 @@ private func listsEvery(_ tokenState: TokenState) {
 }
 
 /// 確かめる取得の状態。止まっているか（`FeedPhase.isStopped`）で記号が変わるので、両方を含める
-private let phases: [FeedPhase?] = [nil, .loaded(updatedAt: .distantPast), .unauthorized]
+private let phases: [FeedPhase?] = [nil, .unauthorized]
 
 /// アイコンの列（`ListLayout.iconColumnWidth`）に置く記号が、書体の大きさのまま列に収まること。
 /// 記号は View と同じ書体で、配置の枠（`fittingSize`）を倍率 1 と 2 の画面で測る。
