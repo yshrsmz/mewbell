@@ -50,12 +50,18 @@ final class ManualSleeper: Sendable {
 }
 
 /// 待ちの helper が諦めるまでの時間。遅いランナーでも条件が満たされる前に切れないよう、テスト全体の実行時間より長くする
-let waitTimeout: Duration = .seconds(30)
+private let waitTimeout: Duration = .seconds(30)
 
 /// 条件が満たされるまで待つ。`waitTimeout` で諦め、呼び出し元の位置に Issue を記録する。
+/// 条件は同期のまま受け取る（呼び出し元が `MainActor.assumeIsolated` で読めるように）。
 func waitUntil(sourceLocation: SourceLocation = #_sourceLocation, _ condition: @Sendable () -> Bool) async {
+    await waitUntilAsync(sourceLocation: sourceLocation) { condition() }
+}
+
+/// `waitUntil` の、条件を actor から async で読む版。
+private func waitUntilAsync(sourceLocation: SourceLocation, _ condition: @Sendable () async -> Bool) async {
     let deadline = ContinuousClock.now + waitTimeout
-    while !condition() {
+    while await !condition() {
         guard ContinuousClock.now < deadline else {
             Issue.record("条件が満たされないまま \(waitTimeout) 経った", sourceLocation: sourceLocation)
             return
@@ -172,16 +178,9 @@ final class PollerFixture: Sendable {
         }
     }
 
-    /// 再読み込みが、今の取得の後の取得を待ち始めるまで待つ。`waitTimeout` で諦め、呼び出し元の位置に Issue を記録する。
+    /// 再読み込みが、今の取得の後の取得を待ち始めるまで待つ。
     func waitForPendingRefresh(sourceLocation: SourceLocation = #_sourceLocation) async {
-        let deadline = ContinuousClock.now + waitTimeout
-        while await poller.pendingRefreshCount == 0 {
-            guard ContinuousClock.now < deadline else {
-                Issue.record("再読み込みが取得を待ち始めないまま \(waitTimeout) 経った", sourceLocation: sourceLocation)
-                return
-            }
-            try? await Task.sleep(for: .milliseconds(1))
-        }
+        await waitUntilAsync(sourceLocation: sourceLocation) { await self.poller.pendingRefreshCount > 0 }
     }
 
     static func ok(_ ids: ClosedRange<Int>, lastModified: String = "LM-1", scopes: String = "repo") -> HTTPResponse {

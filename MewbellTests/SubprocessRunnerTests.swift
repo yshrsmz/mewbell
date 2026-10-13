@@ -37,8 +37,8 @@ struct SubprocessRunnerTests {
         #expect(clock.now - start < .seconds(30))
         let pid = try #require(
             pid_t(try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .newlines)))
+        // 消えなければ waitUntil が Issue を記録する
         await waitUntil { kill(pid, 0) == -1 && errno == ESRCH }
-        #expect(kill(pid, 0) == -1 && errno == ESRCH)
     }
 
     @Test func returnsWhenABackgroundChildKeepsThePipeOpenIfAllowed() async throws {
