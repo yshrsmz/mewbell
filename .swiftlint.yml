@@ -53,7 +53,6 @@ custom_rules:
     name: "Authorization header outside the API client"
     regex: '(?i)"authorization"'
     included: 'Mewbell/'
-    excluded: 'Mewbell/GitHubAPI/GitHubAPIClient\.swift'
     message: "Authorization を付けて送るのは GitHubAPIClient.send だけ（A6、security.md）"
     severity: error
   fixed_font_size:
