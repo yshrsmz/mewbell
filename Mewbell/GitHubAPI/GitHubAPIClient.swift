@@ -75,7 +75,7 @@ struct GitHubAPIClient: Sendable {
 
     /// 送るのは `send` だけ（オリジン検査とリダイレクトの扱いを迂回させないため、外に見せない）
     private let transport: any HTTPTransport
-    /// `X-RateLimit-Reset` から待ち時間を出すための現在時刻
+    /// レート制限の解ける時刻（`Retry-After`、`X-RateLimit-Reset`、どちらも無いときの今）を出すための現在時刻
     private let now: @Sendable () -> Date
 
     init(transport: any HTTPTransport, now: @escaping @Sendable () -> Date = { Date() }) {
@@ -295,17 +295,6 @@ struct GitHubAPIClient: Sendable {
     }
 }
 
-/// `PUT /notifications` のボディ。トークンを含めない。
-private struct MarkAllReadBody: Encodable {
-    let lastReadAt: String
-    let read: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case lastReadAt = "last_read_at"
-        case read
-    }
-}
-
 /// スレッドの件名の状態とイベントの取得の結果。
 enum ThreadDetailsFetchResult: Sendable, Equatable {
     case found(ThreadDetails)
@@ -461,5 +450,16 @@ extension GitHubAPIClient {
         default:
             return .failure(DetailsStop(.failed(.unexpectedStatus(response.statusCode))))
         }
+    }
+}
+
+/// `PUT /notifications` のボディ。トークンを含めない。
+private struct MarkAllReadBody: Encodable {
+    let lastReadAt: String
+    let read: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case lastReadAt = "last_read_at"
+        case read
     }
 }
