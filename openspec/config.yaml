@@ -34,10 +34,12 @@ rules:
     - actor / @MainActor の境界と、どのスレッドで何が動くかを書く
     - ネットワークと gh サブプロセスをテストでどう差し替えるか（プロトコルで抽象化）を書く
     - 外部依存を追加する場合は理由と代替案を書く
+    - 各 Decision に、従う docs/architecture.md の原則の ID（A1 など）を書く。原則から外れる判断は、外れることと理由を書く。原則に無い判断で、別の機能を足すときにも同じ問いが出るものは、同じ change で docs/architecture.md に足すタスクを置く
     - 「セキュリティ」の節を必ず設ける。トークンの流れ（どこで取得し、どこに保持し、どこへ送り、いつ破棄するか）と、.claude/rules/security.md の各項目への対応を書く。該当しない場合はその理由を書く
   tasks:
     - 1 タスクは 1〜2 時間で終わる粒度に分ける
     - 各タスクにテスト（ユニットまたは手動確認手順）を含める
     - セキュリティ上の約束（伏せ字・環境変数の除去・オリジン検査など）を確かめるテストを、その実装と同じタスクグループに入れる
+    - docs/architecture.md を変える change は、スキル update-architecture-doc の手順での更新と、bash scripts/check-architecture.sh の実行をタスクに含める
     - 最後に「ビルドが通る・テストが通る・手元で起動して確認した」を必ず含める
     - その後に、別コンテキストの opus サブエージェントで simplify と code-review（effort medium）を実行し、指摘に対応するタスクを含める（.claude/rules/review-process.md）

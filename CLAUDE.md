@@ -65,6 +65,8 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEW
 
 ## 実装上の約束
 
+コードの構造の約束（層と依存の向き、状態の持ち方、actor の境界、部品を足す基準など）は `docs/architecture.md` にまとめている。設計（design.md）・実装・レビューの指摘の仕分けで判断が要るときに読む。文書を変えるときはスキル `update-architecture-doc` の手順に従う。ここに書くのは、振る舞いの約束の要約だけにする。
+
 - **トークンを永続化しない。** `gh auth token --hostname <host> --user <user>` で取得し、メモリにだけ持つ。ログ・エラーメッセージ・テストフィクスチャにトークン文字列を出さない
 - **リクエストごとにトークンを明示的に付ける。** 共有クライアントのデフォルトヘッダーに入れない（アカウント混在時にページネーションでトークンが入れ替わる Gitify の不具合 #2176 を踏まない）
 - **ポーリングは API の指示に従う。** アカウントごとに `Last-Modified` を保持して `If-Modified-Since` を送り、`304` は無視、`X-Poll-Interval`（下限 60 秒）より短い間隔で叩かない。ただし 5 分ごとと再読み込みの後は `If-Modified-Since` を付けずに取り直す（`Last-Modified` は未読の `updated_at` の最新値なので、それより古いスレッドの増減や Web での既読が `304` に隠れる）。ユーザーが再読み込みを押したときだけは間隔を待たずにすぐ取り直す（アカウントごとに前の取得の開始から 10 秒より早くはせず、レート制限で待っている間は早めない）
@@ -75,8 +77,7 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEW
 - 新着通知は 1 スレッド 1 通知。通知 ID は `<host>/<user>/<threadId>`。既読・Done にしたスレッドの通知は取り下げる
 - 通知クリックは「ブラウザで開く → `PATCH /notifications/threads/{id}` で既読」
 - UI の一覧はアカウント → リポジトリの 2 段グルーピング。既定は `participating=false`（設定で切替）
-- Swift 6 の strict concurrency を有効にし、`@MainActor` 境界を明示する。ネットワークとポーリングは actor に閉じ込める
-- 外部依存は最小限（YAML パースの Yams 程度）。UI フレームワークやネットワークライブラリは追加しない
+- コードの構造の約束（actor と `@MainActor` の境界は A2、外部依存は A13 など）は `docs/architecture.md` にある
 
 ## やらないこと（v1）
 

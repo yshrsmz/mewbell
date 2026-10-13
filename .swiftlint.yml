@@ -21,3 +21,43 @@ opt_in_rules:
   - implicitly_unwrapped_optional
   - empty_count
   - first_where
+
+# 正規表現で守れる約束。message の ID は docs/architecture.md の原則
+custom_rules:
+  no_print:
+    name: "No print"
+    regex: '\bprint\('
+    match_kinds: identifier
+    message: "ログは Logger(category:) で出す（A11、security.md）"
+    severity: error
+  no_thread_sleep:
+    name: "No Thread.sleep"
+    regex: '\bThread\.sleep\b'
+    message: "同期的に待たない。actor が塞がる。待たせるときは async で中断させる（A12）"
+    severity: error
+  no_shared_urlsession:
+    name: "No URLSession.shared"
+    regex: '\bURLSession\.shared\b'
+    included: 'Mewbell/'
+    message: "キャッシュを使わない設定の HTTPTransport を使う（security.md）"
+    severity: error
+  ui_frameworks_outside_ui:
+    name: "UI frameworks outside UI"
+    regex: '^\s*import\s+(SwiftUI|AppKit)\b'
+    included: 'Mewbell/'
+    excluded: 'Mewbell/(UI|App)/|Mewbell/Polling/NotificationStore\.swift'
+    message: "SwiftUI と AppKit を import するのは UI/ と App/ だけ（A1）"
+    severity: error
+  authorization_header_outside_client:
+    name: "Authorization header outside the API client"
+    regex: '"Authorization"'
+    included: 'Mewbell/'
+    excluded: 'Mewbell/GitHubAPI/GitHubAPIClient\.swift'
+    message: "Authorization を付けて送るのは GitHubAPIClient.send だけ（A6、security.md）"
+    severity: error
+  fixed_font_size:
+    name: "Fixed font size"
+    regex: '\.system\(\s*size:'
+    included: 'Mewbell/(UI|App)/'
+    message: "書体の大きさはテキストスタイルで指定し、ポイント数を書かない（A4）"
+    severity: error

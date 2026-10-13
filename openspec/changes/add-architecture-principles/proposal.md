@@ -26,7 +26,7 @@ change をまたいで効く設計の約束は、change ごとの design.md の 
   - 方針が割れたときの優先順位（spec、security.md、この文書、プラットフォームの慣用の順）
   - レビューの指摘をこの文書に照らしてどう仕分けるか
   - 文書に無い論点を決めたときと、原則を改めるときの手順
-- 原則には、archive 済みの design.md とコードから抽出した 12 のテーマを起こす。テーマは次のとおり。
+- 原則には、archive 済みの design.md とコードから抽出した 12 のテーマと、CLAUDE.md から移す外部依存の約束を起こす。さらに、原則を archive に照らして検証したときに見つかった判断を足し、15 の原則にする（design.md の D10）。テーマは次のとおり。
   - 依存の向き
   - actor 境界
   - 状態の持ち主
@@ -82,7 +82,7 @@ change をまたいで効く設計の約束は、change ごとの design.md の 
 
 - マイルストーン: 特定のマイルストーンには属さない、開発の進め方の change。
 - 追加するもの: `docs/architecture.md`、`scripts/check-architecture.sh` とそのテスト、`.claude/skills/update-architecture-doc/SKILL.md`。
-- 変更するもの: `CLAUDE.md`、`openspec/config.yaml`、`.claude/rules/review-process.md`、`.swiftlint.yml`、`scripts/lint.sh`、`.github/workflows/ci.yml`（検査の実行を足すだけで、権限・シークレット・使う Action は変えない）。アプリのコード（`Mewbell/`、`MewbellTests/`）は変えない。lint の新しい規則に今のコードが引っかかる場合は、規則の範囲を見直す。コードを直すのは、原則に合わせる別の change で行う。
+- 変更するもの: `CLAUDE.md`、`openspec/config.yaml`、`.claude/rules/review-process.md`、`.claude/rules/security.md`（外部依存の参照先を A13 に替えるだけ）、`.swiftlint.yml`、`scripts/lint.sh`、`.github/workflows/ci.yml`（検査の実行を足すだけで、権限・シークレット・使う Action は変えない）。アプリのコード（`Mewbell/`、`MewbellTests/`）は変えない。lint の新しい規則に今のコードが引っかかる場合は、規則の範囲を見直す。コードを直すのは、原則に合わせる別の change で行う。
 - 後に続く change: 既知の逸脱を直す change を別に起こす。
   - `ThreadReason`・`ThreadEventText` を `UI/` の外に移す
   - 設定のタブの子の View を値とクロージャだけで組む
