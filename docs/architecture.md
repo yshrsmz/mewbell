@@ -93,7 +93,7 @@
   - ブラウザで開く URL の組み立てを `APIEndpoints` に置く: `APIEndpoints` はトークンを送ってよい相手を決める型で、開く前の検査を持っていない
   - 行数の上限に合わせて `send` の `private` を外す（add-thread-latest-event §2 の判断を改めた）: 「関所は 1 か所」が規約だけで守られる状態になる
 - **適用外**: 案内画面と通知の許可のバナーが開く固定の URL（gh のサイト、システム設定）は API 由来でないので、`NSWorkspace` で直接開く
-- **根拠**: add-gh-account-discovery D5、add-notification-fetch D2・D8、add-system-notifications D3・D5・D7、add-thread-actions D2、add-web-notifications-link D1・D2、update-list-readability D7、add-architecture-principles D7。`Authorization` は lint の `authorization_header_outside_client` で守る
+- **根拠**: add-gh-account-discovery D5、add-notification-fetch D2・D8、add-system-notifications D3・D5・D7、add-thread-actions D2、add-web-notifications-link D1・D2、update-list-readability D7、add-architecture-principles D7、fix-api-client-send-privacy D1・D2・D3。`Authorization` は lint の `authorization_header_outside_client` で守る
 
 ### A7. actor や store の中の判断は、値型か純粋な関数に切り出す
 
@@ -191,6 +191,5 @@
 | A1 | `Polling/NotificationStore.swift` が、`NSWorkspace` で URL を開く `.live` の組み立てのために AppKit を import している（lint の `ui_frameworks_outside_ui` はこのファイルを除外している。直したら除外も消す） | fix-lower-layer-dependencies（仮） |
 | A1 | `ThreadReason`・`ThreadEventText` が `UI/` にあり、`Notifications/ThreadNotificationContent.swift` から使われている | fix-shared-thread-text-placement（仮） |
 | A4 | 設定ウィンドウの下位の View（`DiagnosticsSettingsView`、`AccountSettingsSection` など）が store を直接受け取っている | fix-settings-view-inputs（仮） |
-| A6 | `GitHubAPIClient.send` の `private` が外れている | fix-api-client-send-privacy（仮） |
 | A10 | `AccountPoller.pendingRefreshCount` が、テストのためだけに公開されている | fix-minor-principle-deviations（仮） |
 | A11 | `App/SingleInstance.swift` のログのカテゴリが `SingleInstance` で、ディレクトリ名（`App`）でない | fix-minor-principle-deviations（仮） |

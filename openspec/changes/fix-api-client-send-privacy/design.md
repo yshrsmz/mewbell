@@ -12,7 +12,7 @@
 
 **Goals:**
 
-- `send` を `private` にして、`Authorization` を付ける経路が `GitHubAPIClient.swift` の外から増えないことを、コンパイラで守る。
+- `send` と `transport` を `private` にして、`Authorization` を付ける経路と、検査を通らずに送る経路が `GitHubAPIClient.swift` の外から増えないことを、コンパイラで守る。
 - lint の例外を、`Authorization` を付ける 1 行に絞る。
 
 **Non-Goals:**
@@ -29,6 +29,8 @@
 
 結果の型（`ThreadDetailsFetchResult`、`DetailsStop`）も一緒に移す。取得の関数と結果の型を別のファイルに分ける理由が無く、移した先を読むだけで取得の全体が分かるようにする。
 
+移した後は、同じファイルの中だけで使われるもの（`DetailsStop`、`timelinePerPage`、`rateLimitedUntil(_:)`）も `private` にする。どれも、別のファイルの extension から使うために `private` でなかっただけである。`fetchDetails` の戻り値でテストも使う `ThreadDetailsFetchResult` は internal のままにする。
+
 採らなかった案:
 
 - 純粋な部分（URL の組み立て、`page(of:)`、`isSecondaryRateLimit`、結果の型）を別のファイルに残し、行数を 400 行に収める: 合わせても 400 行前後で、次に少し足せばまた上限に当たる。行数のためだけにファイルを分けると、置き場所を決める軸が増える（A1 の「置き場所を決める軸を 1 つにする」の考え方に反する）。
@@ -42,10 +44,19 @@
 採らなかった案:
 
 - ファイルの除外を残す: `send` が `private` になっても、同じファイルの中に 2 か所目の `Authorization` を書けることは変わらず、lint では見つからない。
+- トークンの中身（`AccessToken.value`）を読む箇所も lint で 1 か所に絞る: 正規表現の lint は字面の検査で、定数や `allHTTPHeaderFields` を使った書き方まで止めるものではない。迂回を止める主な守りは `send` と `transport` を `private` にすることで、残りはレビューで守る。lint は `Authorization` の字面の検査のままにする。
 
-### D3. `docs/architecture.md` を、スキル `update-architecture-doc` の手順で更新する
+### D3. `transport` と `now` を `private` にし、明示の `init(transport:now:)` を置く（A6、A5）
 
-「既知の逸脱」から A6 の行を消し、A6 の「根拠」に `fix-api-client-send-privacy D1・D2` を足す。A6 の本文は今の形と合っているので変えない。
+`send` を `private` にしても、`transport` が internal だと `client.transport.send(...)` と書いて、オリジン検査とリダイレクトの扱いを通らずに送れる。`transport` を `private let` にし、`now` も `private let` にする（外から書き換えている箇所は無い）。stored property が `private` だと memberwise init も `private` になるので、今の memberwise init と同じ形の `init(transport:now:)` を明示して置く。呼び出し側（`NotificationStore.live` とテスト）は変えない。`now` の既定値は今までどおり `Date()` にする（A5 で既定値を持たせないと決めているのは URL を開く処理だけ）。
+
+採らなかった案:
+
+- `transport` を internal のまま残す: 今は誰も読んでいないが、関所を迂回する道が型の上で開いたままになり、A6 の「迂回する呼び出しをコンパイラが止める」が半分しか成り立たない。
+
+### D4. `docs/architecture.md` を、スキル `update-architecture-doc` の手順で更新する
+
+「既知の逸脱」から A6 の行を消し、A6 の「根拠」に `fix-api-client-send-privacy D1・D2・D3` を足す。A6 の本文は今の形と合っているので変えない。
 
 ## Risks / Trade-offs
 
