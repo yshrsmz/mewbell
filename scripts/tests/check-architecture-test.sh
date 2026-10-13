@@ -130,6 +130,17 @@ repo="$(make_repo adjacent-ids)"
 printf '原則 A1・A9 を見る。\n' >>"$repo/CLAUDE.md"
 expect_fail "1 行の 2 つ目の ID も確かめる" "$repo" "[ID の参照]" "CLAUDE.md:4" "A9"
 
+repo="$(make_repo id-reported-once)"
+printf '原則 A7x と A7 を見る。\n' >>"$repo/CLAUDE.md"
+bash "$check" "$repo" >"$work/out" 2>&1 || true
+if [[ "$(grep -c 'A7 は' "$work/out")" == 1 ]]; then
+  echo "ok: 同じ ID を 1 回だけ数える"
+else
+  echo "NG: 同じ ID を 1 回だけ数える" >&2
+  sed 's/^/    /' "$work/out" >&2
+  failures=$((failures + 1))
+fi
+
 repo="$(make_repo proposal-reference)"
 printf '# Proposal\n\nA9 を足す。\n' >"$repo/openspec/changes/add-current/proposal.md"
 expect_fail "proposal.md の参照も確かめる" "$repo" "[ID の参照]" "openspec/changes/add-current/proposal.md:3"
@@ -154,6 +165,14 @@ replace "$repo/Mewbell/UI/SampleRow.swift" "struct SampleRow" "struct RenamedRow
 mv "$repo/Mewbell/UI/SampleRow.swift" "$repo/Mewbell/UI/RenamedRow.swift"
 expect_fail "型とパスがコードに無い" "$repo" "[コードの名前]" "SampleRow がコードにありません" "パス Mewbell/UI/SampleRow.swift"
 
+repo="$(make_repo lint-rule-name)"
+replace "$repo/docs/architecture.md" "- **根拠**: add-sample D1" "- **根拠**: add-sample D1。lint の \`renamed_rule\` で守る"
+expect_fail "小文字の名前（lint の規則など）も確かめる" "$repo" "[コードの名前]" "renamed_rule がコードにありません"
+
+repo="$(make_repo hyphenated-word)"
+replace "$repo/docs/architecture.md" "- **根拠**: add-sample D1" "- **根拠**: add-sample D1（prefix-match の扱い）"
+expect_pass "根拠の中の、change の名前でないハイフンの語は数えない" "$repo"
+
 repo="$(make_repo pattern-token)"
 replace "$repo/docs/architecture.md" "- **適用外**: なし" '- **適用外**: `.claude/rules/*.md` と `openspec/changes/<change>/design.md`'
 expect_pass "グロブやプレースホルダーのパスは、展開も実在の確認もしない" "$repo"
@@ -162,6 +181,10 @@ expect_pass "グロブやプレースホルダーのパスは、展開も実在�
 repo="$(make_repo duplicate)"
 printf '\nプレビューとテストで store を組まずに済み、どの操作が起きるかが引数で読めるようになる。\n' >>"$repo/CLAUDE.md"
 expect_fail "原則の文をそのまま写している" "$repo" "CLAUDE.md: [重複]" "docs/architecture.md:8"
+
+repo="$(make_repo duplicate-in-skill)"
+printf '\nプレビューとテストで store を組まずに済み、どの操作が起きるかが引数で読めるようになる。\n' >>"$repo/.claude/skills/sample/SKILL.md"
+expect_fail "スキルへの写しも見つける" "$repo" ".claude/skills/sample/SKILL.md: [重複]"
 
 repo="$(make_repo no-duplicate-targets)"
 rm "$repo/CLAUDE.md" "$repo/openspec/config.yaml" "$repo/.claude/rules/review.md"

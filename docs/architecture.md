@@ -188,7 +188,7 @@
 | A1 | `GitHubAPI/APIEndpoints.swift` が `Accounts/` の `HostKind` を使っている | fix-lower-layer-dependencies（仮） |
 | A1 | `GitHubAPI/GitHubAPIClient.swift` が `Polling/` の `ThreadAction` を使っている | fix-lower-layer-dependencies（仮） |
 | A1 | `GhCLI/` と `GitHubAPI/` が、`App/Logging.swift` の `Logger(category:)` を使っている | fix-lower-layer-dependencies（仮） |
-| A1 | `Polling/NotificationStore.swift` が、`NSWorkspace` で URL を開く `.live` の組み立てのために AppKit を import している（lint はこのファイルだけ除外している） | fix-lower-layer-dependencies（仮） |
+| A1 | `Polling/NotificationStore.swift` が、`NSWorkspace` で URL を開く `.live` の組み立てのために AppKit を import している（lint の `ui_frameworks_outside_ui` はこのファイルを除外している。直したら除外も消す） | fix-lower-layer-dependencies（仮） |
 | A1 | `ThreadReason`・`ThreadEventText` が `UI/` にあり、`Notifications/ThreadNotificationContent.swift` から使われている | fix-shared-thread-text-placement（仮） |
 | A4 | 設定ウィンドウの下位の View（`DiagnosticsSettingsView`、`AccountSettingsSection` など）が store を直接受け取っている | fix-settings-view-inputs（仮） |
 | A6 | `GitHubAPIClient.send` の `private` が外れている | fix-api-client-send-privacy（仮） |

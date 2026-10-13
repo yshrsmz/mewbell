@@ -110,7 +110,7 @@ while IFS= read -r file; do
     # 1 行に複数の ID があっても（「A1・A4」など）、すべてを取り出す
     while [[ "$rest" =~ (^|[^A-Za-z0-9_])(A[0-9]+)([^A-Za-z0-9_]|$) ]]; do
       id="${BASH_REMATCH[2]}"
-      rest="${rest#*"${BASH_REMATCH[1]}$id"}"
+      rest="${BASH_REMATCH[3]}${rest#*"${BASH_REMATCH[0]}"}"
       if [[ " $ids " != *" $id "* ]]; then
         fail "$file:$line" "ID の参照" "$id は $doc にありません。ID を直すか、原則を足してください"
       elif [[ " $retired " == *" $id "* ]] && ! retired_reference_allowed "$file"; then
@@ -124,7 +124,7 @@ done <<<"$reference_files"
 while IFS=$'\t' read -r line text; do
   [[ -z "${line:-}" ]] && continue
   [[ "$text" == "- **根拠**:"* ]] || continue
-  for name in $(grep -oE '(add|update|fix|remove)-[a-z0-9]+(-[a-z0-9]+)*' <<<"$text" || true); do
+  for name in $(grep -oE '(^|[^a-z0-9-])(add|update|fix|remove)-[a-z0-9]+(-[a-z0-9]+)*' <<<"$text" | sed -E 's/^[^a-z]*//' || true); do
     if [[ ! -d "openspec/changes/$name" ]] && ! ls -d openspec/changes/archive/*-"$name" >/dev/null 2>&1; then
       fail "$doc:$line" "根拠の change" "change $name が openspec/changes/ にも archive にもありません"
     fi
@@ -132,7 +132,7 @@ while IFS=$'\t' read -r line text; do
 done <<<"$principles"
 
 # --- コードの名前 ---
-# 採らなかった案（とその下の箇条）は今のコードに無い名前を書く場所なので、検査しない
+# 型・メンバー・lint の規則の名前が、コードか設定に出てくるかを見る。採らなかった案（とその下の箇条）は今のコードに無い名前を書く場所なので、検査しない
 code_dirs=""
 for dir in Mewbell MewbellTests; do
   [[ -d "$dir" ]] && code_dirs="$code_dirs $dir"
@@ -172,7 +172,10 @@ while IFS= read -r numbered; do
     elif [[ "$token" == */* ]]; then
       [[ -e "$token" || -e "Mewbell/$token" ]] ||
         fail "$doc:$line" "コードの名前" "パス $token がありません。改名や削除に合わせて直してください"
-    elif [[ "$token" =~ ^[A-Z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*)?$ && ! "$token" =~ ^A[0-9]+$ ]]; then
+    elif [[ "$token" =~ \.(yml|yaml|md|swift|json|sh)$ ]]; then
+      # `hosts.yml` のような、ディレクトリを書かないファイル名は確かめない
+      continue
+    elif [[ "$token" =~ ^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)?$ && ! "$token" =~ ^A[0-9]+$ ]]; then
       for part in ${token//./ }; do
         name_exists "$part" ||
           fail "$doc:$line" "コードの名前" "$part がコードにありません。改名や削除に合わせて直してください"
@@ -182,11 +185,11 @@ while IFS= read -r numbered; do
 done < <(grep -n '' "$doc")
 
 # --- 重複 ---
-# 原則の文（「。」で区切った 40 文字以上の 1 文）を、ほかの文書がそのまま写していないかを見る
+# 原則の文（「。」で区切った 40 文字以上の 1 文）を、ほかの文書（archive を除く）がそのまま写していないかを見る
 # 対象のファイルが無いときに grep が標準入力を読まないよう、/dev/null を必ず渡す
 duplicate_targets="/dev/null"
-for file in CLAUDE.md openspec/config.yaml .claude/rules/*.md; do
-  [[ -f "$file" ]] && duplicate_targets="$duplicate_targets $file"
+for file in CLAUDE.md openspec/config.yaml .claude/rules/*.md .claude/skills/*/SKILL.md openspec/changes/*/design.md; do
+  [[ -f "$file" && "$file" != openspec/changes/archive/* ]] && duplicate_targets="$duplicate_targets $file"
 done
 while IFS=$'\t' read -r line text; do
   [[ -z "${line:-}" ]] && continue

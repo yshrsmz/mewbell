@@ -25,8 +25,9 @@ opt_in_rules:
 # 正規表現で守れる約束。message の ID は docs/architecture.md の原則
 custom_rules:
   no_print:
-    name: "No print"
-    regex: '\b(debugP|p)rint\('
+    name: "No print or NSLog"
+    regex: '\b(debugPrint|print|NSLog|dump)\(|\bFileHandle\.standardError\b'
+    included: 'Mewbell/'  # テストは dump(_:to:) で文字列にして確かめる
     match_kinds: identifier
     message: "ログは Logger(category:) で出す（A11、security.md）"
     severity: error
@@ -57,7 +58,7 @@ custom_rules:
     severity: error
   fixed_font_size:
     name: "Fixed font size"
-    regex: '\.system\(\s*size:'
+    regex: '\b(system|custom|systemFont)\([^)]*\b(size|ofSize):'
     included: 'Mewbell/(UI|App)/'
     message: "書体の大きさはテキストスタイルで指定し、ポイント数を書かない（A4）"
     severity: error
