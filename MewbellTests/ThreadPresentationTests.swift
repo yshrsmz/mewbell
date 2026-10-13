@@ -72,10 +72,19 @@ struct ThreadIconTests {
         #expect(ThreadIcon(kind: .issue, state: .closedNotPlanned).label == "Issue, closed as not planned")
     }
 
-    @Test func fallsBackToTheKindWithoutAMatchingState() {
-        let unknown = ThreadIcon(kind: .pullRequest, state: nil)
+    @Test(arguments: [(SubjectKind.pullRequest, "Pull request"), (.issue, "Issue")])
+    func showsOnlyTheKindWithoutAState(_ kind: SubjectKind, _ name: String) {
+        let unknown = ThreadIcon(kind: kind, state: nil)
         #expect(unknown.color == nil)
-        #expect(unknown.label == "Pull request")
+        #expect(unknown.label == name)
+    }
+
+    /// 状態が分からなくても、記号で Pull request と Issue を見分けられる
+    @Test func keepsTheKindsApartWithoutAState() {
+        #expect(ThreadIcon(kind: .pullRequest, state: nil).symbol != ThreadIcon(kind: .issue, state: nil).symbol)
+    }
+
+    @Test func fallsBackToTheKindWithoutAMatchingState() {
         // 種類に合わない状態は、状態が無いときと同じ
         #expect(ThreadIcon(kind: .release, state: .open) == ThreadIcon(kind: .release, state: nil))
         #expect(ThreadIcon(kind: .issue, state: .merged) == ThreadIcon(kind: .issue, state: nil))
