@@ -31,7 +31,7 @@
 
 ## 6. レビュー
 
-- [ ] 6.1 別コンテキストの opus サブエージェントで `simplify` を実行する（`.claude/rules/review-process.md`）。変更を確かめてから取り込む
+- [x] 6.1 別コンテキストの opus サブエージェントで `simplify` を実行する（`.claude/rules/review-process.md`）。変更を確かめてから取り込む。結果: 検査の高速化（ID の取り出し、名前の検索の記憶）、テストの組み方を `verify-app-test.sh` にそろえる、文書どうしの重複（A9・A11・A13 と CLAUDE.md・review-process.md・スキルの重なり）を直した。残した指摘のうち `NotificationStore.swift` の AppKit は、適用外から既知の逸脱に移した（design D10）。そのほかは design が定めた形・範囲の外として直さない
 - [ ] 6.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く
 - [ ] 6.3 文書の中身の修正が多ければ、6.2 を新しいサブエージェントでもう一度実行する
 - [ ] 6.4 PR 本文に、原則の中身を人の目で確かめてほしいことを書く（この change の文書を、この change のレビューが根拠にするため）
