@@ -12,7 +12,7 @@
   - `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` で全テストを通す。
   - `MEWBELL_WARNINGS_AS_ERRORS=YES` で、Debug と Release のビルドを通す。
   - `bash scripts/lint.sh` と `pnpm exec openspec validate --all --strict` を通す。
-- [x] 2.2 `bash scripts/run.sh` で起動し、手元で確かめる。通知の一覧が取れること、再読み込みで取り直すことが今までどおりであること。`log stream --level info --predicate 'subsystem == "com.codingfeline.mewbell" && category == "App"'` を流しながら、起動中にもう 1 つ `open -n build/Debug/Mewbell.app` で起動し、後から起動した方が終了して `Another instance is running; exiting` が出ること（info のログは保存されないので、`log show` ではなく `log stream` で見る）。（起動後の一覧の取得と、2 つ目の終了とカテゴリ `App` のログはここで確かめた。再読み込みのボタンはポップオーバーをクリックで開く必要があるので押しておらず、`RefreshNowTests` が通ったことで代える。本体の再読み込みのロジックは変えていない）
+- [x] 2.2 `bash scripts/run.sh` で起動し、手元で確かめる。通知の一覧が取れること、再読み込みで取り直すことが今までどおりであること。`log stream --level info --predicate 'subsystem == "com.codingfeline.mewbell" && category == "App"'` を流しながら、起動中にもう 1 つ `open -n build/Debug/Mewbell.app` で起動し、後から起動した方が終了して `Another instance is running; exiting` が出ること（info のログは保存されないので、`log show` ではなく `log stream` で見る）。（起動後の一覧の取得、再読み込みのボタンでの `without If-Modified-Since` の取得、2 つ目の終了とカテゴリ `App` のログを確かめた）
 
 ## 3. レビュー
 
