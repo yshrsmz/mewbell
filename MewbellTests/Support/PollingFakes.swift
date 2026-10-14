@@ -180,7 +180,7 @@ final class PollerFixture: Sendable {
 
     /// 再読み込みが、今の取得の後の取得を待ち始めるまで待つ。
     func waitForPendingRefresh(sourceLocation: SourceLocation = #_sourceLocation) async {
-        await waitUntilAsync(sourceLocation: sourceLocation) { await self.poller.pendingRefreshCount > 0 }
+        await waitUntilAsync(sourceLocation: sourceLocation) { await self.poller.refreshWaitsForNextFetch }
     }
 
     static func ok(_ ids: ClosedRange<Int>, lastModified: String = "LM-1", scopes: String = "repo") -> HTTPResponse {

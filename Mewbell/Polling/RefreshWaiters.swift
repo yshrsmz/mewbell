@@ -17,7 +17,6 @@ struct RefreshWaiters {
     }
 
     var isEmpty: Bool { waiters.isEmpty }
-    var count: Int { waiters.count }
     /// 今の試みより後の試みを待っている人がいるか（今の試みの途中で再読み込みが押された）
     var waitsForLaterAttempt: Bool { waiters.contains { $0.attempt > attempts } }
 

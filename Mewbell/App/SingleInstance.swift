@@ -53,7 +53,7 @@ enum SingleInstance {
     /// プロセスが終わるまでロックを持ち続けるために保持しておく。
     @MainActor private static var lock: SingleInstanceLock?
 
-    private static let logger = Logger(category: "SingleInstance")
+    private static let logger = Logger(category: "App")
 
     /// ほかの Mewbell がロックを持っていれば、このプロセスを終了する。
     /// ロックファイルを開けないなどのエラーでは終了せず、記録したうえで起動を続ける

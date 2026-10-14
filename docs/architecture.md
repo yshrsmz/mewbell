@@ -187,5 +187,3 @@
 | 原則 | 場所 | 直す change |
 | --- | --- | --- |
 | A4 | 設定ウィンドウの下位の View（`DiagnosticsSettingsView`、`AccountSettingsSection` など）が store を直接受け取っている | fix-settings-view-inputs（仮） |
-| A10 | `AccountPoller.pendingRefreshCount` が、テストのためだけに公開されている | fix-minor-principle-deviations（仮） |
-| A11 | `App/SingleInstance.swift` のログのカテゴリが `SingleInstance` で、ディレクトリ名（`App`）でない | fix-minor-principle-deviations（仮） |
