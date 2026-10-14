@@ -4,33 +4,13 @@ import SwiftUI
 /// Diagnostics タブ。gh の検出の結果とアカウントごとの状態を、今の値から組み立てて出す
 /// （開いても gh の実行や通知の取得はしない）。トークン、API の URL、スレッドの件名は出さない。
 struct DiagnosticsSettingsView: View {
-    let settings: AppSettings
-    let accounts: AccountStore
-    let notifications: NotificationStore
-
-    private var report: DiagnosticsReport {
-        DiagnosticsReport(
-            ghDetection: accounts.ghDetection, state: accounts.state,
-            accounts: DiagnosticsReport.accounts(in: accounts.state, feeds: notifications.feeds) {
-                settings.preferences(for: $0)
-            },
-            appVersion: Self.appVersion, osVersion: Self.osVersion)
-    }
+    /// 報告を作る。ポーリングのたびに変わる通知の状態を読むので、値ではなくクロージャで受け取り、この View の body で呼ぶ
+    /// （描き直すのをこのタブの中にとどめ、設定ウィンドウのルートとほかのタブを描き直さない）
+    let report: () -> DiagnosticsReport
 
     var body: some View {
-        DiagnosticsReportView(report: report)
+        DiagnosticsReportView(report: report())
     }
-
-    // 起動中は変わらないので 1 回だけ読む（一覧が変わるたびに report を作り直すため）
-    private static let appVersion: String = {
-        let info = Bundle.main.infoDictionary ?? [:]
-        let version = info["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info["CFBundleVersion"] as? String ?? "?"
-        // CFBundleVersion は MARKETING_VERSION と同じ値にしている（release-please が上げる）ので、違うときだけ添える
-        return build == version ? version : "\(version) (\(build))"
-    }()
-
-    private static let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
 }
 
 /// `DiagnosticsReport` の節と行を並べ、Copy でテキストをクリップボードに入れる。

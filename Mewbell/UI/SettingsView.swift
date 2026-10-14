@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 /// 設定ウィンドウ。変更は `AppSettings` のメソッドで書き、すぐに反映する。トークンや API の URL、gh の出力は表示しない。
+/// store を受け取るのはこの View だけで、タブの中身には値と `SettingsActions` を渡す。
 struct SettingsView: View {
     let settings: AppSettings
     let accounts: AccountStore
@@ -11,42 +12,112 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             Tab("General", systemImage: "gearshape") {
-                GeneralSettingsView(settings: settings, launchAtLogin: launchAtLogin)
+                GeneralSettingsView(
+                    notificationSound: settings.notificationSound, launchAtLoginStatus: launchAtLogin.status,
+                    launchAtLoginIsOn: launchAtLogin.isOn, launchAtLoginFailed: launchAtLogin.failed, actions: actions)
             }
             Tab("Accounts", systemImage: "person.2") {
-                AccountsSettingsView(settings: settings, state: accounts.state)
+                AccountsSettingsView(
+                    state: accounts.state, preferences: { settings.preferences(for: $0) }, actions: actions)
             }
             Tab("gh", systemImage: "terminal") {
-                GhSettingsView(settings: settings)
+                GhSettingsView(
+                    executableOverride: settings.ghExecutableOverride,
+                    configDirectoryOverride: settings.ghConfigDirectoryOverride, actions: actions)
             }
             Tab("Diagnostics", systemImage: "stethoscope") {
-                DiagnosticsSettingsView(settings: settings, accounts: accounts, notifications: notifications)
+                DiagnosticsSettingsView(report: diagnosticsReport)
             }
         }
         .frame(width: 520, height: 420)
         .background(SettingsWindowActivator())
     }
+
+    private var actions: SettingsActions {
+        SettingsActions(
+            setNotificationSound: { settings.setNotificationSound($0) },
+            setLaunchAtLogin: { launchAtLogin.set($0) },
+            openLoginItemsSettings: { launchAtLogin.openSystemSettings() },
+            refreshLaunchAtLogin: { launchAtLogin.refresh() },
+            setEnabled: { settings.setEnabled($0, for: $1) },
+            setParticipatingOnly: { settings.setParticipatingOnly($0, for: $1) },
+            setNotifies: { settings.setNotifies($0, for: $1) },
+            setGhExecutableOverride: { settings.setGhExecutableOverride($0) },
+            setGhConfigDirectoryOverride: { settings.setGhConfigDirectoryOverride($0) })
+    }
+
+    /// Diagnostics タブの報告。`DiagnosticsSettingsView` の body で呼ばれ、ポーリングのたびに変わる値はそこで読まれる。
+    private func diagnosticsReport() -> DiagnosticsReport {
+        DiagnosticsReport(
+            ghDetection: accounts.ghDetection, state: accounts.state,
+            accounts: DiagnosticsReport.accounts(in: accounts.state, feeds: notifications.feeds) {
+                settings.preferences(for: $0)
+            },
+            appVersion: Self.appVersion, osVersion: Self.osVersion)
+    }
+
+    // 起動中は変わらないので 1 回だけ読む（一覧が変わるたびに report を作り直すため）
+    private static let appVersion: String = {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info["CFBundleVersion"] as? String ?? "?"
+        // CFBundleVersion は MARKETING_VERSION と同じ値にしている（release-please が上げる）ので、違うときだけ添える
+        return build == version ? version : "\(version) (\(build))"
+    }()
+
+    private static let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
+}
+
+/// 設定ウィンドウでの操作。`SettingsView` が `AppSettings` と `LaunchAtLogin` のメソッドにつなぐ。
+struct SettingsActions {
+    var setNotificationSound: (Bool) -> Void
+    /// ログイン時に起動するかを切り替える
+    var setLaunchAtLogin: (Bool) -> Void
+    /// システム設定のログイン項目を開く
+    var openLoginItemsSettings: () -> Void
+    /// ログイン項目の登録の状態を macOS から読み直す
+    var refreshLaunchAtLogin: () -> Void
+    var setEnabled: (Bool, AccountID) -> Void
+    var setParticipatingOnly: (Bool, AccountID) -> Void
+    var setNotifies: (Bool, AccountID) -> Void
+    /// gh の実行ファイルの上書きを確定する（nil で上書きを外す）
+    var setGhExecutableOverride: (String?) -> Void
+    /// gh の設定ディレクトリの上書きを確定する（nil で上書きを外す）
+    var setGhConfigDirectoryOverride: (String?) -> Void
+
+    /// 何もしない（プレビュー用）。
+    static var none: SettingsActions {
+        SettingsActions(
+            setNotificationSound: { _ in }, setLaunchAtLogin: { _ in }, openLoginItemsSettings: {},
+            refreshLaunchAtLogin: {}, setEnabled: { _, _ in }, setParticipatingOnly: { _, _ in },
+            setNotifies: { _, _ in }, setGhExecutableOverride: { _ in }, setGhConfigDirectoryOverride: { _ in })
+    }
 }
 
 struct GeneralSettingsView: View {
-    let settings: AppSettings
-    let launchAtLogin: LaunchAtLogin
+    let notificationSound: Bool
+    let launchAtLoginStatus: LoginItemStatus
+    /// 登録されている（承認待ちを含む）
+    let launchAtLoginIsOn: Bool
+    /// 直前の登録・解除に失敗した
+    let launchAtLoginFailed: Bool
+    let actions: SettingsActions
 
     var body: some View {
         Form {
             Section {
                 Toggle(
                     "Launch at login",
-                    isOn: Binding(get: { launchAtLogin.isOn }, set: { launchAtLogin.set($0) }))
-                if launchAtLogin.status == .requiresApproval {
+                    isOn: Binding(get: { launchAtLoginIsOn }, set: { actions.setLaunchAtLogin($0) }))
+                if launchAtLoginStatus == .requiresApproval {
                     Text("Allow Mewbell in System Settings to finish setting it up.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button("Open Login Items Settings…") {
-                        launchAtLogin.openSystemSettings()
+                        actions.openLoginItemsSettings()
                     }
                 }
-                if launchAtLogin.failed {
+                if launchAtLoginFailed {
                     Label("Could not change the login item.", systemImage: "exclamationmark.triangle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -55,18 +126,20 @@ struct GeneralSettingsView: View {
             Section("Notifications") {
                 Toggle(
                     "Play a sound",
-                    isOn: Binding(get: { settings.notificationSound }, set: { settings.setNotificationSound($0) }))
+                    isOn: Binding(get: { notificationSound }, set: { actions.setNotificationSound($0) }))
             }
         }
         .formStyle(.grouped)
         // システム設定で外されたときにずれないよう、開くたびに読み直す
-        .onAppear { launchAtLogin.refresh() }
+        .onAppear { actions.refreshLaunchAtLogin() }
     }
 }
 
 struct AccountsSettingsView: View {
-    let settings: AppSettings
     let state: DiscoveryState
+    /// アカウントごとの設定（この View の body で読み、設定を変えたときに描き直すのをこのタブの中にとどめる）
+    let preferences: (AccountID) -> AccountPreferences
+    let actions: SettingsActions
 
     var body: some View {
         if state == .checking {
@@ -75,7 +148,8 @@ struct AccountsSettingsView: View {
         } else if case .accounts(let statuses) = state, !statuses.isEmpty {
             Form {
                 ForEach(statuses) { status in
-                    AccountSettingsSection(settings: settings, account: status.account)
+                    AccountSettingsSection(
+                        account: status.account, preferences: preferences(status.account.id), actions: actions)
                 }
             }
             .formStyle(.grouped)
@@ -90,22 +164,20 @@ struct AccountsSettingsView: View {
 }
 
 struct AccountSettingsSection: View {
-    let settings: AppSettings
     let account: Account
-
-    private var preferences: AccountPreferences { settings.preferences(for: account.id) }
+    let preferences: AccountPreferences
+    let actions: SettingsActions
 
     var body: some View {
         Section {
             Toggle(
                 "Enabled",
-                isOn: Binding(
-                    get: { preferences.isEnabled }, set: { settings.setEnabled($0, for: account.id) }))
+                isOn: Binding(get: { preferences.isEnabled }, set: { actions.setEnabled($0, account.id) }))
             Group {
                 Toggle(
                     isOn: Binding(
                         get: { preferences.participatingOnly },
-                        set: { settings.setParticipatingOnly($0, for: account.id) })
+                        set: { actions.setParticipatingOnly($0, account.id) })
                 ) {
                     Text("Only threads I'm participating in")
                     Text(
@@ -114,7 +186,7 @@ struct AccountSettingsSection: View {
                 }
                 Toggle(
                     "Show macOS notifications",
-                    isOn: Binding(get: { preferences.notifies }, set: { settings.setNotifies($0, for: account.id) }))
+                    isOn: Binding(get: { preferences.notifies }, set: { actions.setNotifies($0, account.id) }))
             }
             .disabled(!preferences.isEnabled)
         } header: {
@@ -128,7 +200,9 @@ struct AccountSettingsSection: View {
 }
 
 struct GhSettingsView: View {
-    let settings: AppSettings
+    let executableOverride: String?
+    let configDirectoryOverride: String?
+    let actions: SettingsActions
 
     var body: some View {
         Form {
@@ -138,9 +212,9 @@ struct GhSettingsView: View {
                     placeholder: "Search /opt/homebrew/bin, /usr/local/bin, then the login shell",
                     unusableMessage:
                         "Mewbell cannot use gh at this path. It must be your own executable file that others cannot modify.",
-                    path: settings.ghExecutableOverride, choosesDirectories: false,
+                    path: executableOverride, choosesDirectories: false,
                     isUsable: { ExecutableValidator.validate($0) != nil },
-                    commit: { settings.setGhExecutableOverride($0) })
+                    commit: actions.setGhExecutableOverride)
             } footer: {
                 Text("Enter an absolute path. Leave empty to search the usual places.")
                     .font(.caption)
@@ -152,9 +226,9 @@ struct GhSettingsView: View {
                     placeholder: "Uses GH_CONFIG_DIR, XDG_CONFIG_HOME/gh, or ~/.config/gh",
                     unusableMessage:
                         "Mewbell cannot use this directory. It must be your own directory that others cannot modify.",
-                    path: settings.ghConfigDirectoryOverride, choosesDirectories: true,
+                    path: configDirectoryOverride, choosesDirectories: true,
                     isUsable: { ConfigDirectoryValidator.validate($0) != nil },
-                    commit: { settings.setGhConfigDirectoryOverride($0) })
+                    commit: actions.setGhConfigDirectoryOverride)
             } footer: {
                 Text(
                     "Enter an absolute path (not ~/…). Set this when gh uses a different GH_CONFIG_DIR in your shell. Mewbell also passes it to gh. Changing it reloads every account."
@@ -237,36 +311,33 @@ struct PathOverrideField: View {
 
 #Preview("General") {
     GeneralSettingsView(
-        settings: AppSettings(storage: InMemorySettingsStorage()),
-        launchAtLogin: LaunchAtLogin(service: InertLoginItem(status: .requiresApproval))
+        notificationSound: true, launchAtLoginStatus: .requiresApproval, launchAtLoginIsOn: true,
+        launchAtLoginFailed: false, actions: .none
     )
     .frame(width: 520, height: 300)
 }
 
 #Preview("Accounts") {
-    let settings = AppSettings(storage: InMemorySettingsStorage())
     let alice = Account(id: AccountID(host: "github.com", user: "alice"), isActive: true)
     let bob = Account(id: AccountID(host: "github.com", user: "bob"), isActive: false)
     let dave = Account(id: AccountID(host: "acme.ghe.com", user: "dave"), isActive: true)
-    settings.setEnabled(false, for: bob.id)
-    settings.setParticipatingOnly(true, for: dave.id)
     return AccountsSettingsView(
-        settings: settings,
         state: .accounts([
             AccountStatus(account: alice, tokenState: .ready), AccountStatus(account: bob, tokenState: .disabled),
             AccountStatus(account: dave, tokenState: .ready),
-        ])
+        ]),
+        preferences: { AccountPreferences(isEnabled: $0 != bob.id, participatingOnly: $0 == dave.id) },
+        actions: .none
     )
     .frame(width: 520, height: 420)
 }
 
 #Preview("Accounts: not logged in") {
-    AccountsSettingsView(settings: AppSettings(storage: InMemorySettingsStorage()), state: .notLoggedIn)
+    AccountsSettingsView(state: .notLoggedIn, preferences: { _ in .default }, actions: .none)
         .frame(width: 520, height: 300)
 }
 
 #Preview("gh") {
-    let settings = AppSettings(storage: InMemorySettingsStorage())
-    settings.setGhExecutableOverride("/tmp/nonexistent/gh")
-    return GhSettingsView(settings: settings).frame(width: 520, height: 360)
+    GhSettingsView(executableOverride: "/tmp/nonexistent/gh", configDirectoryOverride: nil, actions: .none)
+        .frame(width: 520, height: 360)
 }
