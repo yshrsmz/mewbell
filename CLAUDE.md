@@ -61,6 +61,7 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEW
 - `DerivedData`・`build/`・`xcuserdata/` はコミットしない
 - `SWIFT_APPROACHABLE_CONCURRENCY` が有効なので、nonisolated の async 関数は呼び出し元の actor の上で動く。テストの fake で同期的に待つと、その actor（`AccountPoller` など）が塞がり、テストが止まる（`docs/architecture.md` の A12。待たせ方の例は `FakeHTTPTransport` の `pausedMethod`）
 - `openspec` は PATH に無い。プロジェクトの devDependency を `pnpm exec openspec ...` で動かす
+- `xcodebuild test -only-testing:MewbellTests/<名前>` にはファイル名ではなくスイートの型名を渡す（`ThreadActionPollingTests.swift` の中は `DonePollingTests` と `MarkAllReadPollingTests`）。無い名前を渡してもエラーにならずに飛ばすので、結果の「N tests in M suites」のスイート数を確かめる
 - SwiftUI の `Text` に `.font(.body)` を明示すると、既定の書体と同じ 13pt でも折り返し方が変わる（短い最後の行を避けるように折り返す）。スレッドの件名の `Text` には書体を付けない
 - ユニットテストの `NSHostingView` では SwiftUI のアクセシビリティの要素が作られず、`accessibilityLabel` や `accessibilityHidden` の効き目は確かめられない。読み上げは手元の VoiceOver で確かめる項目として tasks に置く
 
