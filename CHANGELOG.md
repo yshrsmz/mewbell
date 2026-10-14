@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/yshrsmz/mewbell/compare/v0.2.0...v0.3.0) (2026-10-14)
+
+
+### Features
+
+* add hover feedback to popover controls (update-popover-hover-feedback) ([#42](https://github.com/yshrsmz/mewbell/issues/42)) ([a0ff2f2](https://github.com/yshrsmz/mewbell/commit/a0ff2f264bb49399aad63779e81ea169d2bd9011))
+* raise the popover heading hit target to 24pt (update-heading-hit-target) ([#43](https://github.com/yshrsmz/mewbell/issues/43)) ([1bda279](https://github.com/yshrsmz/mewbell/commit/1bda279197ba0333f59775cf9b03618778dfa471))
+
+
+### Bug Fixes
+
+* clear the A10 and A11 known deviations (fix-minor-principle-deviations) ([#40](https://github.com/yshrsmz/mewbell/issues/40)) ([6863b1d](https://github.com/yshrsmz/mewbell/commit/6863b1d4a25ba5aae9d30154e27fb54927ef1da7))
+* keep tests from timing out on a slow release runner (fix-slow-runner-test-waits) ([#34](https://github.com/yshrsmz/mewbell/issues/34)) ([e7f1d7d](https://github.com/yshrsmz/mewbell/commit/e7f1d7da08592fc6fd84a436d2e76bde120a853e))
+* make GitHubAPIClient.send private again (fix-api-client-send-privacy) ([#32](https://github.com/yshrsmz/mewbell/issues/32)) ([bb01e2c](https://github.com/yshrsmz/mewbell/commit/bb01e2cd7e3508aaee3d096b2a755f19bb67d7d4))
+* name the token state icon for VoiceOver (fix-account-token-status-labels) ([#35](https://github.com/yshrsmz/mewbell/issues/35)) ([597a3f1](https://github.com/yshrsmz/mewbell/commit/597a3f1c907f6198ad9d793d9853b6293ba4ee6e))
+
 ## [0.2.0](https://github.com/yshrsmz/mewbell/compare/v0.1.0...v0.2.0) (2026-10-13)
 
 
