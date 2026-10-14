@@ -17,7 +17,7 @@
   - `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` で全テストを通す。
   - `MEWBELL_WARNINGS_AS_ERRORS=YES` で、Debug と Release のビルドを通す。
   - `bash scripts/lint.sh`、`bash scripts/tests/check-architecture-test.sh`、`pnpm exec openspec validate --all --strict` を通す。
-- [ ] 3.2 `bash scripts/run.sh` で起動し、手元で今までどおり動くことを確かめる。
+- [x] 3.2 `bash scripts/run.sh` で起動し、手元で今までどおり動くことを確かめる。
   - 一覧の行の補足に、イベント（`Closed by alice` など）と `reason` の表示名が出ること。
   - 行のアイコンが今までどおり出ること。
   - 新着の macOS の通知の本文に、イベント・`reason` の表示名・アカウントが出ること（新着が無ければ、起動と取得の成功をログ（`/usr/bin/log show --info --predicate 'subsystem == "com.codingfeline.mewbell"'`）で確かめ、通知は手で確かめる項目として残す）。
