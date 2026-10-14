@@ -139,14 +139,6 @@ struct GitHubAPIClient: Sendable {
         }
     }
 
-    /// スレッドを既読か Done にする。
-    func perform(_ action: ThreadAction, endpoints: APIEndpoints, token: AccessToken) async -> ThreadActionResult {
-        switch action {
-        case .read(let threadID): await markThreadRead(endpoints: endpoints, token: token, threadID: threadID)
-        case .done(let threadID): await markThreadDone(endpoints: endpoints, token: token, threadID: threadID)
-        }
-    }
-
     /// スレッドを既読にする（`PATCH /notifications/threads/{id}`）。`threadID` が数字でなければ送らない。
     func markThreadRead(endpoints: APIEndpoints, token: AccessToken, threadID: String) async -> ThreadActionResult {
         await sendThreadAction(

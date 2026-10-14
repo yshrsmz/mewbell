@@ -25,7 +25,7 @@ extension AccountPoller {
         var failure: FailureKind?
         if !state.phase.isStopped {
             failure =
-                if let token { FailureKind(await client.perform(action, endpoints: endpoints, token: token)) } else {
+                if let token { FailureKind(await markThread(action, token: token)) } else {
                     .noToken
                 }
         }
@@ -34,6 +34,14 @@ extension AccountPoller {
         HiddenThreads.endRequest(for: threadID, fetchCount: fetchCount, in: &hidden)
         unconditionalRequested = true
         if let failure { await recordActionFailure(ThreadActionKind(action), failure) }
+    }
+
+    /// 操作に応じて、`GitHubAPIClient` の既読か Done のメソッドを呼ぶ。
+    private func markThread(_ action: ThreadAction, token: AccessToken) async -> ThreadActionResult {
+        switch action {
+        case .read(let threadID): await client.markThreadRead(endpoints: endpoints, token: token, threadID: threadID)
+        case .done(let threadID): await client.markThreadDone(endpoints: endpoints, token: token, threadID: threadID)
+        }
     }
 
     /// `newest`（ユーザーが押したときに表示していた一覧の `updated_at` の最大値）までを、すべて既読にする。

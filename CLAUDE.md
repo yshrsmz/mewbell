@@ -28,12 +28,13 @@ Mewbell/
 ├── Mewbell/
 │   ├── App/                    # @main, MenuBarExtra, Settings シーン
 │   ├── GhCLI/                  # gh の検出・hosts.yml 解析・gh auth token 実行
-│   ├── Accounts/               # AccountStore, Account, HostKind
-│   ├── GitHubAPI/              # URLSession クライアント、Notifications エンドポイント
+│   ├── Accounts/               # AccountStore, Account
+│   ├── GitHubAPI/              # URLSession クライアント、Notifications エンドポイント、HostKind
 │   ├── Polling/                # Poller（アカウントごとの Task）
 │   ├── Notifications/          # Notifier（UNUserNotificationCenter）
 │   ├── Diagnostics/            # アカウント状態
-│   └── UI/                     # 一覧・設定の View
+│   ├── UI/                     # 一覧・設定の View
+│   └── Shared/                 # どの層からも使う小さな道具（Logger(category:)）
 ├── MewbellTests/
 ├── openspec/
 └── scripts/                    # build.sh, run.sh など

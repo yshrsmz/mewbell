@@ -1,20 +1,5 @@
-/// アカウントのホストの種類。
-enum HostKind: Sendable, Equatable {
-    case gitHubDotCom
-    case gheCloud
-    case enterpriseServer
-
-    init(host: String) {
-        let host = host.lowercased()
-        if host == "github.com" {
-            self = .gitHubDotCom
-        } else if host.hasSuffix(".ghe.com") {
-            self = .gheCloud
-        } else {
-            self = .enterpriseServer
-        }
-    }
-
+/// 一覧の見出しと Diagnostics に出す、ホストの種類の表示名。
+extension HostKind {
     var displayName: String {
         switch self {
         case .gitHubDotCom: "GitHub.com"
