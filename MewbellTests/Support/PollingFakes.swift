@@ -178,7 +178,8 @@ final class PollerFixture: Sendable {
         }
     }
 
-    /// 再読み込みが、今の取得の後の取得を待ち始めるまで待つ。
+    /// 取得の途中（`transport` で止めている間）に押した再読み込みが、今の取得の後の取得を待ち始めるまで待つ。
+    /// 条件は次の取得が始まると false に戻るので、取得を止めていない場面では使えない。
     func waitForPendingRefresh(sourceLocation: SourceLocation = #_sourceLocation) async {
         await waitUntilAsync(sourceLocation: sourceLocation) { await self.poller.refreshWaitsForNextFetch }
     }

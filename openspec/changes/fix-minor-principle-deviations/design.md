@@ -50,7 +50,8 @@ actor の境界とスレッド: `refreshWaitsForNextFetch` は `AccountPoller` �
 
 ## Risks / Trade-offs
 
-- [テストの待ちの条件が、本体の判断のためのプロパティに依存する] → `refreshWaitsForNextFetch` の意味が変われば、テストの待ちも変わる。ただし、その変化は `RefreshNowTests` と `ThreadDetailsPollingTests` で待ちが切れることで現れ、気づかずに通ることはない。
+- [テストの待ちの条件が、本体の判断のためのプロパティに依存する] → `refreshWaitsForNextFetch` の意味が変われば、テストの待ちも変わる。待ちが切れる方向に変われば、`RefreshNowTests` と `ThreadDetailsPollingTests` が失敗して気づく。再読み込みが待ちに入る前に true になる方向に変わると、確かめたい状態に入る前に待ちを抜け、確かめていないのに通りうる。プロパティの意味を変える change では、`waitForPendingRefresh()` も見直す。
+- [`waitForPendingRefresh()` を、取得を止めていない場面で使うと待ちが切れる] → 新しい条件は、次の試みが始まると false に戻る（前の条件は、待ちが起こされるまで true だった）。ヘルパーの doc コメントに、取得を止めている間に押した再読み込みにだけ使うことを書く。
 - [Console でカテゴリ `SingleInstance` を指定して絞っていた人は、ログが見えなくなる] → 配布物で決まったカテゴリを約束してはいない。ほかのモジュールと同じく `App` で絞れるようになる。
 
 ## セキュリティ
