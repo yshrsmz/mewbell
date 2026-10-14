@@ -12,7 +12,7 @@
   - `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` で全テストを通す。
   - `MEWBELL_WARNINGS_AS_ERRORS=YES` で、Debug と Release のビルドを通す。
   - `bash scripts/lint.sh` と `pnpm exec openspec validate --all --strict` を通す。
-- [ ] 2.2 `bash scripts/run.sh` で起動し、手元で確かめる。通知の一覧が取れること、再読み込みで取り直すこと、既読にしたスレッドが一覧から外れることが今までどおりであること（再読み込みと既読の後の取得が `If-Modified-Since` なしになることは、ログの `without If-Modified-Since` で確かめる）。
+- [x] 2.2 `bash scripts/run.sh` で起動し、手元で確かめる。通知の一覧が取れること、再読み込みで取り直すこと、既読にしたスレッドが一覧から外れることが今までどおりであること（再読み込みと既読の後の取得が `If-Modified-Since` なしになることは、ログの `without If-Modified-Since` で確かめる）。
 
 ## 3. レビュー
 
