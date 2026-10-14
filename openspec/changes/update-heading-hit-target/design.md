@@ -29,7 +29,7 @@
 
 畳めるときは、ラベルの今の枠を `.frame(maxWidth: .infinity, minHeight: ListLayout.headingHeight, alignment: .leading)` にする。スタイルの塗りと押せる範囲はラベルの枠に合わせるので、それだけで 24pt になる。中身は枠の縦の中央に置かれる（`alignment: .leading` は縦が中央）。中身が 24pt より高いときは `minHeight` なので中身に合わせて伸びる。
 
-畳めないときの `HStack` にも `.frame(minHeight: ListLayout.headingHeight)` を付け、同じ高さにする。2 つの枝で同じ下限を書くので、`labelWithCount` と同じように private の computed property か `ViewModifier` にはせず、2 か所の 1 行の modifier のままにする（A9 の「1 行の modifier を型で包まない」）。
+畳めないときの `HStack` にも同じ `.frame(maxWidth: .infinity, minHeight: ListLayout.headingHeight, alignment: .leading)` を付け、同じ枠にする（横の配置を呼び出し側の `Spacer` や枠に頼らない）。2 つの枝で同じ下限を書くので、`labelWithCount` と同じように private の computed property か `ViewModifier` にはせず、2 か所の 1 行の modifier のままにする（A9 の「1 行の modifier を型で包まない」）。
 
 アカウントの見出しの `HStack` は既定で縦の中央揃えなので、24pt の開閉のボタンの横で、アイコンのボタンは今の大きさのまま縦の中央に並ぶ。
 
@@ -58,7 +58,7 @@ A16 は「並べる大きさを変えられないボタンは `outset` で広げ
 - 採らなかった案: 見出しの押せる範囲を `outset` で広げる（隣の行と押せる範囲が重なり、畳めない見出しの高さがそろわない）。見出しに上下の余白を付ける（書体ごとに高さが変わる）
 - 根拠: update-heading-hit-target D1・D2
 
-今のアイコンのボタン（歯車・再読み込みは余白 4 で約 24pt、Web の通知一覧・すべて既読・コピーは `outset: 3` で約 22pt、スレッドの行の既読・Done は 22pt 四方）は 20pt を満たす見込みなので、「既知の逸脱」には足さない。実装のときに手元で確かめ、満たさないものがあれば逸脱の行を足す。
+アイコンのボタンの押せる範囲を `NSHostingView` で測ると、歯車・再読み込みは 24pt 四方（余白 4）、Web の通知一覧は 22×20pt、すべて既読は 21pt 四方、その確認の文は縦 20pt（いずれも `outset: 3`）、スレッドの行の既読・Done は 22pt 四方で、20pt を満たす。コマンドの行のコピーのボタンだけは、ラベルの枠が幅しか決めておらず、コピーした後の 2 秒間に記号が `checkmark` に替わると縦が 19pt に縮んだ。ラベルの枠を `.frame(width: 16, height: 18)` にして、コピーの記号（`doc.on.doc`）の高さにそろえる（1 行の直しで済むので、逸脱として残さずにこの change で直す。記号を替えても行の高さが動かなくなる）。
 
 `ListLayout.headingHeight` は実装で足す名前で、先に文書に書くと `scripts/check-architecture.sh` の「コードの名前」の検査で止まる。文書の更新は実装と同じタスク群に置く。
 

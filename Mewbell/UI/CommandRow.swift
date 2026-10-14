@@ -24,7 +24,8 @@ struct CommandRow: View {
                 }
             } label: {
                 Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .frame(width: 16)
+                    // 記号を替えても、押せる範囲の高さが変わらないように（コピーの記号の高さにそろえる）
+                    .frame(width: 16, height: 18)
             }
             .buttonStyle(HoverHighlightButtonStyle(outset: 3))
             .help("Copy to clipboard")

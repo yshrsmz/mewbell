@@ -198,4 +198,3 @@
 
 | 原則 | 場所 | 直す change |
 | --- | --- | --- |
-| A16 | `CommandRow` のコピーのボタン（コピーした後の checkmark の間は、押せる範囲の縦が 19pt） | fix-copy-button-hit-size |
