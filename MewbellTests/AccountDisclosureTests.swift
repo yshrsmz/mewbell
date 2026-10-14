@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import Testing
@@ -64,6 +65,22 @@ struct DisclosureButtonCountTests {
     @Test(arguments: [(true, 3, Int?.some(3)), (true, 0, nil), (false, 3, nil)])
     func showsTheCountOnlyWhenCollapsedWithThreads(_ isCollapsed: Bool, _ count: Int, _ shown: Int?) {
         #expect(shownCount(isCollapsed: isCollapsed, count: count) == shown)
+    }
+}
+
+/// 見出しの高さ（開閉の押せる範囲の高さ）。畳めるときも畳めないときも `ListLayout.headingHeight` にそろう
+@MainActor
+struct DisclosureButtonHeightTests {
+    /// アカウントの見出し（`.headline`）とリポジトリの見出し（`.subheadline.weight(.semibold)`）の書体
+    private nonisolated static let fonts: [Font] = [.headline, .subheadline.weight(.semibold)]
+
+    @Test(arguments: fonts, [true, false])
+    func isTheHeadingHeight(_ font: Font, _ isCollapsible: Bool) {
+        let button = DisclosureButton(isCollapsed: true, name: "octo/app", isCollapsible: isCollapsible, count: 3) {
+        } label: {
+            Text("octo/app").font(font)
+        }
+        #expect(NSHostingView(rootView: button).fittingSize.height == ListLayout.headingHeight)
     }
 }
 

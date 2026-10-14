@@ -35,8 +35,9 @@ struct DisclosureButton<Label: View>: View {
                         .help(hint)
                     labelWithCount
                 }
-                // 見出しの行の空いている幅まで押せるようにする（アカウントの見出しは右のボタンの手前まで）
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // 見出しの行の空いている幅まで押せるようにする（アカウントの見出しは右のボタンの手前まで）。
+                // 高さは見出しの高さまで上下に広げ、中身は縦の中央に置く
+                .frame(maxWidth: .infinity, minHeight: ListLayout.headingHeight, alignment: .leading)
             }
             .buttonStyle(HoverHighlightButtonStyle())
             .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
@@ -47,6 +48,8 @@ struct DisclosureButton<Label: View>: View {
                 DisclosureChevron(isCollapsed: isCollapsed).hidden()
                 labelWithCount
             }
+            // 畳めるようになっても見出しの高さが変わらないように、畳めるときと同じ枠にする
+            .frame(maxWidth: .infinity, minHeight: ListLayout.headingHeight, alignment: .leading)
         }
     }
 

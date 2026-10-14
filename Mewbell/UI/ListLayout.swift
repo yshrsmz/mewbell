@@ -9,6 +9,9 @@ enum ListLayout {
     static let spacing: CGFloat = 6
     /// 見出しの下に置く中身の字下げ（アイコンの列の幅と間隔の分）
     static let contentIndent = iconColumnWidth + spacing
+    /// アカウントとリポジトリの見出しの高さの下限（開閉の押せる範囲の高さ）。macOS のサイドバーの小さい行と同じ。
+    /// 中身がこれより高いときは中身に合わせる
+    static let headingHeight: CGFloat = 24
     /// 区画の中の文（取得とトークンの状態、未読が無いこと、操作の失敗、案内とコマンドの行）の、行と行の間隔
     static let noteSpacing: CGFloat = 6
 }
