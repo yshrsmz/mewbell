@@ -61,3 +61,9 @@ custom_rules:
     included: 'Mewbell/(UI|App)/'
     message: "書体の大きさはテキストスタイルで指定し、ポイント数を書かない（A4）"
     severity: error
+  no_plain_button_style:
+    name: "No plain or borderless button style"
+    regex: '\.buttonStyle\(\s*(\.(plain|borderless)\b|(Plain|Borderless)ButtonStyle\()'
+    included: 'Mewbell/(UI|App)/'
+    message: "押せる要素には HoverHighlightButtonStyle を付けるか、標準の押しボタンのままにする（A16）"
+    severity: error

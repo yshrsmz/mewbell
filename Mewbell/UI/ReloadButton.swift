@@ -16,41 +16,13 @@ struct ReloadButton: View {
                 }
             }
             .frame(width: 16, height: 16)
+            // 塗りの内側の余白
+            .padding(4)
         }
-        .buttonStyle(PressableIconButtonStyle())
+        .buttonStyle(HoverHighlightButtonStyle())
         .disabled(isLoading)
         .help("Reload gh accounts, resume stopped accounts, and refetch notifications now")
         .accessibilityLabel(isLoading ? "Reloading" : "Reload")
-    }
-}
-
-/// 押している間とホバー中に、アイコンの後ろへ背景を付ける。
-struct PressableIconButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        PressableIcon(configuration: configuration)
-    }
-
-    private struct PressableIcon: View {
-        let configuration: ButtonStyleConfiguration
-        @Environment(\.isEnabled) private var isEnabled
-        @State private var isHovering = false
-
-        var body: some View {
-            configuration.label
-                .padding(4)
-                .background(
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(.primary.opacity(backgroundOpacity))
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 5))
-                .onHover { isHovering = $0 }
-        }
-
-        private var backgroundOpacity: Double {
-            guard isEnabled else { return 0 }
-            if configuration.isPressed { return 0.2 }
-            return isHovering ? 0.08 : 0
-        }
     }
 }
 

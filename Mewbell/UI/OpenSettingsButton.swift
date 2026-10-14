@@ -22,8 +22,10 @@ struct OpenSettingsButton: View {
             Button(action: open) {
                 Image(systemName: "gearshape")
                     .frame(width: 16, height: 16)
+                    // 塗りの内側の余白
+                    .padding(4)
             }
-            .buttonStyle(PressableIconButtonStyle())
+            .buttonStyle(HoverHighlightButtonStyle())
             .keyboardShortcut(",")
             .help("Settings")
             .accessibilityLabel("Settings")

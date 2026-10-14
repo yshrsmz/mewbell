@@ -180,6 +180,16 @@
 - **適用外**: なし
 - **根拠**: add-notification-fetch D4、update-reload-fetch-now D2、fix-stale-notification-list D2、add-settings D5・D6、add-thread-latest-event §3
 
+### A16. 押せる要素の見た目は、標準の押しボタンか `HoverHighlightButtonStyle` のどちらかにする
+
+- **原則**: 押せる要素（アイコンだけのボタン、行、開閉の見出しなど、標準の押しボタンの見た目でないもの）には `HoverHighlightButtonStyle` を付け、ホバー中と押している間の塗りを出す。`.plain` や `.borderless` のままにしない。標準の押しボタン（Quit、Open Settings… など）は、スタイルを付けずに macOS の標準の見た目のままにする。並べる大きさを変えられないボタンは、ラベルに余白を付けずに `outset` で塗りと押せる範囲を広げる。上に別のボタンを重ねる要素（スレッドの行）は、重ねたボタンを含めたホバーの状態を `isHovering` で渡す。
+- **理由**: `.plain` と `.borderless` は、macOS ではホバーしても見た目が変わらず、どこが押せて、押すとどの範囲が反応するかが押すまで分からない。塗りの色・透明度・押せないときの扱いを 1 つのスタイルに置けば、要素ごとに見た目が揃う。
+- **採らなかった案**:
+  - `.borderless` のまま `.onHover` で背景を足す: 押している間の塗りが出せず、要素ごとに塗りの書き方が分かれる
+  - 行・見出し・アイコンで別々のスタイルを作る: 塗りの色・透明度・押せないときの扱いが 3 か所に分かれる（A9）
+- **適用外**: なし
+- **根拠**: update-popover-hover-feedback D1・D3。振る舞いは `openspec/specs/ui/spec.md` の「ポップオーバーの押せる要素のホバーの反応」。lint の規則 `no_plain_button_style`
+
 ## 既知の逸脱
 
 原則に合わない今のコード。直したら行を消す。

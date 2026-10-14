@@ -42,21 +42,22 @@ struct ThreadRow: View {
                 }
                 Spacer(minLength: 0)
             }
-            .contentShape(Rectangle())
             .padding(.vertical, 3)
-        }
-        .buttonStyle(.plain)
-        .help("Open in browser and mark as read")
-        // ホバーのボタンの下に件名が透けないよう、ボタンの範囲と手前を消す（折り返しは変えないので行の高さは動かない）
-        .mask {
-            Rectangle()
-                .overlay(alignment: .topTrailing) {
-                    if isHovering {
-                        ThreadActionButtons.titleFade
+            // ホバーのボタンの下に件名が透けないよう、ボタンの範囲と手前を消す（折り返しは変えないので行の高さは動かない）。
+            // ラベルにだけ掛け、スタイルの塗りはボタンの下にも残す
+            .mask {
+                Rectangle()
+                    .overlay(alignment: .topTrailing) {
+                        if isHovering {
+                            ThreadActionButtons.titleFade
+                        }
                     }
-                }
-                .compositingGroup()
+                    .compositingGroup()
+            }
         }
+        // 操作のボタンに載せている間も行を塗るよう、行全体のホバーの状態で塗る
+        .buttonStyle(HoverHighlightButtonStyle(isHovering: isHovering))
+        .help("Open in browser and mark as read")
         // 上端に揃えて件名の 1 行目の高さに置く（件名が 2 行の行でも位置が変わらず、Done で繰り上がった行でもカーソルの下に来るように）
         .overlay(alignment: .topTrailing) {
             if isHovering {
@@ -115,19 +116,17 @@ private struct ThreadActionButtons: View {
             Button(action: markRead) {
                 Image(systemName: "envelope.open")
                     .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
             }
             .help("Mark as read")
             .accessibilityLabel("Mark as read")
             Button(action: markDone) {
                 Image(systemName: "checkmark")
                     .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
             }
             .help("Mark as done")
             .accessibilityLabel("Mark as done")
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(HoverHighlightButtonStyle())
         .padding(.horizontal, 2)
     }
 }
@@ -170,13 +169,13 @@ struct MarkAllReadButton: View {
             if confirming {
                 Text(labels.confirmation)
                     .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.tint)
                     .fixedSize()
             } else {
                 Image(systemName: "checkmark.circle")
             }
         }
-        .buttonStyle(.borderless)
-        .tint(confirming ? .accentColor : nil)
+        .buttonStyle(HoverHighlightButtonStyle(outset: 3))
         .disabled(!isEnabled)
         .help(labels.help(confirming: confirming))
         .accessibilityLabel(labels.accessibilityLabel(confirming: confirming))

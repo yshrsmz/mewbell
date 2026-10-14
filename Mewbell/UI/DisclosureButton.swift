@@ -35,9 +35,10 @@ struct DisclosureButton<Label: View>: View {
                         .help(hint)
                     labelWithCount
                 }
-                .contentShape(Rectangle())
+                // 見出しの行の空いている幅まで押せるようにする（アカウントの見出しは右のボタンの手前まで）
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HoverHighlightButtonStyle())
             .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
             .accessibilityHint(hint)
         } else {
