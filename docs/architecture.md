@@ -34,14 +34,15 @@
 
 ### A1. 依存は下の層へ向け、型は使う層のうち最も下に置く
 
-- **原則**: 層は 3 段に分ける。下の層は `GhCLI/` と `GitHubAPI/`、中間の層は `Accounts/`・`Polling/`・`Notifications/`・`Settings/`、上の層は `UI/` と `App/` である。下の層は中間と上の層の型を使わない。中間の層は同じ高さとして互いの型を使ってよいが、上の層の型は使わない。store と actor を持つのは中間の層で、`UI/` は表示と、表示だけに使う状態（折りたたみの `ListExpansion`、アニメーションの `DisclosureAnimations`）を受け持つ。SwiftUI と AppKit を import するのは `UI/` と `App/` だけにする。本物の部品は `AppDelegate` で組み立て、長いものは `.live(...)` にまとめて `AppDelegate` から呼ぶ。型や値は、それを使う層のうち最も下の層に置く。1 つの層だけが使うならその層に、複数の層が使うなら共通の依存先に置く（`RepositoryGroup` は `Polling/`、`hostLabel` は `UI/`、ポップオーバーと通知の両方が使う `AccountID.displayName` は `Accounts/`）。
+- **原則**: 層は 3 段に分ける。下の層は `GhCLI/` と `GitHubAPI/`、中間の層は `Accounts/`・`Polling/`・`Notifications/`・`Settings/`・`Diagnostics/`、上の層は `UI/` と `App/` である。下の層は中間と上の層の型を使わない。3 段の下に、どの層からも使ってよい最下段 `Shared/` を置く。`Shared/` はほかのどのディレクトリの型も使わない。置いてよいのは、アプリの領域の型（アカウント・スレッド・ホストなど）を知らず、下の層を含む 2 つ以上の層が使う小さな道具（`Logger(category:)`）だけにする。中間の層は同じ高さとして互いの型を使ってよいが、上の層の型は使わない。store と actor を持つのは中間の層で、`UI/` は表示と、表示だけに使う状態（折りたたみの `ListExpansion`、アニメーションの `DisclosureAnimations`）を受け持つ。SwiftUI と AppKit を import するのは `UI/` と `App/` だけにする。本物の部品は `AppDelegate` で組み立て、長いものは `.live(...)` にまとめて `AppDelegate` から呼ぶ。型や値は、それを使う層のうち最も下の層に置く。1 つの層だけが使うならその層に、複数の層が使うなら共通の依存先に置く（`RepositoryGroup` は `Polling/`、`hostLabel` は `UI/`、ポップオーバーと通知の両方が使う `AccountID.displayName` は `Accounts/`）。
 - **理由**: 下の層を UI 抜きで単体テストでき、トークンを扱う層が表示の都合で変わらない。置き場所を決める軸を 1 つにすると、移す・移さないの判断がレビューの周ごとに揺れない。
 - **採らなかった案**:
   - 値を作る層に置く: 表示のためだけに作る値（`hostLabel` など）の置き場所を別に決める必要がある
   - 中間の層にも順序を決めて上への参照を禁じる: 設定・アカウント・ポーリング・通知は互いの変化に応じて動き、順序を決めても参照を間接にする部品が増えるだけになる
   - SwiftPM のモジュールに分けて依存の向きをコンパイラで守る: プロジェクトの構成を変える大きさに見合わない。import だけを lint で守る
+  - どの層からも使う道具も、使う層のうち最も下の層（`GhCLI/`）に置く: ロガーの拡張が gh の部品に住み、次に似た道具が出たときの置き場所としても読めてしまう
 - **適用外**: なし
-- **根拠**: add-gh-account-discovery D1、add-notification-fetch D1、add-system-notifications D1、add-settings D1、add-diagnostics D1、update-notification-list D1・D6、update-list-readability D8、add-architecture-principles D6・D7。import は lint の `ui_frameworks_outside_ui` で守る
+- **根拠**: add-gh-account-discovery D1、add-notification-fetch D1、add-system-notifications D1、add-settings D1、add-diagnostics D1、update-notification-list D1・D6、update-list-readability D8、add-architecture-principles D6・D7、fix-lower-layer-dependencies D1〜D5。import は lint の `ui_frameworks_outside_ui` で守る
 
 ### A2. View と store は @MainActor、外部とのやり取りは actor に閉じ込める
 
@@ -140,7 +141,7 @@
 - **採らなかった案**:
   - 型ごとのカテゴリにする: カテゴリが増え、モジュール単位で絞りにくい
 - **適用外**: なし
-- **根拠**: 今のコード（`Mewbell/App/Logging.swift`）の形を add-architecture-principles で原則にした。`print` を使わないことは add-gh-account-discovery と add-thread-latest-event のセキュリティの節。lint の `no_print` で守る
+- **根拠**: 今のコード（`Mewbell/Shared/Logging.swift`）の形を add-architecture-principles で原則にした。`print` を使わないことは add-gh-account-discovery と add-thread-latest-event のセキュリティの節。lint の `no_print` で守る
 
 ### A12. テストは、削ったら見逃す不具合で残すかを決める
 
@@ -185,10 +186,6 @@
 
 | 原則 | 場所 | 直す change |
 | --- | --- | --- |
-| A1 | `GitHubAPI/APIEndpoints.swift` が `Accounts/` の `HostKind` を使っている | fix-lower-layer-dependencies（仮） |
-| A1 | `GitHubAPI/GitHubAPIClient.swift` が `Polling/` の `ThreadAction` を使っている | fix-lower-layer-dependencies（仮） |
-| A1 | `GhCLI/` と `GitHubAPI/` が、`App/Logging.swift` の `Logger(category:)` を使っている | fix-lower-layer-dependencies（仮） |
-| A1 | `Polling/NotificationStore.swift` が、`NSWorkspace` で URL を開く `.live` の組み立てのために AppKit を import している（lint の `ui_frameworks_outside_ui` はこのファイルを除外している。直したら除外も消す） | fix-lower-layer-dependencies（仮） |
 | A1 | `ThreadReason`・`ThreadEventText` が `UI/` にあり、`Notifications/ThreadNotificationContent.swift` から使われている | fix-shared-thread-text-placement（仮） |
 | A4 | 設定ウィンドウの下位の View（`DiagnosticsSettingsView`、`AccountSettingsSection` など）が store を直接受け取っている | fix-settings-view-inputs（仮） |
 | A10 | `AccountPoller.pendingRefreshCount` が、テストのためだけに公開されている | fix-minor-principle-deviations（仮） |

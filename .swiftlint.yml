@@ -46,7 +46,7 @@ custom_rules:
     name: "UI frameworks outside UI"
     regex: '^\s*(@\w+\s+)*import\s+(\w+\s+)?(SwiftUI|AppKit|Cocoa)\b'
     included: 'Mewbell/'
-    excluded: 'Mewbell/(UI|App)/|Mewbell/Polling/NotificationStore\.swift'
+    excluded: 'Mewbell/(UI|App)/'
     message: "SwiftUI・AppKit（Cocoa を含む）を import するのは UI/ と App/ だけ（A1）"
     severity: error
   authorization_header_outside_client:

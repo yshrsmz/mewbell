@@ -72,6 +72,8 @@ A11 の根拠に書いた `Mewbell/App/Logging.swift` を `Mewbell/Shared/Loggin
 
 `NotificationStore.live(...)` に `openURL: @escaping @MainActor (URL) -> Void` を足し、`AppDelegate` が `{ NSWorkspace.shared.open($0) }` を渡す。`NotificationStore.swift` の `import AppKit` を消し、`.swiftlint.yml` の `ui_frameworks_outside_ui` の `excluded` から `Mewbell/Polling/NotificationStore\.swift` を消す。`openURL` に既定値は持たせない（init と同じく、テストで本物のブラウザを開かないため）。
 
+引数が 6 個になり、swiftlint の `function_parameter_count`（5 個まで。init は対象外）にかかる。`.live` は init の引数を中継するだけの組み立て関数なので、`.live` にだけ `// swiftlint:disable:next function_parameter_count` を付ける。引数を減らすためだけに型を足す（コールバック 2 つを struct にまとめる）、`.live` を `convenience init` にしてほかの部品の `.live` とそろわなくする、プロジェクト全体の上限を上げる、はどれも採らない。
+
 actor の境界とスレッド: `openURL` は今までどおり `@MainActor` の関数で、`NotificationStore`（`@MainActor`）が `ThreadWebURL` の検査を通した後にだけ呼ぶ。開く経路を `NotificationStore` の `openURL` の 1 つにすること（A6）は変えない。
 
 採らなかった案:

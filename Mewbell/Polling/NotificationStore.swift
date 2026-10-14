@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import Observation
 import os
@@ -73,8 +72,11 @@ final class NotificationStore {
         }
     }
 
+    // init（規則の対象外）の引数を中継するだけの組み立て関数なので、引数の数の上限を外す
+    // swiftlint:disable:next function_parameter_count
     static func live(
         tokens: any TokenProviding, notifier: any ThreadNotifying, settings: AppSettings,
+        openURL: @escaping @MainActor (URL) -> Void,
         onNewThreads: @escaping @MainActor (AccountID, [NotificationThread]) -> Void,
         onAccountsRetained: @escaping @MainActor (Set<AccountID>) -> Void
     ) -> NotificationStore {
@@ -85,7 +87,7 @@ final class NotificationStore {
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
                     participating: participating, initialPhase: initialPhase, carriedWait: carriedWait,
                     onUpdate: onUpdate)
-            }, notifier: notifier, openURL: { NSWorkspace.shared.open($0) },
+            }, notifier: notifier, openURL: openURL,
             preferences: { settings.preferences(for: $0) }, onNewThreads: onNewThreads,
             onAccountsRetained: onAccountsRetained)
     }

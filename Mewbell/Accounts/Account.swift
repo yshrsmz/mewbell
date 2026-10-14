@@ -1,29 +1,3 @@
-/// アカウントのホストの種類。
-enum HostKind: Sendable, Equatable {
-    case gitHubDotCom
-    case gheCloud
-    case enterpriseServer
-
-    init(host: String) {
-        let host = host.lowercased()
-        if host == "github.com" {
-            self = .gitHubDotCom
-        } else if host.hasSuffix(".ghe.com") {
-            self = .gheCloud
-        } else {
-            self = .enterpriseServer
-        }
-    }
-
-    var displayName: String {
-        switch self {
-        case .gitHubDotCom: "GitHub.com"
-        case .gheCloud: "GHE Cloud"
-        case .enterpriseServer: "Enterprise Server"
-        }
-    }
-}
-
 /// `<host>/<user>` で表すアカウントの識別子。ホストは小文字にそろえる。
 struct AccountID: Hashable, Sendable, CustomStringConvertible {
     let host: String

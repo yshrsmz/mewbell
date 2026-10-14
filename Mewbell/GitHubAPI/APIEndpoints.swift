@@ -1,5 +1,31 @@
 import Foundation
 
+/// アカウントのホストの種類。
+enum HostKind: Sendable, Equatable {
+    case gitHubDotCom
+    case gheCloud
+    case enterpriseServer
+
+    init(host: String) {
+        let host = host.lowercased()
+        if host == "github.com" {
+            self = .gitHubDotCom
+        } else if host.hasSuffix(".ghe.com") {
+            self = .gheCloud
+        } else {
+            self = .enterpriseServer
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .gitHubDotCom: "GitHub.com"
+        case .gheCloud: "GHE Cloud"
+        case .enterpriseServer: "Enterprise Server"
+        }
+    }
+}
+
 /// アカウントのホストから導いた API と Web のベース URL。トークンを送ってよい相手はこの API ベースだけ。
 struct APIEndpoints: Sendable, Equatable {
     /// 小文字の検証済みホスト名
