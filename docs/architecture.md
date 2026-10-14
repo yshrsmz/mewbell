@@ -45,14 +45,14 @@
 
 ### A2. View と store は @MainActor、外部とのやり取りは actor に閉じ込める
 
-- **原則**: Swift 6 の strict concurrency を有効にし、`@MainActor` を明示する。View と、View が読む `@Observable` の型は `@MainActor` に置く。gh の実行・ファイルの読み取り・HTTP は、関心ごと（アカウントごと）の actor の中で行う。状態を持たない部品は actor にせず、`nonisolated` の `Sendable` な値型にして呼び出し元の actor の上で動かす（`GitHubAPIClient`、`APIEndpoints`、`PollSchedule`）。actor は `@MainActor` の状態を読まず、要る値は呼び出した時点の `Sendable` な値として引数で受け取る（`DiscoveryOptions`）。actor の外から同期的に触る状態は `Mutex` や `Atomic` で持つ。
+- **原則**: Swift 6 の strict concurrency を有効にし、`@MainActor` を明示する。View と、View が読む `@Observable` の型は `@MainActor` に置く。gh の実行・ファイルの読み取り・HTTP は、関心ごと（アカウントごと）の actor の中で行う。状態を持たない部品は actor にせず、`nonisolated` の `Sendable` な値型にして呼び出し元の actor の上で動かす（`GitHubAPIClient`、`APIEndpoints`、`PollSchedule`）。actor は `@MainActor` の状態を読まず、要る値は呼び出した時点の `Sendable` な値として引数で受け取る（`DiscoveryOptions`）。actor の外から同期的に触る状態は `Synchronization` の型（`Mutex` など）で持ち、actor の中だけで触る状態は actor の `var` で持つ。
 - **理由**: どのスレッドで何が動くかを型で決めれば、コンパイラが境界を守る。スナップショットで渡すと、どの値で動いたかがはっきりする。
 - **採らなかった案**:
   - 状態の無いクライアントを actor にする: 守る状態が無く、意味が無い
   - actor の中から `MainActor.assumeIsolated` などで設定を読む: 読み直しの開始時点の値を引数で渡す方が、どの値で読んだかがはっきりする
   - `SWIFT_DEFAULT_ACTOR_ISOLATION` で既定を `MainActor` にする: 境界が宣言から読み取れなくなる
 - **適用外**: なし
-- **根拠**: add-project-skeleton D1・D3、add-gh-account-discovery D2、add-notification-fetch D2・D7、fix-stale-notification-list D2、add-settings D3、add-diagnostics D6
+- **根拠**: add-project-skeleton D1・D3、add-gh-account-discovery D2、add-notification-fetch D2・D7、fix-stale-notification-list D2、add-settings D3、add-diagnostics D6、remove-poller-flag-atomic D1
 
 ### A3. 状態は残す期間で置き場所を決め、正本は 1 か所に持つ
 

@@ -28,8 +28,6 @@ actor AccountPoller {
     /// 走っているループ。actor に入らずに起動・停止できるように、ロックで持つ
     /// `discarded` は `stop()` で立て、その後は起動も再開もしない（取り除いたアカウントのトークンで取得し続けないため）
     private nonisolated let loop = Mutex<(task: Task<Void, Never>?, discarded: Bool)>((nil, false))
-    /// 次の取得を条件なしにする印（再読み込み）。actor に入らずに立てられるように、アトミックに持つ
-    nonisolated let unconditionalRequested = Atomic(false)
 
     var state = FeedState.loading
     /// 最後にすべてのページを取り終えた 200 の `Last-Modified`
@@ -47,6 +45,8 @@ actor AccountPoller {
     var readThroughs: [Int: ReadThrough] = [:]
     /// 次のすべて既読に振る番号
     var readThroughCount = 0
+    /// 次の取得を条件なしにする印（再読み込み・操作の後と、条件なしの取得を取り終えられなかったとき）。取得を早めはしない
+    var unconditionalRequested = false
     /// スレッドの件名の状態とイベント
     var details = ThreadDetailsCache()
     /// この回の、一覧を知らせる前に状態とイベントを取ったスレッド
@@ -106,15 +106,10 @@ actor AccountPoller {
         }
     }
 
-    /// 次の取得を `If-Modified-Since` なしにする。取得を早めはしない。
-    private nonisolated func requestUnconditionalFetch() {
-        unconditionalRequested.store(true, ordering: .relaxed)
-    }
-
     /// 再読み込み: 次の予定を待たずに（下限は `RefreshWaiters`）条件なしで取得し、終わるまで待つ。取得の途中なら、その後に
     /// もう 1 回取得する。止まっていれば再開して最初の取得を待つ。レート制限中とループが無いときは、早めずにすぐ戻る。
     func refreshNow() async {
-        requestUnconditionalFetch()
+        unconditionalRequested = true
         // レート制限の待ちの間だけ早めない（待ち終えて取得している途中なら、その後にもう 1 回取得する）
         guard !(state.phase.isRateLimited && sleepTask != nil) else { return }
         let stopped = state.phase.isStopped
@@ -209,7 +204,8 @@ actor AccountPoller {
     /// `If-Modified-Since` を付けない。
     private func fetch(with token: AccessToken) async -> (NotificationsFetchResult, Int) {
         // 印は送る前に下ろす（取得中に押された再読み込みを、その前に始めた取得で消さないため）
-        let requested = unconditionalRequested.exchange(false, ordering: .relaxed)
+        let requested = unconditionalRequested
+        unconditionalRequested = false
         let isDue =
             requested
             || PollSchedule.unconditionalFetchIsDue(
@@ -245,7 +241,7 @@ actor AccountPoller {
             lastFullFetch = now()
         } else if requested {
             // 取り終えられなかったので、次の取得もまた条件なしにする
-            unconditionalRequested.store(true, ordering: .relaxed)
+            unconditionalRequested = true
         }
         return (result, number)
     }
