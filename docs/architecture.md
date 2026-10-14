@@ -68,14 +68,14 @@
 
 ### A4. View に ViewModel の層を置かず、文言は View の外で決める
 
-- **原則**: データの store（`AccountStore`、`NotificationStore`、`AppSettings` など）を直接受け取るのは、シーンのルートの View（`MenuBarContentView`、`SettingsView`、`MenuBarLabel`）だけにする。それ以外の View は、値と、操作のクロージャ（`ThreadListActions` など）と、表示の状態の型（`ListExpansion`、`AccountExpansion`）だけを受け取る。表示する文言・記号・コマンドは、View の外の純粋な enum や値型で決め、単体テストする（`ThreadReason`、`ThreadEventText`、`ThreadIcon`、`ActionFailureMessage`、`GhCommand`、`UnreadBadge`）。書体の大きさはテキストスタイルで指定し、ポイント数を書かない。
+- **原則**: データの store（`AccountStore`、`NotificationStore`、`AppSettings`、`LaunchAtLogin` など、中間の層の状態を持つ `@Observable` の型）を直接受け取るのは、シーンのルートの View（`MenuBarContentView`、`SettingsView`、`MenuBarLabel`）だけにする。それ以外の View は、値と、操作のクロージャ（`ThreadListActions`、`SettingsActions` など）と、表示の状態の型（`ListExpansion`、`AccountExpansion`）だけを受け取る。表示する文言・記号・コマンドは、View の外の純粋な enum や値型で決め、単体テストする（`ThreadReason`、`ThreadEventText`、`ThreadIcon`、`ActionFailureMessage`、`GhCommand`、`UnreadBadge`）。書体の大きさはテキストスタイルで指定し、ポイント数を書かない。
 - **理由**: `@Observable` の store をルートが読めば、変換のための層を挟まずに済む。下位の View が値とクロージャだけを受け取れば、プレビューとテストで store を組まずに済み、どの操作が起きるかが引数で読める。文言を View の外に置けば、描画抜きでテストできる。
 - **採らなかった案**:
   - View ごとに ViewModel を置く: store と同じ状態を二重に持ち、同期の経路が増える
   - View で `@Environment(\.openURL)` を使って開く: テストで開いた URL を確かめられず、開く前の検査の場所が分かれる
   - 書体を共有の型（`ListTypography` など）にまとめる: ほとんどが 1 行の modifier で、型を挟むと読む場所が増えるだけになる
 - **適用外**: なし
-- **根拠**: add-notification-fetch D9、add-system-notifications D8、add-thread-actions D7、add-web-notifications-link D2、update-list-readability D1・D7、add-thread-latest-event §2。書体のポイント数は lint の `fixed_font_size` で守る
+- **根拠**: add-notification-fetch D9、add-system-notifications D8、add-thread-actions D7、add-web-notifications-link D2、update-list-readability D1・D7、add-thread-latest-event §2、fix-settings-view-inputs D1・D2。書体のポイント数は lint の `fixed_font_size` で守る
 
 ### A5. 外部はプロトコルかクロージャの裏に置き、テストでは本物に触れない
 
@@ -186,4 +186,3 @@
 
 | 原則 | 場所 | 直す change |
 | --- | --- | --- |
-| A4 | 設定ウィンドウの下位の View（`DiagnosticsSettingsView`、`AccountSettingsSection` など）が store を直接受け取っている | fix-settings-view-inputs（仮） |
