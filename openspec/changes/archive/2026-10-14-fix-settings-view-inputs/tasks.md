@@ -13,7 +13,7 @@
   - `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` で全テストを通す。
   - `MEWBELL_WARNINGS_AS_ERRORS=YES` で、Debug と Release のビルドを通す。
   - `bash scripts/lint.sh` と `pnpm exec openspec validate --all --strict` を通す。
-- [ ] 2.2 `bash scripts/run.sh` で起動し、設定ウィンドウを手元で確かめる。General: 「Launch at login」と「Play a sound」の切り替えが反映され、設定ウィンドウを閉じて開き直しても保たれること。Accounts: アカウントの「Enabled」を切ると下の 2 つのトグルが無効になり、ポップオーバーからそのアカウントの区画が消えること、「Only threads I'm participating in」と「Show macOS notifications」の切り替えが保たれること。gh: 実行ファイルのパスに使えないパスを入れて Return を押すと警告が出て、Reset で消えること。Diagnostics: 次の取得の後に「Last fetched」の時刻が進むこと、Copy で `Copied` に変わること。
+- [x] 2.2 `bash scripts/run.sh` で起動し、設定ウィンドウを手元で確かめる。General: 「Launch at login」と「Play a sound」の切り替えが反映され、設定ウィンドウを閉じて開き直しても保たれること。Accounts: アカウントの「Enabled」を切ると下の 2 つのトグルが無効になり、ポップオーバーからそのアカウントの区画が消えること、「Only threads I'm participating in」と「Show macOS notifications」の切り替えが保たれること。gh: 実行ファイルのパスに使えないパスを入れて Return を押すと警告が出て、Reset で消えること。Diagnostics: 次の取得の後に「Last fetched」の時刻が進むこと、Copy で `Copied` に変わること。（Accounts のトグルと「Play a sound」は AX で操作して確かめた。「Launch at login」・gh のパスの入力・Diagnostics の更新と Copy はユーザーが目で確かめた）
 
 ## 3. レビュー
 
