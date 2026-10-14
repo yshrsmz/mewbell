@@ -1,5 +1,4 @@
 import Foundation
-import Synchronization
 import os
 
 // 一覧のスレッドへの操作と、操作したスレッドを取得の結果から隠す処理
@@ -33,7 +32,7 @@ extension AccountPoller {
         // 結果が 304 に隠れないように、また失敗したスレッドが一覧に戻るように、次は条件なしで取り直す
         // （失敗を知らせる前に済ませる。知らせている間に始まった取得で、スレッドが戻らないまま知らせが消えないように）
         HiddenThreads.endRequest(for: threadID, fetchCount: fetchCount, in: &hidden)
-        unconditionalRequested.store(true, ordering: .relaxed)
+        unconditionalRequested = true
         if let failure { await recordActionFailure(ThreadActionKind(action), failure) }
     }
 
@@ -64,7 +63,7 @@ extension AccountPoller {
         readThroughs[serial]?.finish(
             succeeded: result == .succeeded, fetchCount: fetchCount, at: now(), holdFor: Self.unconditionalFetchInterval
         )
-        unconditionalRequested.store(true, ordering: .relaxed)
+        unconditionalRequested = true
         if let failure = FailureKind(result) {
             await recordActionFailure(.markAllRead, failure)
         }

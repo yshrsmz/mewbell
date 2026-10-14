@@ -12,6 +12,7 @@
 - `requestUnconditionalFetch()` を消し、印を立てる 4 か所をすべて `unconditionalRequested = true` と書く。
 - `fetch` で印を下ろす `exchange(false, ordering: .relaxed)` を、値を読んでから `false` を代入する 2 行にする。送る前に下ろす順序は変えない。
 - `AccountPoller+ThreadActions.swift` の `import Synchronization` を消す（`AccountPoller.swift` は `loop` の `Mutex` で引き続き使う）。
+- `docs/architecture.md` の A2 から、コードに無くなる `Atomic` の名前を外し、今の形（外から触る状態は `Synchronization` の型、中だけで触る状態は actor の `var`）に書き直す。
 
 アプリの振る舞いは変えない。
 
@@ -28,5 +29,5 @@
 ## Impact
 
 - マイルストーン: 特定のマイルストーンには属さない保守の change。M2（fix-stale-notification-list）と M4（update-reload-fetch-now）で入れた `AccountPoller` の印を、A2 に合わせる。
-- 変更するもの: `Mewbell/Polling/AccountPoller.swift`、`Mewbell/Polling/AccountPoller+ThreadActions.swift`。テストは変えない。
+- 変更するもの: `Mewbell/Polling/AccountPoller.swift`、`Mewbell/Polling/AccountPoller+ThreadActions.swift`、`docs/architecture.md`（A2）。テストは変えない。
 - トークン・gh サブプロセス・ネットワーク・URL を開く処理: いずれにも触れない。取得の条件（`If-Modified-Since` を付けるか）を決める印の持ち方だけを変え、送り先・ヘッダー・トークンの扱いは変えない。トークンは今までどおりメモリにだけ持ち、永続化しない。
