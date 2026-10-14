@@ -2,7 +2,7 @@
 
 ## 1. 下の層から上の層への型の参照を無くす
 
-- [x] 1.1 `HostKind`（`init(host:)` と `displayName` を含む）を `Mewbell/Accounts/Account.swift` から `Mewbell/GitHubAPI/APIEndpoints.swift` の先頭へ移す。中身は変えず、`Account.hostKind` は `Accounts/` に残す（design.md D1）。`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test -only-testing:MewbellTests/APIEndpointsTests -only-testing:MewbellTests/AccountDiscoveryTests` が、テストを変えずに通ることを確かめる（「N tests in M suites」のスイート数も確かめる）。`git grep -n "HostKind" Mewbell/GitHubAPI` に `Accounts/` の型の参照が残っていないことも確かめる。
+- [x] 1.1 `HostKind`（`init(host:)` を含む）を `Mewbell/Accounts/Account.swift` から `Mewbell/GitHubAPI/APIEndpoints.swift` の先頭へ移す。表示名の `displayName` は `Accounts/` の `extension HostKind` に残し、`Account.hostKind` も `Accounts/` に残す（design.md D1）。`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test -only-testing:MewbellTests/APIEndpointsTests -only-testing:MewbellTests/AccountDiscoveryTests` が、テストを変えずに通ることを確かめる（「N tests in M suites」のスイート数も確かめる）。`git grep -n "HostKind" Mewbell/GitHubAPI` に `Accounts/` の型の参照が残っていないことも確かめる。
 - [x] 1.2 `GitHubAPIClient.perform(_:endpoints:token:)` を消し、`AccountPoller+ThreadActions.swift` の `perform(_:)` で `ThreadAction` を `switch` して、`client.markThreadRead` と `client.markThreadDone` を呼び分ける（design.md D2）。`git grep -n "ThreadAction\b" Mewbell/GitHubAPI` が何も返さないこと（`ThreadActionResult` は残る）と、`-only-testing:MewbellTests/MarkReadPollingTests -only-testing:MewbellTests/DonePollingTests -only-testing:MewbellTests/MarkThreadReadTests -only-testing:MewbellTests/MarkThreadDoneTests` が、テストを変えずに通ることを確かめる。
 
 ## 2. `Shared/` を足し、ロガーの拡張を移す
@@ -34,6 +34,6 @@
 
 ## 5. レビュー
 
-- [ ] 5.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。
-- [ ] 5.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。
-- [ ] 5.3 ロジックの変更を含む修正が多ければ、5.2 を新しいサブエージェントでもう一度実行する。
+- [x] 5.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。（指摘なし。作業ツリーは変わらなかった）
+- [x] 5.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。（指摘 7 件。5 件を直し、2 件は直さない。理由は PR 本文）
+- [x] 5.3 ロジックの変更を含む修正が多ければ、5.2 を新しいサブエージェントでもう一度実行する。（直したのは置き場所・名前・文書だけで、ロジックの変更が無いので再実行しない）

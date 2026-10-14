@@ -31,19 +31,19 @@
 
 ## Decisions
 
-### D1. `HostKind` を丸ごと `GitHubAPI/APIEndpoints.swift` へ移す（A1）
+### D1. `HostKind` を `GitHubAPI/APIEndpoints.swift` へ移し、表示名だけを `Accounts/` に置く（A1）
 
-`HostKind` の enum を、`init(host:)` と `displayName` ごと `APIEndpoints.swift` の先頭に移す。ホスト種別は「どの API ベースへ送るか」の分類で、`APIEndpoints.init?(host:)` がその規則の本体である。`Account.hostKind` は `Accounts/` に残す。`Accounts/` は下の層の型を使ってよいので、そのままでよい。
+`HostKind` の enum と `init(host:)` を `APIEndpoints.swift` の先頭に移す。ホスト種別は「どの API ベースへ送るか」の分類で、`APIEndpoints.init?(host:)` がその規則の本体である。表示名の `displayName` は、使うのが `UI/`（`hostLabel`）と `Diagnostics/` なので、A1 のとおりその共通の依存先の `Accounts/`（`Account.swift` の `extension HostKind`）に置く。`Account.hostKind` も `Accounts/` に残す。`Accounts/` は下の層の型を使ってよいので、そのままでよい。
 
 採らなかった案:
 
 - `HostKind` を独立したファイル（`GitHubAPI/HostKind.swift`）にする: 規則を使うのは `APIEndpoints` で、分類と URL の導出が同じファイルにあれば、ホストの種類を足すときに両方を一度に見られる。
-- `displayName` を表示の側（`UI/` か `Accounts/` の extension）に残す: 使うのは `UI/` と `Diagnostics/` で、その共通の依存先は `Accounts/` になる。enum と表示名が 2 つのファイルに分かれ、種類を足したときに表示名の書き漏れを `switch` で気づけても、置き場所が増えるだけになる。表示名は 3 つの固定の文字列で、下の層に置いても表示の都合が下の層を変える心配はほぼない。
+- `displayName` も enum と一緒に `GitHubAPI/` に置く: 表示用の文字列が下の層に入り、A1 の「使う層のうち最も下（複数なら共通の依存先）」に合わない。enum と表示名が 2 つのファイルに分かれても、`default` の無い `switch` なので種類を足したときの書き漏れはコンパイラが知らせる（code-review の指摘で、この形に改めた）。
 - `APIEndpoints` の中でホストの分類を書き直し、`HostKind` は `Accounts/` に残す: 同じ規則（`github.com`、`*.ghe.com`、それ以外）が 2 か所に分かれる。
 
 ### D2. `GitHubAPIClient.perform(_:)` を消し、`AccountPoller` が呼び分ける（A1）
 
-`GitHubAPIClient.perform(_:endpoints:token:)` を消す。`AccountPoller+ThreadActions.swift` の `perform(_:)` では、`ThreadAction` の `switch` で `client.markThreadRead(...)` と `client.markThreadDone(...)` を呼び分ける。`ThreadAction` は `Polling/` に残る。`GitHubAPIClient` の公開メソッドは、`markAllRead` と同じくエンドポイントの単位にそろう。
+`GitHubAPIClient.perform(_:endpoints:token:)` を消す。`AccountPoller+ThreadActions.swift` に `private func markThread(_:token:)` を置き、`ThreadAction` の `switch` で `client.markThreadRead(...)` と `client.markThreadDone(...)` を呼び分ける。`perform(_:)` はこれを呼ぶ。名前を `send` にしないのは、トークンの経路を監査するときに `GitHubAPIClient.send` と紛れないため。`ThreadAction` は `Polling/` に残る。`GitHubAPIClient` の公開メソッドは、`markAllRead` と同じくエンドポイントの単位にそろう。
 
 actor の境界は変えない。呼び分けは `AccountPoller` の actor の上で動き、`GitHubAPIClient` は今までどおり `nonisolated` の値型として、呼び出し元の actor の上で動く（A2）。
 
@@ -78,7 +78,7 @@ actor の境界とスレッド: `openURL` は今までどおり `@MainActor` の
 
 採らなかった案:
 
-- `.live` を `App/` の extension（`NotificationStore+Live.swift`）に移す: AppKit は消えるが、A1 の「長いものは `.live(...)` にまとめて型の隣に置き、`AppDelegate` から呼ぶ」の形から外れる。ほかの部品の `.live` と置き場所がそろわなくなる。
+- `.live` を `App/` の extension（`NotificationStore+Live.swift`）に移す: AppKit は消えるが、A1 は「長いものは `.live(...)` にまとめて `AppDelegate` から呼ぶ」とだけ決めていて置き場所は決めていないが、今の部品の `.live`（`AccountDiscovery.live` など）はどれも型と同じファイルにあり、1 つだけ `App/` に置くとそろわなくなる。
 - `NotificationStore.swift` で `NSWorkspace` の代わりに Foundation だけで開く: macOS で URL を既定のブラウザで開く公開の手段は AppKit（`NSWorkspace`）か SwiftUI（`openURL`）で、どちらも上の層の framework になる。
 
 ### D5. A1 の中間の層に `Diagnostics/` を足す（A1）
@@ -92,7 +92,7 @@ A1 の中間の層の一覧に `Diagnostics/` を足す。働き（`Polling/` �
 ## Risks / Trade-offs
 
 - [`Shared/` が、何でも置く場所になる] → 置いてよいものの条件（領域の型を知らない、下の層を含む 2 つ以上の層が使う、小さな道具）を A1 に書き、レビューの判断の根拠にする。
-- [`HostKind.displayName` という表示用の文字列が下の層に入る] → 文字列は 3 つの固定値で、トークンや API の振る舞いには関わらない。表示を変えたくなったら、そのときに表示の側へ分ける。
+- [ホストの種類を足すときに、`GitHubAPI/` の enum と `Accounts/` の表示名の 2 か所を直す必要がある] → 表示名の `switch` に `default` が無いので、書き漏れはコンパイルで止まる。
 - [`project.xcproj` が新しいディレクトリを取り込まない] → フォルダの同期で取り込む前提だが、`Shared/` を足した後に `xcodebuild -list` と Debug のビルドで確かめる。取り込まれなければ `project.xcproj` を直す。
 - [`perform` を消すと、既読と Done で送る先を取り違える] → 呼び分けは `switch` の 2 行で、`MarkReadPollingTests`（既読と Done で送ったメソッドを確かめる）と `DonePollingTests` がそのまま通ることで確かめる。
 

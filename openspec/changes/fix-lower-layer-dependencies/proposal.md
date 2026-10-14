@@ -13,7 +13,7 @@
 
 ## What Changes
 
-- `HostKind`（表示名の `displayName` を含む）を `Accounts/Account.swift` から `GitHubAPI/APIEndpoints.swift` へ移す。ホスト種別は API ベース URL を導くための分類で、使う層のうち最も下は `GitHubAPI/` である。
+- `HostKind` を `Accounts/Account.swift` から `GitHubAPI/APIEndpoints.swift` へ移す。ホスト種別は API ベース URL を導くための分類で、使う層のうち最も下は `GitHubAPI/` である。表示名の `displayName` は、使う `UI/` と `Diagnostics/` の共通の依存先の `Accounts/` に残す。
 - `GitHubAPIClient.perform(_:endpoints:token:)` を消す。`AccountPoller.perform(_:)` が `ThreadAction` に応じて `markThreadRead` と `markThreadDone` を呼び分ける。`ThreadAction` は `Polling/` に残す。
 - `Mewbell/Shared/` を新しく作り、`App/Logging.swift` を `Shared/Logging.swift` に移す。A1 に「どの層からも使ってよい最下段 `Shared/`」を足し、置いてよいものの条件を書く。
 - `NotificationStore.live(...)` に `openURL` の引数を足し、`AppDelegate` から `NSWorkspace.shared.open` を渡す。`NotificationStore.swift` の `import AppKit` と、`.swiftlint.yml` の `ui_frameworks_outside_ui` からこのファイルの除外を消す。

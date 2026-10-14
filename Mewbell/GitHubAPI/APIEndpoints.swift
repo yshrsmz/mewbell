@@ -16,14 +16,6 @@ enum HostKind: Sendable, Equatable {
             self = .enterpriseServer
         }
     }
-
-    var displayName: String {
-        switch self {
-        case .gitHubDotCom: "GitHub.com"
-        case .gheCloud: "GHE Cloud"
-        case .enterpriseServer: "Enterprise Server"
-        }
-    }
 }
 
 /// アカウントのホストから導いた API と Web のベース URL。トークンを送ってよい相手はこの API ベースだけ。

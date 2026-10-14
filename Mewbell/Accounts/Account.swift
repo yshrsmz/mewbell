@@ -1,3 +1,14 @@
+/// 一覧の見出しと Diagnostics に出す、ホストの種類の表示名。
+extension HostKind {
+    var displayName: String {
+        switch self {
+        case .gitHubDotCom: "GitHub.com"
+        case .gheCloud: "GHE Cloud"
+        case .enterpriseServer: "Enterprise Server"
+        }
+    }
+}
+
 /// `<host>/<user>` で表すアカウントの識別子。ホストは小文字にそろえる。
 struct AccountID: Hashable, Sendable, CustomStringConvertible {
     let host: String
