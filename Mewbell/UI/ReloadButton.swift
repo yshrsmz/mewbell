@@ -16,6 +16,8 @@ struct ReloadButton: View {
                 }
             }
             .frame(width: 16, height: 16)
+            // 塗りの内側の余白
+            .padding(4)
         }
         .buttonStyle(HoverHighlightButtonStyle())
         .disabled(isLoading)

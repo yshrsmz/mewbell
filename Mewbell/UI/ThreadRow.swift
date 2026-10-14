@@ -57,7 +57,7 @@ struct ThreadRow: View {
             }
         }
         // 操作のボタンに載せている間も行を塗るよう、行全体のホバーの状態で塗る
-        .buttonStyle(HoverHighlightButtonStyle(padding: 0, isHovering: isHovering))
+        .buttonStyle(HoverHighlightButtonStyle(isHovering: isHovering))
         .help("Open in browser and mark as read")
         // 上端に揃えて件名の 1 行目の高さに置く（件名が 2 行の行でも位置が変わらず、Done で繰り上がった行でもカーソルの下に来るように）
         .overlay(alignment: .topTrailing) {
@@ -129,7 +129,7 @@ private struct ThreadActionButtons: View {
             .help("Mark as done")
             .accessibilityLabel("Mark as done")
         }
-        .buttonStyle(HoverHighlightButtonStyle(padding: 0))
+        .buttonStyle(HoverHighlightButtonStyle())
         .padding(.horizontal, 2)
     }
 }
@@ -178,7 +178,7 @@ struct MarkAllReadButton: View {
                 Image(systemName: "checkmark.circle")
             }
         }
-        .buttonStyle(HoverHighlightButtonStyle(padding: 0, outset: 4))
+        .buttonStyle(HoverHighlightButtonStyle(outset: 4))
         .disabled(!isEnabled)
         .help(labels.help(confirming: confirming))
         .accessibilityLabel(labels.accessibilityLabel(confirming: confirming))

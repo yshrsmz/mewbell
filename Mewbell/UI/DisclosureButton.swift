@@ -39,7 +39,7 @@ struct DisclosureButton<Label: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(HoverHighlightButtonStyle(padding: 0))
+            .buttonStyle(HoverHighlightButtonStyle())
             .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
             .accessibilityHint(hint)
         } else {
