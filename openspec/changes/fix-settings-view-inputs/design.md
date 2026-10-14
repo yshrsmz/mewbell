@@ -38,8 +38,8 @@
 
 ### D2. General・gh タブは、ルートが store を読んで値を渡す（A4・A3）
 
-- `GeneralSettingsView` は、`notificationSound: Bool` と、ログイン項目の `status: LoginItemStatus`・`failed: Bool`・`isOn: Bool` を値で受け取る。`isOn` は `LaunchAtLogin.isOn` の値をそのまま渡し、承認待ちを含めるという判断を `LaunchAtLogin` の 1 か所に残す。開いたときの読み直し（`.onAppear`）は `SettingsActions` の読み直しを呼ぶ。
-- `GhSettingsView` は、`ghExecutableOverride: String?` と `ghConfigDirectoryOverride: String?` を値で受け取り、`PathOverrideField` の `commit` に `SettingsActions` の確定を渡す。パスの検査（`ExecutableValidator`・`ConfigDirectoryValidator`）は今のまま `GhSettingsView` から呼ぶ。
+- `GeneralSettingsView` は、`notificationSound: Bool` と、ログイン項目の `launchAtLoginStatus: LoginItemStatus`・`launchAtLoginFailed: Bool`・`launchAtLoginIsOn: Bool` を値で受け取る。`isOn` は `LaunchAtLogin.isOn` の値をそのまま渡し、承認待ちを含めるという判断を `LaunchAtLogin` の 1 か所に残す。開いたときの読み直し（`.onAppear`）は `SettingsActions` の読み直しを呼ぶ。
+- `GhSettingsView` は、`executableOverride: String?` と `configDirectoryOverride: String?` を値で受け取り、`PathOverrideField` の `commit` に `SettingsActions` の確定を渡す。パスの検査（`ExecutableValidator`・`ConfigDirectoryValidator`）は今のまま `GhSettingsView` から呼ぶ。
 
 ルートの `body` がこれらの値を読むので、値が変わるとルートの `body` が評価し直される。変わるのはユーザーの操作と、General タブを開いたときの読み直しだけなので、描き直しの粒度は問題にならない。
 
@@ -55,6 +55,8 @@
 - `AccountSettingsSection` は、`account: Account`・`preferences: AccountPreferences`・`SettingsActions` を受け取る。トグルの `Binding` は、値から読んで、`SettingsActions` の操作で書く。
 
 `preferences` はクロージャで渡すので、`AppSettings.accountPreferences` を読むのは `AccountsSettingsView` の `body` になる。アカウントの設定を変えたときに描き直すのは Accounts タブの中だけになる。
+
+`accountPreferences` は 1 つの辞書のプロパティで、Observation はプロパティの単位で観測する。区画の `body` で読んでも、1 つのトグルで全区画を評価し直す（store を受け取っていた形でも同じだった）。区画ごとに観測を分けるには、アカウントごとの `@Observable` の型が要る。それを求める要件もテストも無いので足さない（A9）。
 
 採らなかった案:
 
@@ -78,7 +80,7 @@
 
 ## Risks / Trade-offs
 
-- [ルートの `body` が設定の値を読むので、General と gh の操作のたびに設定ウィンドウ全体を評価し直す] → 操作はユーザーの手によるもので回数が少ない。ポーリングのたびの描き直しは D4 のとおり Diagnostics の中にとどまる。
+- [ルートの `body` が設定の値を読むので、General と gh の操作のたび、General を開いたときの読み直しでログイン項目の状態が変わったときに、ルートの `body` を評価し直す。子に渡すクロージャ（`SettingsActions`、`report`）は比較できないので、作られているタブの `body` もすべて評価し直し、Diagnostics の報告も組み直す] → きっかけはユーザーの操作だけで回数が少なく、Form 数枚の評価し直しは設定ウィンドウでは問題にならない。ポーリングのたびの描き直しは D4 のとおり Diagnostics の中にとどまる。各タブに読み取りのクロージャを渡してルートが store を読まない形は、クロージャが 6 つ増え、プレビューも値で書けなくなるので採らない。
 - [`SettingsActions` のメンバーを足し忘れたり、別のメソッドにつないだりしても、コンパイラでは気づけない] → 組み立ては `SettingsView` の 1 か所だけにする。手元で各タブの操作を確かめる（tasks の確認）。
 - [`DiagnosticsSettingsView` が、クロージャを呼ぶだけの薄い View になる] → 観測の粒度を保つために要る。doc コメントに理由を書き、次のレビューで「畳める」と指摘されたときに理由が読めるようにする。
 
