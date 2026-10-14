@@ -26,7 +26,7 @@ struct CommandRow: View {
                 Image(systemName: copied ? "checkmark" : "doc.on.doc")
                     .frame(width: 16)
             }
-            .buttonStyle(HoverHighlightButtonStyle(outset: 4))
+            .buttonStyle(HoverHighlightButtonStyle(outset: 3))
             .help("Copy to clipboard")
             .accessibilityLabel("Copy \(command)")
         }

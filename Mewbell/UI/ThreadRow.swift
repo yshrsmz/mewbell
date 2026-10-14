@@ -42,7 +42,6 @@ struct ThreadRow: View {
                 }
                 Spacer(minLength: 0)
             }
-            .contentShape(Rectangle())
             .padding(.vertical, 3)
             // ホバーのボタンの下に件名が透けないよう、ボタンの範囲と手前を消す（折り返しは変えないので行の高さは動かない）。
             // ラベルにだけ掛け、スタイルの塗りはボタンの下にも残す
@@ -117,14 +116,12 @@ private struct ThreadActionButtons: View {
             Button(action: markRead) {
                 Image(systemName: "envelope.open")
                     .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
             }
             .help("Mark as read")
             .accessibilityLabel("Mark as read")
             Button(action: markDone) {
                 Image(systemName: "checkmark")
                     .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
             }
             .help("Mark as done")
             .accessibilityLabel("Mark as done")
@@ -178,7 +175,7 @@ struct MarkAllReadButton: View {
                 Image(systemName: "checkmark.circle")
             }
         }
-        .buttonStyle(HoverHighlightButtonStyle(outset: 4))
+        .buttonStyle(HoverHighlightButtonStyle(outset: 3))
         .disabled(!isEnabled)
         .help(labels.help(confirming: confirming))
         .accessibilityLabel(labels.accessibilityLabel(confirming: confirming))

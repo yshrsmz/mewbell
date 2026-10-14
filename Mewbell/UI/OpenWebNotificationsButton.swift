@@ -10,7 +10,7 @@ struct OpenWebNotificationsButton: View {
         Button(action: action) {
             Image(systemName: "arrow.up.forward.square")
         }
-        .buttonStyle(HoverHighlightButtonStyle(outset: 4))
+        .buttonStyle(HoverHighlightButtonStyle(outset: 3))
         .help(label)
         .accessibilityLabel(label)
     }
