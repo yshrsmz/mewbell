@@ -4,7 +4,8 @@
 
 - [ ] 1.1 `ListLayout` に `headingHeight`（24）を足し、`DisclosureButton` の畳めるときのラベルの枠に `minHeight`、畳めないときの `HStack` に `.frame(minHeight:)` を付ける（design D1・D2）。`RepositoryGroupView` の `#Preview("Collapsed")` で、見出しが上下に広がり、長いホスト名の `grace` の見出しの省略の仕方が変わらないことを確かめる
 - [ ] 1.2 `MewbellTests/` に、`.headline` と `.subheadline.weight(.semibold)` の中身で、畳めるときと畳めないときの `DisclosureButton` の `fittingSize` の高さが `ListLayout.headingHeight` であることを `NSHostingView` で測るテストを足す（design D4）。1.1 の下限を外すと落ちることを一度確かめてから戻す。`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test -only-testing:MewbellTests/<スイートの型名>` で、結果のスイート数が 1 であることも確かめる
-- [ ] 1.3 `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` を `-only-testing` を付けずに回し、寸法を測る既存のテスト（`IconColumnTests` など）を含めて通ることを確かめる
+- [ ] 1.3 スキル `update-architecture-doc` の手順で、`docs/architecture.md` の A16 に押せる範囲の大きさ（縦横 20pt 以上、見出しは `ListLayout.headingHeight`）を書き足す（design D5）。ポップオーバーのアイコンのボタンの押せる範囲が 20pt 以上かを手元で確かめ、満たさないものがあれば「既知の逸脱」に行を足す。`bash scripts/check-architecture.sh` が通ることを確かめる
+- [ ] 1.4 `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` を `-only-testing` を付けずに回し、寸法を測る既存のテスト（`IconColumnTests` など）を含めて通ることを確かめる
 
 ## 2. 手元での確認（spec の Scenario ごと）
 

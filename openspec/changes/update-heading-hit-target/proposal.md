@@ -26,6 +26,7 @@
 ## Impact
 
 - コード: `Mewbell/UI/ListLayout.swift`（見出しの高さの寸法を足す）、`Mewbell/UI/DisclosureButton.swift`（見出しの中身に高さの下限を付ける）、`MewbellTests/`（見出しの高さを `NSHostingView` で測るテスト）
+- 文書: `docs/architecture.md` の A16 に、押せる範囲の大きさ（縦横 20pt 以上、見出しの高さ）を書き足す
 - トークン: 触れない
 - gh サブプロセス: 触れない
 - ネットワーク: 触れない
