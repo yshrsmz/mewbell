@@ -23,7 +23,7 @@ struct OpenSettingsButton: View {
                 Image(systemName: "gearshape")
                     .frame(width: 16, height: 16)
             }
-            .buttonStyle(PressableIconButtonStyle())
+            .buttonStyle(HoverHighlightButtonStyle())
             .keyboardShortcut(",")
             .help("Settings")
             .accessibilityLabel("Settings")
