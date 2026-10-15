@@ -26,5 +26,5 @@
 - [x] 5.1 別コンテキストの opus サブエージェント（`general-purpose`）で `simplify` を実行し、入った変更を確かめる
 - [x] 5.2 別の opus サブエージェントで `code-review` を effort `medium` で実行し、指摘ごとに直す・直さない（理由）を決めて対応する。ロジックの変更を含む修正が多いときは、もう一度 `code-review` を新しいサブエージェントで回す
 - [x] 5.4 レビューの指摘が集まった `NotificationThread` の `subjectNumber` と `releaseID` を、経緯を渡さないサブエージェントの評価とユーザーの確認を経て `detailsSubject: DetailsSubject?` にまとめる（design D2 の今の形）。確認: `ThreadDetailsSubjectTests` ほか全テスト、lint、警告をエラー扱いにした Debug と Release のビルドが通る
-- [ ] 5.5 ロジックの変更を含むので、新しいサブエージェントでもう一度 `code-review`（effort `medium`）を回し、指摘に対応する
+- [x] 5.5 ロジックの変更を含むので、新しいサブエージェントでもう一度 `code-review`（effort `medium`）を回し、指摘に対応する
 - [ ] 5.3 PR 本文の Test plan に、simplify と code-review をサブエージェントで実行したこと、指摘の件数と対応を書く。トークン・ネットワーク・URL を開く処理に触れるので、「セキュリティ上の確認」の節を設ける

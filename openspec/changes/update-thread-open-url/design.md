@@ -38,7 +38,8 @@
 `ThreadDetails` に `releaseTag: String?` を足す。Release のスレッドでは `state` と `event` は nil、Issue と Pull request では `releaseTag` は nil になる。
 
 - 代替案: クリックしたときに取る → ブラウザが開くまで通信を待つ。macOS の通知の経路は起動の直後でトークンが無いことがあり、2 つの経路で別々に取る処理が要る（ユーザーと確認して採らなかった）
-- 代替案: `ThreadDetails` を Issue 用と Release 用の enum にする → 状態のアイコンやイベントの表示（`details?.state`、`details?.event`）の読み出しをすべて変えることになる。足す値が 1 つなので、任意の値を 1 つ足す（A9）
+- 代替案: `ThreadDetails` を Issue 用と Release 用の enum にする → `ThreadDetails` を読む側（`state`・`event` を読む行と通知、`releaseTag` を読む `ThreadWebURL.make`）に Issue か Release かで分岐する箇所が無く、排他は `kind` と `DetailsSubject` がすでに表しているので、3 か所目で同じ事実を表す型は要らない（A9）。任意の値を 1 つ足す。2 回目の code-review で指摘されたが、経緯を渡さないサブエージェントの評価とユーザーの確認を経て今の形を残した
+- 代替案: タグを失敗しうる init を持つ `ReleaseTag` 型にして検証を 1 回にする → 本体でタグを作るのは `fetchReleaseTag`（検証する）、使うのは `make`（`ThreadWebURL` の関所でもう一度検証する。A6）の 1 か所ずつで、要件もテストも型を求めていない（A9）。同じく今の形を残した
 - 代替案: `subjectNumber` を残し、`releaseID: String?` を別の欄として足す（最初の実装の形）→ 排他の 2 つの欄の組み合わせの意味を `pending` と `fetchDetails` の両方が知る必要があり、`subject.url` の検証もデコードで 2 回走る。新しい欄の既定値のために手書きの init も要った。simplify と code-review の指摘を受け、経緯を渡さないサブエージェントに要件・原則・最小であることで評価させて、ユーザーと確かめて enum にした
 - 代替案: タグを `ThreadDetailsCache` とは別の記録に持つ → 覚え方・失敗の回数・レート制限・止まったときに捨てる処理を二重に持つことになる（A3 の正本は 1 か所）
 
