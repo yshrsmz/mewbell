@@ -185,6 +185,19 @@ extension ThreadDetailsRequestTests {
         #expect(await fetch(thread, endpoints, transport(list: Self.waiting([]), created: created)) == .unavailable)
     }
 
+    /// 承認を待っている run は、承認できないか時刻が合わずに外したものなので、通知の時刻に動いていても拾い直さない。
+    @Test func doesNotTakeBackAWaitingRunItRejected() async throws {
+        let (thread, endpoints) = try approvalThread()
+        let waitingRun =
+            #"{"id": 103, "name": "Deploy", "status": "waiting", "run_started_at": "2026-10-08T11:55:00Z", "#
+            + #""updated_at": "2026-10-08T11:56:00Z"}"#
+        let list = HTTPResponse(
+            statusCode: 200, body: Data(#"{"total_count": 1, "workflow_runs": [\#(waitingRun)]}"#.utf8))
+        let transport = transport(list: list, created: list) { _ in Self.pending(canApprove: false) }
+        #expect(await fetch(thread, endpoints, transport) == .unavailable)
+        #expect(transport.requests.count == 3)
+    }
+
     /// 承認を待っている run の一覧が「無い」（Actions を読めないなど）でも探す。
     @Test func searchesTheSpanningRunAfterANotFoundWaitingList() async throws {
         let (thread, endpoints) = try approvalThread()

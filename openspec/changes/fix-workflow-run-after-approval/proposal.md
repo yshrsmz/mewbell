@@ -15,7 +15,7 @@
 ## What Changes
 
 - 種類が `WorkflowRun` のスレッドで、承認を待っている run から run が決まらない（「無い」になる）ときは、`GET /repos/{owner}/{name}/actions/runs?created=<=<スレッドの updated_at>&per_page=30` で、通知より前に作られた run を取る。
-- そのうち、`run_started_at` がスレッドの `updated_at` 以前で、終わった時刻（`status` が `completed` なら `updated_at`、終わっていなければ今）がスレッドの `updated_at` 以降の run（通知の時刻を挟む run）が 1 件だけなら、その run にする。0 件か 2 件以上なら、今までどおり「無い」（承認待ちの一覧を開く）。
+- そのうち、承認を待っていない（`status` が `waiting` でない）run で、`run_started_at` がスレッドの `updated_at` 以前で、終わった時刻（`status` が `completed` なら `updated_at`、終わっていなければ今）がスレッドの `updated_at` 以降の run（通知の時刻を挟む run）が 1 件だけなら、その run にする。0 件か 2 件以上なら、今までどおり「無い」（承認待ちの一覧を開く）。
 - 承認を待っている run から決まったときと、一時的な失敗・認証の失敗・レート制限のときは、このリクエストを送らない。
 - 1 つのスレッドについて送るリクエストは、最大 6 回から最大 7 回になる。
 

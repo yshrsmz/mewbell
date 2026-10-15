@@ -28,7 +28,7 @@ GitHub の振る舞い（確かめたこと）:
 
 `fetchApprovalRequestRun` の終わりで、承認を待っている run から run が決まらなかった（今 `.unavailable` を返している 3 か所: 0 件、6 件以上か ID が検証を通らない、承認できて近い run が無い）ときに、`fetchRuns(of:query:)` で `created=<=<T>&per_page=30` を取る（`T` はスレッドの `updated_at`）。一時的な失敗・認証の失敗・レート制限のときは、今までどおりその結果で終え、このリクエストは送らない。承認を待っている run の一覧が「無い」（`404` など）だったときは送る（どちらも Actions を読めなければ、同じく「無い」になる）。
 
-選び方は `WorkflowRunSummary` の `static func runSpanning(_ date: Date, in runs: [WorkflowRunSummary], now: Date) -> String?` にする（A7。純粋な関数として単体でテストする）。`run_started_at` が `date` 以前で、終わった時刻（`status == "completed"` なら `updated_at`、そうでなければ `now`）が `date` 以降の run が 1 件だけならその ID、そうでなければ nil。日時を読めない run は数えない。`now` は `GitHubAPIClient` が持つ `now`（テストで差し替えている時計）を渡す。
+承認を待っている run（`status == "waiting"`）は、承認できるかと時刻を 1〜4 で調べて外したものなので、`runSpanning` に渡す前に除く（code-review の指摘で足した。除かないと、ユーザーが承認できない run や、通知の後に待ち始めた run を拾い直してしまう）。選び方は `WorkflowRunSummary` の `static func runSpanning(_ date: Date, in runs: [WorkflowRunSummary], now: Date) -> String?` にする（A7。純粋な関数として単体でテストする）。`run_started_at` が `date` 以前で、終わった時刻（`status == "completed"` なら `updated_at`、そうでなければ `now`）が `date` 以降の run が 1 件だけならその ID、そうでなければ nil。日時を読めない run は数えない。`now` は `GitHubAPIClient` が持つ `now`（テストで差し替えている時計）を渡す。
 
 採らなかった案:
 
@@ -42,7 +42,7 @@ GitHub の振る舞い（確かめたこと）:
 
 ### D3. クエリの日時の書き方（A6）
 
-`T` は `Date.ISO8601FormatStyle`（UTC、秒まで、`Z`）で書き、`<=` とあわせて `URL.appending(queryValue:for:)` でクエリの値にする（`<` と `=` はエスケープされる）。値は API が返した `updated_at` を読み直したものなので、件名のような外からの文字列は入らない。
+`T` は `Date.ISO8601FormatStyle(includingFractionalSeconds: false, timeZone: .gmt)`（すべて既読の `last_read_at` と同じ書き方。UTC、秒まで、`Z`）で書き、`<=` とあわせて `URL.appending(queryValue:for:)` でクエリの値にする（`<` と `=` はエスケープされる）。値は API が返した `updated_at` を読み直したものなので、件名のような外からの文字列は入らない。
 
 ### D4. 動く場所とテスト（A2・A5）
 
@@ -53,7 +53,8 @@ GitHub の振る舞い（確かめたこと）:
 - 同じ時刻に長く走るほかのワークフローがあると、挟む run が 2 件以上になり、承認待ちの一覧を開く（今と同じ）。
 - 承認を待った run が、通知の前に作られた最新の 30 件に入らないとき（通知の後ではなく前に、30 件より多くの run が作られた）は見つからない。
 - 承認リクエストではない run（同じ時刻にたまたま動いていた 1 件だけの run）を選ぶことがある。承認を待った run も同じ時刻に動いていたはずなので、その run が 1 件だけになることは、承認を待った run が一覧に入っていないときに限られる。
-- `status` が `completed` でない run は今を終わりとするので、取ったときに動いている run は、通知の時刻の後に始まっていなければ挟む run に入る。
+- `status` が `completed` でない run は今を終わりとするので、取ったときに動いている run（承認を待っている run を除く）は、通知の時刻の後に始まっていなければ挟む run に入る。通知の run のほかに、通知の前から動き続けている run があると、決まらずに承認待ちの一覧を開く。
+- 承認された run が後で再実行されると、`run_started_at` と `updated_at` は新しい試行の時刻になり、通知の時刻を挟まなくなる。そのときは決まらないか、たまたま挟むほかの run が 1 件だけならその run を開く。
 
 ## セキュリティ
 

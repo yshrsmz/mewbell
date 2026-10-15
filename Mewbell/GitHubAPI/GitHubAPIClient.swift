@@ -467,17 +467,20 @@ extension GitHubAPIClient {
         return .success(approvable)
     }
 
-    /// `date`（通知の時刻）より前に作られた run のうち、`date` に動いていた run が 1 件だけなら、その run。
+    /// `date`（通知の時刻）より前に作られた run のうち、承認を待っていなくて、`date` に動いていた run が 1 件だけなら、その run。
     private func fetchRunSpanning(
         _ date: Date, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
-        let createdBefore = "<=" + date.formatted(.iso8601)
+        let format = Date.ISO8601FormatStyle(includingFractionalSeconds: false, timeZone: .gmt)
+        let createdBefore = "<=" + date.formatted(format)
         switch await fetchRuns(
             of: repository, query: [("created", createdBefore), ("per_page", "30")], endpoints: endpoints,
             token: token)
         {
         case .success(let page):
-            return Self.workflowRunResult(WorkflowRunSummary.runSpanning(date, in: page.workflowRuns, now: now()))
+            // 承認を待っている run は、承認できるかと時刻をもう調べて外したものなので数えない
+            let runs = page.workflowRuns.filter { $0.status != "waiting" }
+            return Self.workflowRunResult(WorkflowRunSummary.runSpanning(date, in: runs, now: now()))
         case .failure(let stop):
             return stop.result
         }

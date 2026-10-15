@@ -10,7 +10,7 @@ Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling
 2. 1 件も無ければ、run は「無い」
 3. 1〜5 件なら、それぞれの `GET <API ベース URL>/repos/{owner}/{name}/actions/runs/{run の ID}/pending_deployments` を取り、`current_user_can_approve` が true の待ちを 1 つでも持つ run のうち、`updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内で、差が最も小さいものにする。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」
 4. 6 件以上（`total_count` が 6 以上のときを含む）なら、run は「無い」
-5. 2〜4 で run が「無い」になったときは、`GET <API ベース URL>/repos/{owner}/{name}/actions/runs?created=<=<スレッドの updated_at>&per_page=30` で、通知より前に作られた run を取る。`<スレッドの updated_at>` は UTC の `YYYY-MM-DDTHH:MM:SSZ` の形で書き、`<=` とあわせてクエリの値としてエスケープする。取った run のうち、`run_started_at` がスレッドの `updated_at` 以前で、終わった時刻（`status` が `completed` なら `updated_at`、そうでなければ今）がスレッドの `updated_at` 以降のもの（通知の時刻を挟む run）が 1 件だけなら、その run にする。0 件か 2 件以上なら、run は「無い」
+5. 2〜4 で run が「無い」になったときは、`GET <API ベース URL>/repos/{owner}/{name}/actions/runs?created=<=<スレッドの updated_at>&per_page=30` で、通知より前に作られた run を取る。`<スレッドの updated_at>` は UTC の `YYYY-MM-DDTHH:MM:SSZ` の形で書き、`<=` とあわせてクエリの値としてエスケープする。取った run のうち、`status` が `waiting` でなく（承認を待っている run は 1〜4 で調べて外したもの）、`run_started_at` がスレッドの `updated_at` 以前で、終わった時刻（`status` が `completed` なら `updated_at`、そうでなければ今）がスレッドの `updated_at` 以降のもの（通知の時刻を挟む run）が 1 件だけなら、その run にする。0 件か 2 件以上なら、run は「無い」
 
 1 件のときも `pending_deployments` で確かめ、時刻も照らさなければならない（MUST）。通知の run がほかの人に承認された後に、ユーザーが承認できない別の run や、後から待ち始めた別の run だけが待っていることがあるため。5. は、Mewbell がスレッドを初めて見たときに通知の run がもう承認されていた（Mewbell が起動していなかった間に届いた、一覧に出る前に Web で承認されたなど）ときのためにある。1〜4 が一時的な失敗・認証の失敗・レート制限になったときは、5. のリクエストを送ってはならない（MUST NOT）。
 
@@ -112,6 +112,12 @@ Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling
 
 - **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run は 0 件
 - **WHEN** 通知より前に作られた run に、11:50〜12:10 の run と、11:55 に始まってまだ終わっていない run がある
+- **THEN** そのスレッドの run は「無い」になる
+
+#### Scenario: 承認できない承認待ちの run は拾い直さない
+
+- **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run は `103`（`run_started_at` 11:55）の 1 件だけで、その `pending_deployments` が `current_user_can_approve: false` の待ちだけを返す
+- **WHEN** 通知より前に作られた run の一覧が、`status: waiting` の `103` だけを返す
 - **THEN** そのスレッドの run は「無い」になる
 
 #### Scenario: 承認を待っている run の一覧が一時的に失敗した
