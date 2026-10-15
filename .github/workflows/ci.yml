@@ -24,7 +24,7 @@ jobs:
     env:
       # どちらも digest で固定する。swift-format は Swift ツールチェーンに含まれ、
       # swiftlint の公式イメージには実行に必要な SourceKit が含まれる
-      SWIFT_IMAGE: swift:6.3.2-noble@sha256:c4336909a71b2e69b884f4078cdf98c0cd081911632cb349ef72abc4cbed69fc
+      SWIFT_IMAGE: swift:6.4.1-noble@sha256:64f2c54113c2d5c234ed8fa2f59684b5d1ab3c4802657031679b4a8d6308a2dd
       SWIFTLINT_IMAGE: ghcr.io/realm/swiftlint:0.65.1@sha256:f47e083201e47a136cda5ae847595bfe00226c444ca226fa74fa5dc648a9b057
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
