@@ -228,8 +228,7 @@ extension ThreadDetailsRequestTests {
 
     @Test func treatsASecondaryRateLimitAsARateLimit() async throws {
         let (thread, endpoints) = try thread(subjectURL: "https://api.github.com/repos/octo/app/issues/7")
-        let body = Data(#"{"message": "You have exceeded a secondary rate limit. Please wait a few minutes."}"#.utf8)
-        let transport = transport(issue: HTTPResponse(statusCode: 403, body: body)) { _ in Self.ok(comment) }
+        let transport = transport(issue: FakeHTTPTransport.secondaryRateLimit()) { _ in Self.ok(comment) }
         #expect(await fetch(thread, endpoints, transport) == .rateLimited(retryAt: now))
     }
 

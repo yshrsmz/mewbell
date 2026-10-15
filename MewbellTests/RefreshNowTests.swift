@@ -85,6 +85,23 @@ struct RefreshNowTests {
         fixture.poller.stop()
     }
 
+    /// 待ち時間のヘッダーが無い二次レート制限の待ちも早めない
+    @Test func doesNotHastenASecondaryRateLimitWithoutAWait() async {
+        fixture.respond([
+            PollerFixture.ok(1...1),
+            FakeHTTPTransport.secondaryRateLimit(),
+            PollerFixture.notModified,
+        ])
+        await startAndWait()
+        fixture.advance(by: 60)
+        await fixture.sleeper.waitForSleeps(2)
+        fixture.moveClock(by: 20)
+        await fixture.poller.refreshNow()
+        #expect(fixture.transport.requests.count == 2)
+        #expect(fixture.sleeper.durations == [.seconds(60), .seconds(60)])
+        fixture.poller.stop()
+    }
+
     @Test func doesNotHastenARateLimitReturnedByTheFetchInFlight() async {
         fixture.respond([
             PollerFixture.ok(1...1), HTTPResponse(statusCode: 403, headers: ["Retry-After": "300"]),

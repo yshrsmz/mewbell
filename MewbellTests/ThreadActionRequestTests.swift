@@ -30,12 +30,13 @@ struct MarkThreadDoneTests {
         #expect(request.httpBody == nil)
     }
 
-    /// Done に固有の成功（`204` / `404`）と、既読では成功の `205` を失敗にすること。
+    /// Done に固有の成功（`204` / `404`）と、既読では成功の `205` を失敗にすること。二次レート制限の見分けも既読と同じであること。
     /// そのほかの状態コードの分類は `MarkThreadReadTests.classifiesTheStatus` で確かめる。
     @Test(arguments: [
         (HTTPResponse(statusCode: 204), ThreadActionResult.succeeded),
         (HTTPResponse(statusCode: 404), .succeeded),
         (HTTPResponse(statusCode: 205), .failed(.unexpectedStatus(205))),
+        (FakeHTTPTransport.secondaryRateLimit(), .rateLimited),
     ])
     func classifiesTheStatus(_ response: HTTPResponse, _ expected: ThreadActionResult) async {
         let (result, _) = await markDone(response)
@@ -77,11 +78,13 @@ struct MarkAllReadTests {
     }
 
     /// すべて既読に固有の成功（`202` / `205` / `304`）と、スレッドの操作では成功の `404` を失敗にすること。
+    /// 二次レート制限の見分けもスレッドの操作と同じであること。
     @Test(arguments: [
         (HTTPResponse(statusCode: 202), ThreadActionResult.succeeded),
         (HTTPResponse(statusCode: 205), .succeeded),
         (HTTPResponse(statusCode: 304), .succeeded),
         (HTTPResponse(statusCode: 404), .failed(.unexpectedStatus(404))),
+        (FakeHTTPTransport.secondaryRateLimit(), .rateLimited),
     ])
     func classifiesTheStatus(_ response: HTTPResponse, _ expected: ThreadActionResult) async {
         let (result, _) = await markAllRead(response)

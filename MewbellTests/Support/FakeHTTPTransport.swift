@@ -35,6 +35,13 @@ final class FakeHTTPTransport: HTTPTransport {
         return try handler(request)
     }
 
+    /// 待ち時間のヘッダーが無い二次レート制限の 403（本文の `message` で見分ける）。
+    static func secondaryRateLimit(headers: [String: String] = [:]) -> HTTPResponse {
+        HTTPResponse(
+            statusCode: 403, headers: headers,
+            body: Data(#"{"message": "You have exceeded a secondary rate limit. Please wait a few minutes."}"#.utf8))
+    }
+
     /// 通知のスレッドの JSON（1 件）。
     /// `subjectURL` を渡すと、そのスレッドは番号を持つ（状態とイベントを取る対象になる）。
     static func threadJSON(
