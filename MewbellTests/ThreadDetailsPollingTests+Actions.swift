@@ -38,7 +38,7 @@ extension ThreadDetailsPollingTests {
         let urls = detailsRequests(fixture).compactMap { $0.url?.absoluteString }
         #expect(
             Set(urls) == [
-                "https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=20",
+                "https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=6",
                 "https://api.github.com/repos/octo/app/actions/runs/38692691414/pending_deployments",
             ])
         // 1 は最初の一覧の後に、2 は知らせる前に 1 回ずつ探し（一覧と `pending_deployments` の 2 回ずつ）、

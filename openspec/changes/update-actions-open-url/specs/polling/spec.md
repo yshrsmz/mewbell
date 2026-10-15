@@ -95,7 +95,7 @@ Mewbell はアカウントごとに、一覧のスレッドのイベント（git
 
 - **GIVEN** `github.com/alice` の前の取得の一覧にスレッド `777` が無かった
 - **WHEN** 次の取得で、種類が `WorkflowRun` でリポジトリが `octo/app` のスレッド `777` が返る
-- **THEN** `GET https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=20` が `alice` のトークンで送られる
+- **THEN** `GET https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=6` が `alice` のトークンで送られる
 - **AND** `777` を含む一覧は、`777` に見つけた run の ID を付けた状態で初めて知らされる
 
 #### Scenario: 種類が CheckSuite のスレッドは subject.url が無くても run を探す

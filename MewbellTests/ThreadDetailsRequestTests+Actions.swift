@@ -20,14 +20,15 @@ extension ThreadDetailsRequestTests {
         try thread(subjectURL: nil, type: "CheckSuite", title: title)
     }
 
-    /// run の一覧の 1 件（ID、ワークフロー名、`updated_at`）。
+    /// run の一覧の 1 件（ID、ワークフロー名、`updated_at`、結果）。
     private struct Run {
         let id: String
         let name: String
         let updatedAt: String
+        let conclusion: String
 
-        init(_ id: String, _ name: String, _ updatedAt: String) {
-            (self.id, self.name, self.updatedAt) = (id, name, updatedAt)
+        init(_ id: String, _ name: String, _ updatedAt: String, _ conclusion: String = "failure") {
+            (self.id, self.name, self.updatedAt, self.conclusion) = (id, name, updatedAt, conclusion)
         }
     }
 
@@ -35,6 +36,7 @@ extension ThreadDetailsRequestTests {
     private static func runs(_ runs: [Run], totalCount: Int? = nil) -> HTTPResponse {
         let items = runs.map { run in
             #"{"id": \#(run.id), "name": "\#(run.name)", "display_title": "Fix it", "updated_at": "\#(run.updatedAt)", "#
+                + #""conclusion": "\#(run.conclusion)", "#
                 + #""html_url": "https://evil.example.com/octo/app/actions/runs/\#(run.id)"}"#
         }
         let body =
@@ -76,7 +78,7 @@ extension ThreadDetailsRequestTests {
         #expect(await fetch(thread, endpoints, transport) == Self.found("38692691414"))
         #expect(
             transport.requests.map { $0.url?.absoluteString } == [
-                "https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=20",
+                "https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=6",
                 "https://api.github.com/repos/octo/app/actions/runs/38692691414/pending_deployments",
             ])
         #expect(transport.requests.first?.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
@@ -88,7 +90,7 @@ extension ThreadDetailsRequestTests {
         _ = await fetch(thread, endpoints, transport)
         #expect(
             transport.requests.first?.url?.absoluteString
-                == "https://ghe.example.com/api/v3/repos/team/svc/actions/runs?status=waiting&per_page=20")
+                == "https://ghe.example.com/api/v3/repos/team/svc/actions/runs?status=waiting&per_page=6")
     }
 
     @Test func takesTheOnlyRunTheUserCanApprove() async throws {
@@ -216,6 +218,21 @@ extension ThreadDetailsRequestTests {
         #expect(!String(describing: result).contains("evil.example.com"))
     }
 
+    /// 件名の結果と違う結果の run は、時刻が近くても選ばない。
+    @Test func takesTheRunWithTheResultOfTheTitle() async throws {
+        let (thread, endpoints) = try checkSuiteThread()
+        let list = Self.runs([
+            Run("301", "CI", "2026-10-08T12:00:00Z", "success"), Run("302", "CI", "2026-10-08T11:58:00Z", "failure"),
+        ])
+        #expect(await fetch(thread, endpoints, transport(list: list)) == Self.found("302"))
+        let (startup, _) = try checkSuiteThread(title: "CI workflow run failed at startup for main branch")
+        let startupList = Self.runs([
+            Run("303", "CI", "2026-10-08T12:00:00Z", "failure"),
+            Run("304", "CI", "2026-10-08T11:59:00Z", "startup_failure"),
+        ])
+        #expect(await fetch(startup, endpoints, transport(list: startupList)) == Self.found("304"))
+    }
+
     @Test func findsNoRunWhenTheBranchRunsCannotBeRead() async throws {
         let (thread, endpoints) = try checkSuiteThread()
         #expect(await fetch(thread, endpoints, transport(list: HTTPResponse(statusCode: 404))) == .unavailable)
@@ -227,7 +244,7 @@ struct WorkflowRunSelectionTests {
     private let updatedAt = Date(timeIntervalSince1970: 1_791_460_800)  // 2026-10-08T12:00:00Z
 
     private func run(_ id: Int64, _ updatedAt: String) -> WorkflowRunSummary {
-        WorkflowRunSummary(id: id, name: "CI", updatedAt: updatedAt)
+        WorkflowRunSummary(id: id, name: "CI", conclusion: "failure", updatedAt: updatedAt)
     }
 
     @Test func takesTheClosestRun() {

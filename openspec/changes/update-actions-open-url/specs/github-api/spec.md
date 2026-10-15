@@ -6,16 +6,16 @@ Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling
 
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。1 つのスレッドについて送るリクエストは最大 6 回にしなければならない（MUST）。
 
-1. `GET <API ベース URL>/repos/{owner}/{name}/actions/runs?status=waiting&per_page=20` で、承認を待っている run を取る
+1. `GET <API ベース URL>/repos/{owner}/{name}/actions/runs?status=waiting&per_page=6` で、承認を待っている run を取る
 2. 1 件も無ければ、run は「無い」
 3. 1〜5 件なら、それぞれの `GET <API ベース URL>/repos/{owner}/{name}/actions/runs/{run の ID}/pending_deployments` を取り、`current_user_can_approve` が true の待ちを 1 つでも持つ run のうち、`updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内で、差が最も小さいものにする。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」
 4. 6 件以上（`total_count` が 6 以上のときを含む）なら、run は「無い」
 
 1 件のときも `pending_deployments` で確かめ、時刻も照らさなければならない（MUST）。通知の run がほかの人に承認された後に、ユーザーが承認できない別の run や、後から待ち始めた別の run だけが待っていることがあるため。
 
-種類が `CheckSuite` のスレッド（ワークフローの実行の結果）は、件名を `<ワークフロー名> workflow run[, Attempt #<数字>] <結果> for <ブランチ> branch` の形として読まなければならない（MUST）。`<結果>` は `failed`、`failed at startup`、`cancelled`、`skipped`、`succeeded` のいずれかでなければならず、ワークフロー名とブランチは空でなく、UTF-8 で 255 バイト以下で、制御文字を含まないものでなければならない（MUST）。読めなければ、リクエストを送らずに run は「無い」としなければならない（MUST）。読めたら、`GET <API ベース URL>/repos/{owner}/{name}/actions/runs?branch=<ブランチ>&per_page=30` を 1 回だけ送り、`name` がワークフロー名と一致し、`updated_at` とスレッドの `updated_at` の差が 10 分以内の run のうち、差が最も小さいものにしなければならない（MUST）。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」としなければならない（MUST）。
+種類が `CheckSuite` のスレッド（ワークフローの実行の結果）は、件名を `<ワークフロー名> workflow run[, Attempt #<数字>] <結果> for <ブランチ> branch` の形として読まなければならない（MUST）。`<結果>` は `failed`、`failed at startup`、`cancelled`、`skipped`、`succeeded` のいずれかでなければならず、ワークフロー名とブランチは空でなく、UTF-8 で 255 バイト以下で、制御文字を含まないものでなければならない（MUST）。読めなければ、リクエストを送らずに run は「無い」としなければならない（MUST）。読めたら、`GET <API ベース URL>/repos/{owner}/{name}/actions/runs?branch=<ブランチ>&per_page=30` を 1 回だけ送り、`name` がワークフロー名と一致し、`conclusion` が件名の結果（`failed` は `failure`、`failed at startup` は `startup_failure`、`cancelled` は `cancelled`、`skipped` は `skipped`、`succeeded` は `success`）と一致し、`updated_at` とスレッドの `updated_at` の差が 10 分以内の run のうち、差が最も小さいものにしなければならない（MUST）。再実行で結果が変わった run は選ばない。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」としなければならない（MUST）。
 
-レスポンスのうち、使ってよいのは run の `id`・`name`・`updated_at`・`total_count` と、待ちの `current_user_can_approve` だけで、`html_url` などの URL を保持・表示・ログ出力してはならない（MUST NOT）。`id` は 1〜20 桁の数字として読めるものだけを受け付けなければならない（MUST）。
+レスポンスのうち、使ってよいのは run の `id`・`name`・`conclusion`・`updated_at`・`total_count` と、待ちの `current_user_can_approve` だけで、`html_url` などの URL を保持・表示・ログ出力してはならない（MUST NOT）。`id` は 1〜20 桁の数字として読めるものだけを受け付けなければならない（MUST）。
 
 レスポンスは、スレッドのイベントの取得のリクエスト（「スレッドのイベントの取得のリクエスト」）と同じく次のように扱わなければならない（MUST）。`pending_deployments` のリクエストも同じに扱い、どれか 1 つでも一時的な失敗・認証の失敗・レート制限になったら、そのスレッドの結果をそれにしなければならない（MUST）。
 
@@ -31,7 +31,7 @@ Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling
 - **GIVEN** `github.com/alice` の種類が `WorkflowRun` のスレッドのリポジトリが `octo/app`
 - **WHEN** Mewbell がそのスレッドの run を探し、API が `200` と、`id: 38692691414` の run 1 件を返す
 - **AND** `GET /repos/octo/app/actions/runs/38692691414/pending_deployments` が `current_user_can_approve: true` の待ちを返す
-- **THEN** リクエストは `https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=20` に `alice` のトークンを付けて送られる
+- **THEN** リクエストは `https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=6` に `alice` のトークンを付けて送られる
 - **AND** そのスレッドの run は `38692691414` になる
 
 #### Scenario: 承認を待っている 1 件の run を承認できない
@@ -66,14 +66,14 @@ Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling
 
 #### Scenario: 承認を待っている run が多い
 
-- **GIVEN** `GET /repos/octo/app/actions/runs?status=waiting&per_page=20` が `total_count: 8` を返す
+- **GIVEN** `GET /repos/octo/app/actions/runs?status=waiting&per_page=6` が `total_count: 8` を返す
 - **WHEN** Mewbell がレスポンスを受け取る
 - **THEN** `pending_deployments` のリクエストは送られず、そのスレッドの run は「無い」になる
 
 #### Scenario: 失敗したワークフローの run を探す
 
 - **GIVEN** `github.com/alice` の種類が `CheckSuite` のスレッドのリポジトリが `octo/app`、件名が `CI workflow run failed for main branch`、`updated_at` が 12:05
-- **WHEN** `GET https://api.github.com/repos/octo/app/actions/runs?branch=main&per_page=30` が、`name: CI` で `updated_at` 12:04 の run `201`、`name: CI` で `updated_at` 11:30 の run `200`、`name: Release` で `updated_at` 12:05 の run `202` を返す
+- **WHEN** `GET https://api.github.com/repos/octo/app/actions/runs?branch=main&per_page=30` が、`name: CI`・`conclusion: failure` で `updated_at` 12:04 の run `201`、`name: CI`・`conclusion: failure` で `updated_at` 11:30 の run `200`、`name: Release` で `updated_at` 12:05 の run `202`、`name: CI`・`conclusion: success` で `updated_at` 12:05 の run `203` を返す
 - **THEN** そのスレッドの run は `201` になる
 
 #### Scenario: 試行の回数が付いた件名

@@ -10,6 +10,17 @@ struct CheckSuiteTitle: Hashable, Sendable {
         case cancelled
         case skipped
         case succeeded
+
+        /// run の一覧の `conclusion` の値
+        var conclusion: String {
+            switch self {
+            case .failed: "failure"
+            case .failedAtStartup: "startup_failure"
+            case .cancelled: "cancelled"
+            case .skipped: "skipped"
+            case .succeeded: "success"
+            }
+        }
     }
 
     let workflowName: String

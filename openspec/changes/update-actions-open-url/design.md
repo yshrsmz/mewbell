@@ -57,9 +57,9 @@
 
 `GitHubAPIClient.fetchDetails` の `switch` に 2 つの場合を足し、`fetchReleaseTag` と同じ並びに `private func fetchWaitingWorkflowRun` と `private func fetchCheckSuiteRun` を置く。状態コードの扱いは今の `get(_:endpoints:token:)` をそのまま使う（`404` / `410` / `422` と、レート制限でない `403` は「無い」）。`pending_deployments` は候補ごとに順に送り、どれかが一時的な失敗・認証の失敗・レート制限になったら、その結果で終える。`404` などで「無い」なら、その run は承認できないものとして数える。
 
-レスポンスは `Mewbell/GitHubAPI/WorkflowRunSummary.swift` の `Decodable` の struct で、使うフィールドだけを持つ（`WorkflowRunsPage { totalCount: Int; workflowRuns: [WorkflowRunSummary] }`、`WorkflowRunSummary { id: Int64; name: String?; updatedAt: String }`、`PendingDeployment { currentUserCanApprove: Bool }`）。`ReleaseSummary` と同じく、テストと選ぶ関数から使うので private にしない。`updatedAt` は `ThreadDTO` と同じく文字列で読み、比べるときに `Date(_:strategy: .iso8601)` で読む（`APIJSON.decoder()` は日付の読み方を決めていない）。`id` は文字列にして `ThreadID.isValid` を通す（負の値は「無い」、`Int64` に入らない値は形の崩れたボディになる）。run の一覧の取得は `fetchRuns(of:query:endpoints:token:)` の 1 か所にまとめる。
+レスポンスは `Mewbell/GitHubAPI/WorkflowRunSummary.swift` の `Decodable` の struct で、使うフィールドだけを持つ（`WorkflowRunsPage { totalCount: Int; workflowRuns: [WorkflowRunSummary] }`、`WorkflowRunSummary { id: Int64; name: String?; conclusion: String?; updatedAt: String }`、`PendingDeployment { currentUserCanApprove: Bool }`）。`ReleaseSummary` と同じく、テストと選ぶ関数から使うので private にしない。`updatedAt` は `ThreadDTO` と同じく文字列で読み、比べるときに `Date(_:strategy: .iso8601)` で読む（`APIJSON.decoder()` は日付の読み方を決めていない）。`id` は文字列にして `ThreadID.isValid` を通す（負の値は「無い」、`Int64` に入らない値は形の崩れたボディになる）。run の一覧の取得は `fetchRuns(of:query:endpoints:token:)` の 1 か所にまとめる。
 
-`CheckSuite` の run の選び方（名前が一致し、`updated_at` の差が 10 分以内で最も近いもの。同じ差が 2 件なら決めない）は、`WorkflowRunSummary` の配列とスレッドの `updated_at` を受け取る `static` の純粋な関数にし、単体でテストする（A7）。
+`CheckSuite` の run の選び方（名前と結果（`conclusion`）が一致し、`updated_at` の差が 10 分以内で最も近いもの。同じ差が 2 件なら決めない）は、`WorkflowRunSummary` の配列とスレッドの `updated_at` を受け取る `static` の純粋な関数にし、単体でテストする（A7）。
 
 テストは今の `FakeHTTPTransport`（`HTTPTransport` のプロトコルの偽物）で API を差し替える（A5）。
 
@@ -79,7 +79,7 @@ run を探すのは、今のイベントの取得と同じく `AccountPoller`（
 - 通知には run の情報が無いので、承認リクエストの run は「今待っていて、ユーザーが承認でき、承認を待ち始めた時刻が通知に最も近い（前後 10 分以内）もの」として推し量る。1 件のときも確かめるので、ユーザーが承認できない run と、通知から 10 分より後に待ち始めた run は開かない（2 回の code-review の指摘で、1 件なら確かめずに開く形、承認できる run が 1 件だけのときに開く形から改めた）。通知の run が承認された後、10 分以内に待ち始めた別の run があると、その run を開く。同じ差の run が 2 件あるときは決まらず、一覧（`is:waiting`）を開く。
 - 同じリポジトリの承認リクエストのスレッドが何件もあると、スレッドごとに同じ検索（一覧 1 回と `pending_deployments` 最大 5 回）を繰り返す。まとめて 1 回にするには取得の間で結果を分け合う仕組みが要り、この change では足さない。1 回の取得にかける 20 秒の上限は今のままで、超えた分は一時的な失敗として次の機会に取り直す。
 - run の一覧の要素に形の崩れたものが 1 件でもあると、一覧全体を一時的な失敗として扱う（今の Timeline の読み方と同じ厳しさ。同じ `updated_at` で 3 回続けば取り直さない）。
-- `CheckSuite` の通知の `updated_at` が run の `updated_at` と 10 分より離れている（再実行の後など）と、run は決まらず絞り込みの一覧を開く。ブランチの run が多くて最新の 30 件に入らないときも同じ。
+- `CheckSuite` の通知の `updated_at` が run の `updated_at` と 10 分より離れている（再実行の後など）と、run は決まらず絞り込みの一覧を開く。再実行で結果が変わった run も、件名の結果と合わないので選ばない（同じ時刻に終わった別の結果の run を開かないため。3 回目の code-review の指摘で足した）。ブランチの run が多くて最新の 30 件に入らないときも同じ。
 - 件名の形は GitHub が決めていて、文書は無い。形が変わったら読めずに、`CheckSuite` は `/actions` を開く（今のリポジトリのトップより悪くはならない）。
 - API の呼び出しが、Actions の通知 1 件につき最大 6 回（`WorkflowRun`）か 1 回（`CheckSuite`）増える。`updated_at` が変わるまで取り直さない。
 

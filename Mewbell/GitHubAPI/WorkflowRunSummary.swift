@@ -17,6 +17,8 @@ struct WorkflowRunSummary: Decodable, Sendable {
     let id: Int64
     /// ワークフロー名（実行の表示名は `display_title` で、使わない）
     let name: String?
+    /// 結果（`failure`・`success` など）。終わっていなければ nil
+    let conclusion: String?
     let updatedAt: String
 
     /// 検証した run の ID（1〜20 桁の数字）。通らなければ nil。

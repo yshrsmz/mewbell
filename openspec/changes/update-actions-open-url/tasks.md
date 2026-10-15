@@ -9,7 +9,7 @@
 ## 2. run を探す
 
 - [x] 2.1 `DetailsSubject` に `.waitingWorkflowRun` と `.checkSuite(CheckSuiteTitle)` を足し、`ThreadDetails` の Release のタグと run の ID を `resource: Resource?`（`.release(tag:)` / `.workflowRun(id:)`）にまとめる（design.md D1 の今の形。code-review の後に改めた）。`ThreadWebURL.detailsSubject` に `title` を足し、種類で決める（D1）。`ThreadDTO.thread(endpoints:)` から件名を渡す。`subject.url` が無いか別のリポジトリを指していても、`WorkflowRun` と `CheckSuite`（件名を読めるもの）は詳細の行き先を持つことをテストする。
-- [x] 2.2 `GitHubAPIClient` に `fetchWaitingWorkflowRun` を置く（D4）。`MewbellTests` の詳細のリクエストのテストに足す: run が 0 件・1 件（`pending_deployments` を送らない）・2 件で承認できるのが 1 件・2 件とも承認できる・`total_count` が 6、`pending_deployments` の `404` と `502` とレート制限の `403`、一覧の `404` と `403`（レート制限でない）と `401`、形の崩れたボディ、`id` が 21 桁。リクエストの URL（`status=waiting&per_page=20`、`pending_deployments` のパス）と、別のオリジンへのリダイレクトを拒むことも確かめる。
+- [x] 2.2 `GitHubAPIClient` に `fetchWaitingWorkflowRun` を置く（D4）。`MewbellTests` の詳細のリクエストのテストに足す: run が 0 件・1 件（`pending_deployments` を送らない）・2 件で承認できるのが 1 件・2 件とも承認できる・`total_count` が 6、`pending_deployments` の `404` と `502` とレート制限の `403`、一覧の `404` と `403`（レート制限でない）と `401`、形の崩れたボディ、`id` が 21 桁。リクエストの URL（`status=waiting&per_page=6`、`pending_deployments` のパス）と、別のオリジンへのリダイレクトを拒むことも確かめる。
 - [x] 2.3 `GitHubAPIClient` に `fetchCheckSuiteRun` と、run を選ぶ `static` の関数を置く（D4）。選ぶ関数のテスト: 名前が一致する最も近い run、10 分を超える run は選ばない、同じ差が 2 件なら決めない、`name` が無い run。リクエストのテスト: `branch=feat/a%2Bb&per_page=30` の URL、`&` と `=` を含むブランチのエスケープ、`html_url` が別のホストでも覚えないこと（デコードした結果に URL が無いこと）、一覧の `404`。
 - [x] 2.4 ポーラーのテスト（`ThreadDetailsPollingTests` に近い形）: 新着の `WorkflowRun` のスレッドの run を、一覧を知らせる前に取って付けること。同じ `updated_at` の間は取り直さないこと。`xcodebuild ... test -only-testing:` で該当のスイートを通し、スイート数を確かめる。
 
@@ -31,4 +31,4 @@
 
 - [x] 5.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。（4 件を取り込んだ: run の一覧の取得を `fetchRuns` にまとめた、`waitingRunLimit` と `matchWindow` を private にした、`detailsSubject` の届かない `default` を消した、`Result` の重複した `Hashable` を消した。design の D4 をコードに合わせた）
 - [x] 5.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。（7 件。ユーザーの判断で 2 件を直した: 承認待ちの run が 1 件のときも `pending_deployments` で承認できるかを確かめる、`"` や空白を含むブランチでは絞らない。3 件は design の Risks に書いた。2 件は直さない。理由は PR 本文。simplify の提案を受け、ユーザーの判断で `ThreadDetails` の型を整理した）
-- [x] 5.3 ロジックの変更を含む修正が多ければ、5.2 を新しいサブエージェントでもう一度実行する。（8 件。ユーザーの判断で、承認リクエストの run を時刻でも照らすようにした。詳細の行き先を種類で直接決める、`;` もエスケープする、試行の回数を `[0-9]` で読む、の 3 件も直した。4 件は直さない。理由は PR 本文）
+- [x] 5.3 ロジックの変更を含む修正が多ければ、5.2 を新しいサブエージェントでもう一度実行する。（8 件。ユーザーの判断で、承認リクエストの run を時刻でも照らすようにした。詳細の行き先を種類で直接決める、`;` もエスケープする、試行の回数を `[0-9]` で読む、の 3 件も直した。4 件は直さない。理由は PR 本文）（3 回目は 8 件。ユーザーの判断で、CheckSuite の run を結果（`conclusion`）でも照らすようにした。承認待ちの一覧の件数を 6 件にした。6 件は直さない。理由は PR 本文）

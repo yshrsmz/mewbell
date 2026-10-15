@@ -412,7 +412,7 @@ extension GitHubAPIClient {
         let runsPath = Self.runsPath(of: repository)
         let page: WorkflowRunsPage
         switch await fetchRuns(
-            of: repository, query: [("status", "waiting"), ("per_page", "20")], endpoints: endpoints, token: token)
+            of: repository, query: [("status", "waiting"), ("per_page", "6")], endpoints: endpoints, token: token)
         {
         case .success(let value): page = value
         case .failure(let stop): return stop.result
@@ -459,7 +459,7 @@ extension GitHubAPIClient {
     }
 
     /// 種類が CheckSuite のスレッドの run を、件名のブランチの run の一覧から探す（github-api「ワークフローの実行の検索の
-    /// リクエスト」）。ワークフロー名が一致し、`updated_at` がスレッドに最も近い run。決まらなければ「無い」。
+    /// リクエスト」）。ワークフロー名と結果が一致し、`updated_at` がスレッドに最も近い run。決まらなければ「無い」。
     private func fetchCheckSuiteRun(
         _ title: CheckSuiteTitle, updatedAt: Date, of repository: RepositoryName, endpoints: APIEndpoints,
         token: AccessToken
@@ -468,7 +468,9 @@ extension GitHubAPIClient {
             of: repository, query: [("branch", title.branch), ("per_page", "30")], endpoints: endpoints, token: token)
         {
         case .success(let page):
-            let runs = page.workflowRuns.filter { $0.name == title.workflowName }
+            let runs = page.workflowRuns.filter {
+                $0.name == title.workflowName && $0.conclusion == title.result.conclusion
+            }
             guard let id = WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: runs) else {
                 return .unavailable
             }

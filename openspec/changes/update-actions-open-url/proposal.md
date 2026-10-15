@@ -12,7 +12,7 @@ GitHub Actions の通知は、種類が 2 つある。どちらも件名に run 
 - 通知の種類 `WorkflowRun` を、ほかの種類（`other`）から分けて扱う。`CheckSuite` は今も種類として持っているが、開く URL では扱っていないので、扱うようにする。
 - Release のタグと同じく「スレッドのイベントの取得」の仕組みで、スレッドの run を API で探し、その ID を覚える。
   - `WorkflowRun`: `GET /repos/{owner}/{name}/actions/runs?status=waiting` で承認を待っている run を取る。1〜5 件なら、それぞれの `GET /repos/{owner}/{name}/actions/runs/{run_id}/pending_deployments` を取り、ユーザーが承認できる（`current_user_can_approve`）run のうち、承認を待ち始めた時刻がスレッドの `updated_at` に最も近い（前後 10 分以内）ものにする。それ以外は「決まらない」にする。
-  - `CheckSuite`: 件名からワークフロー名・結果・ブランチ・試行の回数を読み、`GET /repos/{owner}/{name}/actions/runs?branch=<ブランチ>` で取った run から、ワークフロー名と結果（と試行の回数）が合い、更新日時がスレッドの `updated_at` に最も近い（前後 10 分以内）ものにする。当たらなければ「決まらない」にする。
+  - `CheckSuite`: 件名からワークフロー名・結果・ブランチを読み、`GET /repos/{owner}/{name}/actions/runs?branch=<ブランチ>` で取った run から、ワークフロー名と結果が合い、更新日時がスレッドの `updated_at` に最も近い（前後 10 分以内）ものにする。当たらなければ「決まらない」にする。
 - 開く URL:
   - run が決まっていれば、どちらも `<Web ベース>/<owner>/<name>/actions/runs/<run の ID>`。
   - 決まっていなければ、`WorkflowRun` は承認待ちの一覧 `<Web ベース>/<owner>/<name>/actions?query=is:waiting`。`CheckSuite` は件名から作った絞り込みの一覧（Gitify と同じ。例: `actions?query=workflow:"CI" is:failure branch:main`）で、件名を読めなければ `<Web ベース>/<owner>/<name>/actions`。
@@ -40,5 +40,5 @@ notifications の「通知のクリック」は ui の URL の決まりで開く
 - マイルストーン: M4（設定と操作）以降の保守の change。update-thread-open-url（Discussion と Release の個別のページ）の続き。
 - 変更するもの: `Mewbell/GitHubAPI/NotificationThread.swift`（`SubjectKind` と `DetailsSubject`）、件名を読む処理、`Mewbell/GitHubAPI/ThreadEvent.swift`（`ThreadDetails` の Release のタグと run の ID を 1 つの enum にまとめる）、`Mewbell/GitHubAPI/GitHubAPIClient.swift`（run を探すリクエスト）、`Mewbell/GitHubAPI/ThreadWebURL.swift`（開く URL）、`Mewbell/UI/ThreadIcon.swift`（種類の名前）、そのテスト。
 - API の呼び出し: `updated_at` が変わるまでに、`WorkflowRun` のスレッド 1 件で最大 6 回（一覧 1 回と承認できるかの確認 5 回）、`CheckSuite` のスレッド 1 件で 1 回。ほかの種類の呼び出しは変えない。
-- トークン・gh サブプロセス・ネットワーク・URL を開く処理: ネットワーク（新しい API のリクエスト）と URL を開く処理に触れるので、`.claude/rules/security.md` が適用される。リクエストの URL は検証済みのリポジトリ名・検証済みの run の ID・クエリの値としてエスケープした件名の値から組み立て、送る前のオリジン検査を通す。レスポンスからは run の ID・ワークフロー名・結果・試行の回数・更新日時と、承認できるかだけを読み、`html_url` などの URL は使わない。トークンは今までどおりメモリにだけ持ち、永続化しない。gh サブプロセスには触れない。
+- トークン・gh サブプロセス・ネットワーク・URL を開く処理: ネットワーク（新しい API のリクエスト）と URL を開く処理に触れるので、`.claude/rules/security.md` が適用される。リクエストの URL は検証済みのリポジトリ名・検証済みの run の ID・クエリの値としてエスケープした件名の値から組み立て、送る前のオリジン検査を通す。レスポンスからは run の ID・ワークフロー名・結果・更新日時と、承認できるかだけを読み、`html_url` などの URL は使わない。トークンは今までどおりメモリにだけ持ち、永続化しない。gh サブプロセスには触れない。
 - 手元に Actions の通知が無いので、実物の確認はユーザーが行う（environment の承認を 1 回起こす、ワークフローを 1 回失敗させる）。
