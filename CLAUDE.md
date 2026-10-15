@@ -72,7 +72,7 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEW
 
 - **トークンを永続化しない。** `gh auth token --hostname <host> --user <user>` で取得し、メモリにだけ持つ。ログ・エラーメッセージ・テストフィクスチャにトークン文字列を出さない
 - **リクエストごとにトークンを明示的に付ける。** 共有クライアントのデフォルトヘッダーに入れない（アカウント混在時にページネーションでトークンが入れ替わる Gitify の不具合 #2176 を踏まない）
-- **ポーリングは API の指示に従う。** アカウントごとに `Last-Modified` を保持して `If-Modified-Since` を送り、`304` は無視、`X-Poll-Interval`（下限 60 秒）より短い間隔で叩かない。ただし 5 分ごとと再読み込みの後は `If-Modified-Since` を付けずに取り直す（`Last-Modified` は未読の `updated_at` の最新値なので、それより古いスレッドの増減や Web での既読が `304` に隠れる）。ユーザーが再読み込みを押したときだけは間隔を待たずにすぐ取り直す（アカウントごとに前の取得の開始から 10 秒より早くはせず、レート制限で待っている間は早めない）
+- **ポーリングは API の指示に従う。** アカウントごとに `Last-Modified` を保持して `If-Modified-Since` を送り、`304` は無視、`X-Poll-Interval`（下限 60 秒）より短い間隔で叩かない。`If-Modified-Since` を付けた `200` はその時刻より後に更新されたスレッドだけなので、一覧を置き換えずに今の一覧に重ねる。5 分ごと（条件なしの `200` から数える）と再読み込みの後は `If-Modified-Since` を付けずに取り直し、一覧を置き換える（`Last-Modified` は未読の `updated_at` の最新値なので、それより古いスレッドの増減や Web での既読は、`304` にも条件付きの `200` にも出ない）。ユーザーが再読み込みを押したときだけは間隔を待たずにすぐ取り直す（アカウントごとに前の取得の開始から 10 秒より早くはせず、レート制限で待っている間は早めない）
 - **ホスト種別の判定**: `github.com` → `https://api.github.com`、`*.ghe.com` → `https://api.<host>`、それ以外 → `https://<host>/api/v3`
 - **スコープ確認**: 初回レスポンスの `X-OAuth-Scopes` に `repo` も `notifications` も無いアカウントは「スコープ不足」にして止め、`gh auth refresh -s repo` を案内する
 - gh が無い／未ログインのときはインストール・`gh auth login` の案内画面を出すだけ。フォールバックの認証経路は作らない

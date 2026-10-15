@@ -48,6 +48,19 @@ struct PollingDiagnosticsTests {
         fixture.poller.stop()
     }
 
+    /// 条件付きの 200 の一覧の残りは前の取得のものなので、打ち切られなかった条件付きの 200 では打ち切りを保つ。
+    @Test func keepsTheTruncationAcrossAConditional200() async {
+        fixture.respond(Self.truncatedPages() + [PollerFixture.ok(1...1, lastModified: "LM-2")])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        fixture.advance(by: 60)
+        await fixture.sleeper.waitForSleeps(2)
+        #expect(fixture.ifModifiedSince.last == "LM-1")
+        #expect(fixture.last?.threads.count == 11)
+        #expect(fixture.last?.isTruncated == true)
+        fixture.poller.stop()
+    }
+
     /// 間隔の境界の値は `FeedDiagnosticsTests.derivesThePollInterval` で確かめる。
     @Test func recordsTheIntervalAndTheNextFetch() async {
         fixture.respond([Self.ok(pollInterval: "120")])
