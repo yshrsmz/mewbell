@@ -22,7 +22,7 @@ struct MarkReadPollingTests {
         fixture.route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3), PollerFixture.notModified])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
-        await fixture.poller.perform(action)
+        await fixture.poller.perform([action])
         #expect(lastIDs == ["1", "3"])
         let sent = fixture.transport.requests.filter { $0.httpMethod != "GET" }
         #expect(
@@ -46,7 +46,7 @@ struct MarkReadPollingTests {
         fixture.route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3)], [:])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
-        await fixture.poller.perform(action)
+        await fixture.poller.perform([action])
         #expect(lastIDs == ["1", "3"])
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
@@ -62,7 +62,7 @@ struct MarkReadPollingTests {
         fixture.transport.pausedMethod.value = "GET"
         fixture.sleeper.advance()
         await waitUntil { self.gets.count == 2 }
-        await fixture.poller.perform(.read(threadID: "2"))
+        await fixture.poller.perform([.read(threadID: "2")])
         #expect(patches.count == 1)
         fixture.transport.pausedMethod.value = nil
         await fixture.sleeper.waitForSleeps(2)

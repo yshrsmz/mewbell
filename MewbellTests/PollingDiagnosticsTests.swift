@@ -159,7 +159,7 @@ struct ActionFailurePollingTests {
         fixture.route(gets: [PollerFixture.ok(1...3)], ["PATCH": HTTPResponse(statusCode: 500)])
         await startAndLoad()
         let before = fixture.last
-        await fixture.poller.perform(.read(threadID: "2"))
+        await fixture.poller.perform([.read(threadID: "2")])
         let expected = ActionFailure(action: .read, kind: .httpStatus(500), occurredAt: now)
         #expect(fixture.last?.actionFailure == expected)
         #expect(fixture.last?.diagnostics.lastActionFailure == expected)
@@ -176,7 +176,7 @@ struct ActionFailurePollingTests {
         fixture.transport.pausedMethod.value = "GET"
         fixture.advance(by: 60)
         await waitUntil { self.fixture.requests("GET").count == 2 }
-        await fixture.poller.perform(.done(threadID: "2"))
+        await fixture.poller.perform([.done(threadID: "2")])
         #expect(fixture.last?.actionFailure?.kind == .unauthorized)
         // Done の前に送った取得が終わっても消さない
         fixture.transport.pausedMethod.value = nil
@@ -204,7 +204,7 @@ struct ActionFailurePollingTests {
         fixture.route(gets: [PollerFixture.ok(1...3)])
         await startAndLoad()
         await fixture.tokens.discardToken(for: PollerFixture.alice)
-        await fixture.poller.perform(.read(threadID: "2"))
+        await fixture.poller.perform([.read(threadID: "2")])
         #expect(fixture.requests("PATCH").isEmpty)
         #expect(fixture.last?.actionFailure?.kind == .noToken)
         fixture.poller.stop()
@@ -214,8 +214,8 @@ struct ActionFailurePollingTests {
         fixture.route(gets: [PollerFixture.ok(1...3, scopes: "gist")], [:])
         fixture.poller.start()
         await waitUntil { self.fixture.last?.phase == .scopeInsufficient }
-        await fixture.poller.perform(.read(threadID: "2"))
-        await fixture.poller.perform(.done(threadID: "2"))
+        await fixture.poller.perform([.read(threadID: "2")])
+        await fixture.poller.perform([.done(threadID: "2")])
         await fixture.poller.markAllRead(through: now)
         #expect(fixture.transport.requests.allSatisfy { $0.httpMethod == "GET" })
         #expect(fixture.last?.actionFailure == nil)
@@ -225,8 +225,8 @@ struct ActionFailurePollingTests {
     @Test func doesNotRecordSuccesses() async {
         fixture.route(gets: [PollerFixture.ok(1...3)])
         await startAndLoad()
-        await fixture.poller.perform(.read(threadID: "1"))
-        await fixture.poller.perform(.done(threadID: "2"))
+        await fixture.poller.perform([.read(threadID: "1")])
+        await fixture.poller.perform([.done(threadID: "2")])
         await fixture.poller.markAllRead(through: now)
         #expect(fixture.last?.actionFailure == nil)
         #expect(fixture.last?.diagnostics.lastActionFailure == nil)
@@ -238,7 +238,7 @@ struct ActionFailurePollingTests {
         fixture.route(
             gets: [PollerFixture.ok(1...3), HTTPResponse(statusCode: 401)], ["PATCH": HTTPResponse(statusCode: 500)])
         await startAndLoad()
-        await fixture.poller.perform(.read(threadID: "2"))
+        await fixture.poller.perform([.read(threadID: "2")])
         fixture.advance(by: 60)
         await waitUntil { self.fixture.last?.phase == .unauthorized }
         #expect(fixture.last?.actionFailure == nil)

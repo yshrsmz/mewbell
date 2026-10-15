@@ -35,6 +35,8 @@ struct MenuBarContentView: View {
                         open: { notifications.open($0, in: $1) },
                         markRead: { notifications.markRead($0, in: $1) },
                         markDone: { notifications.markDone($0, in: $1) },
+                        markGroupRead: { notifications.markRead($0, in: $1) },
+                        markGroupDone: { notifications.markDone($0, in: $1) },
                         markAllRead: { notifications.markAllRead(in: $0) },
                         openWebNotifications: { notifications.openWebNotifications(for: $0) }))
             } else {

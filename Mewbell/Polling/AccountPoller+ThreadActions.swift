@@ -11,29 +11,52 @@ extension AccountPoller {
         await publish(state)
     }
 
-    /// スレッドを既読か Done にする。一覧からすぐに外し、リクエストを送り、次の取得を条件なしにする。
-    /// 止まっているときとトークンが無いときは送らない（次の条件なしの取得で、未読のままなら一覧に戻る）。
-    func perform(_ action: ThreadAction) async {
-        let threadID = action.threadID
-        HiddenThreads.beginRequest(for: threadID, in: &hidden)
-        if state.threads.contains(where: { $0.id == threadID }) {
-            state.threads.removeAll { $0.id == threadID }
+    /// スレッドを既読か Done にする。どれも一覧からすぐに外し、配列の順に 1 件ずつリクエストを送り、次の取得を条件なしにする。
+    /// 認証エラーかレート制限になったら残りは送らない。止まっているときとトークンが無いときは送らない
+    /// （送らなかったスレッドは、次の条件なしの取得で未読のままなら一覧に戻る）。失敗は最後の 1 つだけを知らせる。
+    func perform(_ actions: [ThreadAction]) async {
+        guard !actions.isEmpty else { return }
+        for action in actions {
+            HiddenThreads.beginRequest(for: action.threadID, in: &hidden)
+        }
+        let threadIDs = Set(actions.map(\.threadID))
+        if state.threads.contains(where: { threadIDs.contains($0.id) }) {
+            state.threads.removeAll { threadIDs.contains($0.id) }
             await publish(state)
         }
         // 止まっているかはトークンを待った後に見る。止まっていれば送らず、失敗も記録しない（取得の状態で伝わる）
         let token = await tokens.currentToken(for: accountID)
-        var failure: FailureKind?
+        var failure: FailedAction?
+        var unsent = actions[...]
         if !state.phase.isStopped {
-            failure =
-                if let token { FailureKind(await markThread(action, token: token)) } else {
-                    .noToken
-                }
+            failure = if let token { await send(&unsent, token: token) } else { (actions[0], .noToken) }
         }
-        // 結果が 304 に隠れないように、また失敗したスレッドが一覧に戻るように、次は条件なしで取り直す
-        // （失敗を知らせる前に済ませる。知らせている間に始まった取得で、スレッドが戻らないまま知らせが消えないように）
-        HiddenThreads.endRequest(for: threadID, fetchCount: fetchCount, in: &hidden)
+        // 失敗を知らせる前に済ませる（知らせている間に始まった取得で、スレッドが戻らないまま知らせが消えないように）
+        for action in unsent {
+            HiddenThreads.endRequest(for: action.threadID, fetchCount: fetchCount, in: &hidden)
+        }
         unconditionalRequested = true
-        if let failure { await recordActionFailure(ThreadActionKind(action), failure) }
+        if let failure { await recordActionFailure(ThreadActionKind(failure.action), failure.kind) }
+    }
+
+    /// 失敗した操作と、その失敗の種類
+    private typealias FailedAction = (action: ThreadAction, kind: FailureKind)
+
+    /// `actions` の先頭から 1 件ずつ送り、送った分を取り除く。二次レート制限を避けるため、並行させない。
+    /// 認証エラーかレート制限になったら、残りも同じ理由で失敗するので送らずに残す。最後の失敗を返す。
+    private func send(_ actions: inout ArraySlice<ThreadAction>, token: AccessToken) async -> FailedAction? {
+        var failure: FailedAction?
+        while let action = actions.popFirst() {
+            let kind = FailureKind(await markThread(action, token: token))
+            // 結果が 304 に隠れないように、また失敗したスレッドが一覧に戻るように、次は条件なしで取り直す
+            // （取得を始めるときに読んで消すので、残りを送っている間に始まる取得にも効くよう、1 件ごとに立てる）
+            HiddenThreads.endRequest(for: action.threadID, fetchCount: fetchCount, in: &hidden)
+            unconditionalRequested = true
+            guard let kind else { continue }
+            failure = (action, kind)
+            if kind == .unauthorized || kind == .rateLimited { break }
+        }
+        return failure
     }
 
     /// 操作に応じて、`GitHubAPIClient` の既読か Done のメソッドを呼ぶ。

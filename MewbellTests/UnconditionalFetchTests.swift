@@ -42,7 +42,7 @@ struct UnconditionalFetchTests {
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         if requested {
-            await fixture.poller.perform(.read(threadID: "1"))
+            await fixture.poller.perform([.read(threadID: "1")])
         }
         fixture.advance(by: requested ? 60 : 300)
         await fixture.sleeper.waitForSleeps(2)

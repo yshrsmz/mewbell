@@ -62,7 +62,7 @@ struct ConditionalFetchTests {
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         fixture.transport.pausedMethod.value = "PATCH"
-        let read = Task { await fixture.poller.perform(.read(threadID: "2")) }
+        let read = Task { await fixture.poller.perform([.read(threadID: "2")]) }
         await waitUntil { fixture.requests("PATCH").count == 1 }
         fixture.advance(by: 60)
         await fixture.sleeper.waitForSleeps(2)

@@ -71,6 +71,35 @@ struct NotificationStoreActionTests {
         store.stopAll()
     }
 
+    @Test func marksTheThreadsOfARepositoryGroupDone() async throws {
+        // 1 と 2 は octo/app、3 は octo/lib
+        let page = [("1", "octo/app"), ("2", "octo/app"), ("3", "octo/lib")]
+            .map { FakeHTTPTransport.threadJSON(id: $0.0, repository: $0.1) }
+        transport.setHandler { request in
+            switch request.httpMethod {
+            case "DELETE": HTTPResponse(statusCode: 204)
+            default: PollerFixture.ok(body: Data("[\(page.joined(separator: ","))]".utf8))
+            }
+        }
+        let notifier = SystemNotifier(center: center)
+        let store = await loadedStore(notifier: notifier)
+        await notifier.waitForPendingWork()
+        center.delivered.value = ["github.com/alice/1", "github.com/alice/2"]
+        let group = try #require(store.repositories[alice]?.first { $0.repository.description == "octo/app" })
+        store.markDone(group, in: alice)
+        #expect(store.feeds[alice]?.threads.map(\.id) == ["3"])
+        #expect(store.feeds[bob]?.threads.count == 3)
+        #expect(opened.value.isEmpty)
+        await waitUntil { self.urls("DELETE").count == 2 }
+        #expect(
+            Set(urls("DELETE")) == [
+                "https://api.github.com/notifications/threads/1", "https://api.github.com/notifications/threads/2",
+            ])
+        await notifier.waitForPendingWork()
+        #expect(center.delivered.value.isEmpty)
+        store.stopAll()
+    }
+
     @Test func marksAThreadReadWithoutOpeningIt() async throws {
         let store = await loadedStore()
         let thread = try #require(store.feeds[alice]?.threads.first { $0.id == "2" })
