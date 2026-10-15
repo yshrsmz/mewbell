@@ -342,7 +342,8 @@ extension GitHubAPIClient {
         case .release(let id):
             return await fetchReleaseTag(id, of: thread.repository, endpoints: endpoints, token: token)
         case .waitingWorkflowRun:
-            return await fetchWaitingWorkflowRun(of: thread.repository, endpoints: endpoints, token: token)
+            return await fetchWaitingWorkflowRun(
+                updatedAt: thread.updatedAt, of: thread.repository, endpoints: endpoints, token: token)
         case .checkSuite(let title):
             return await fetchCheckSuiteRun(
                 title, updatedAt: thread.updatedAt, of: thread.repository, endpoints: endpoints, token: token)
@@ -403,10 +404,10 @@ extension GitHubAPIClient {
     private static let waitingRunLimit = 5
 
     /// 承認を待っている run を探す（github-api「ワークフローの実行の検索のリクエスト」）。1〜5 件なら、ユーザーが承認できる
-    /// 待ちを持つ run が 1 件だけのときその run（1 件でも確かめる。通知の run が承認された後に、別の人の承認を待つ run を
-    /// 開かないように）。決まらなければ「無い」。
+    /// 待ちを持つ run のうち、`updated_at` が `updatedAt`（通知の時刻）に最も近いもの（1 件でも確かめる。通知の run が
+    /// 承認された後に、別の人の承認を待つ run や後から待ち始めた run を開かないように）。決まらなければ「無い」。
     private func fetchWaitingWorkflowRun(
-        of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
+        updatedAt: Date, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
         let runsPath = Self.runsPath(of: repository)
         let page: WorkflowRunsPage
@@ -416,34 +417,38 @@ extension GitHubAPIClient {
         case .success(let value): page = value
         case .failure(let stop): return stop.result
         }
-        let ids = page.workflowRuns.compactMap(\.validatedID)
-        guard max(page.totalCount, page.workflowRuns.count) <= Self.waitingRunLimit,
-            ids.count == page.workflowRuns.count, !ids.isEmpty
+        let runs = page.workflowRuns
+        guard max(page.totalCount, runs.count) <= Self.waitingRunLimit, !runs.isEmpty,
+            runs.allSatisfy({ $0.validatedID != nil })
         else { return .unavailable }
-        switch await approvableRuns(ids, runsPath: runsPath, endpoints: endpoints, token: token) {
-        case .success(let approvable) where approvable.count == 1:
-            return .found(ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: approvable[0])))
-        case .success:
-            return .unavailable
+        switch await approvableRuns(runs, runsPath: runsPath, endpoints: endpoints, token: token) {
+        case .success(let approvable):
+            // 通知の run が承認された後に待ち始めた別の run を選ばないように、承認待ちになった時刻（run の
+            // `updated_at`）が通知に最も近いものにする
+            guard let id = WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: approvable) else {
+                return .unavailable
+            }
+            return .found(ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: id)))
         case .failure(let stop):
             return stop.result
         }
     }
 
-    /// `ids` の run のうち、ユーザーが承認できる待ちを持つものを、`pending_deployments` を順に取って求める。
-    /// 見られない run は承認できないものとして数え、ほかの失敗があればそこで止める。
+    /// `runs`（ID が検証を通ったもの）のうち、ユーザーが承認できる待ちを持つものを、`pending_deployments` を順に取って
+    /// 求める。見られない run は承認できないものとして数え、ほかの失敗があればそこで止める。
     private func approvableRuns(
-        _ ids: [String], runsPath: String, endpoints: APIEndpoints, token: AccessToken
-    ) async -> Result<[String], DetailsStop> {
-        var approvable: [String] = []
-        for id in ids {
+        _ runs: [WorkflowRunSummary], runsPath: String, endpoints: APIEndpoints, token: AccessToken
+    ) async -> Result<[WorkflowRunSummary], DetailsStop> {
+        var approvable: [WorkflowRunSummary] = []
+        for run in runs {
+            guard let id = run.validatedID else { continue }
             let pendingURL = endpoints.apiURL(path: "\(runsPath)/\(id)/pending_deployments")
             switch await get(pendingURL, endpoints: endpoints, token: token) {
             case .success(let response):
                 guard let deployments = PendingDeployment.decodeList(from: response.body) else {
                     return .failure(DetailsStop(.failed(.malformedBody)))
                 }
-                if deployments.contains(where: \.currentUserCanApprove) { approvable.append(id) }
+                if deployments.contains(where: \.currentUserCanApprove) { approvable.append(run) }
             case .failure(let stop) where stop.result == .unavailable:
                 continue
             case .failure(let stop):
@@ -463,10 +468,10 @@ extension GitHubAPIClient {
             of: repository, query: [("branch", title.branch), ("per_page", "30")], endpoints: endpoints, token: token)
         {
         case .success(let page):
-            guard
-                let id = WorkflowRunSummary.closestRun(
-                    named: title.workflowName, updatedNear: updatedAt, in: page.workflowRuns)
-            else { return .unavailable }
+            let runs = page.workflowRuns.filter { $0.name == title.workflowName }
+            guard let id = WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: runs) else {
+                return .unavailable
+            }
             return .found(ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: id)))
         case .failure(let stop):
             return stop.result

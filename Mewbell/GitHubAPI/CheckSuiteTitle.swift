@@ -19,7 +19,7 @@ struct CheckSuiteTitle: Hashable, Sendable {
     /// 件名を読む。形が合わない、知らない結果、ワークフロー名かブランチが空・UTF-8 で 255 バイトより長い・制御文字を含むときは nil。
     init?(_ title: String) {
         let pattern =
-            /^(.+?) workflow run(?:, Attempt #\d+)? (failed at startup|failed|cancelled|skipped|succeeded) for (.+) branch$/
+            /^(.+?) workflow run(?:, Attempt #[0-9]+)? (failed at startup|failed|cancelled|skipped|succeeded) for (.+) branch$/
         guard let match = title.wholeMatch(of: pattern), let result = Result(rawValue: String(match.output.2)) else {
             return nil
         }

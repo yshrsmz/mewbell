@@ -14,6 +14,7 @@ struct URLQueryValueTests {
             "query=workflow:%22Build%20and%20test%22%20is:failure%20branch:feat/a%2Bb"
         ),
         ("a&b=c#d", "query=a%26b%3Dc%23d"),
+        ("feat;x", "query=feat%3Bx"),
     ])
     func escapesTheValue(_ value: String, _ query: String) {
         let url = base.appending(queryValue: value, for: "query")

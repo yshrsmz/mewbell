@@ -28,13 +28,11 @@ struct WorkflowRunSummary: Decodable, Sendable {
     /// run を選ぶとき、`updated_at` の差として許す幅
     private static let matchWindow: TimeInterval = 600
 
-    /// `runs` のうち、`name` が `workflowName` と一致し、`updated_at` と `updatedAt` の差が `matchWindow` 以内で最も
-    /// 小さいものの ID。当たらないとき、差が最も小さいものが 2 件以上あるときは nil。
-    static func closestRun(named workflowName: String, updatedNear updatedAt: Date, in runs: [WorkflowRunSummary])
-        -> String?
-    {
+    /// `runs` のうち、`updated_at` と `updatedAt` の差が `matchWindow` 以内で最も小さいものの ID。当たらないとき、
+    /// 差が最も小さいものが 2 件以上あるときは nil。
+    static func closestRun(updatedNear updatedAt: Date, in runs: [WorkflowRunSummary]) -> String? {
         let candidates = runs.compactMap { run -> (id: String, distance: TimeInterval)? in
-            guard run.name == workflowName, let id = run.validatedID,
+            guard let id = run.validatedID,
                 let runUpdatedAt = try? Date(run.updatedAt, strategy: .iso8601)
             else { return nil }
             let distance = abs(runUpdatedAt.timeIntervalSince(updatedAt))

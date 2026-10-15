@@ -31,6 +31,7 @@ struct CheckSuiteTitleTests {
         "CI workflow run failed for  branch",
         "CI workflow run failed for main",
         "CI workflow run, Attempt #x failed for main branch",
+        "CI workflow run, Attempt #\u{662} failed for main branch",
         "C\u{7}I workflow run failed for main branch",
         "CI workflow run failed for ma\nin branch",
         "\(String(repeating: "a", count: 256)) workflow run failed for main branch",

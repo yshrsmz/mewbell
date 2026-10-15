@@ -102,6 +102,21 @@ extension ThreadDetailsRequestTests {
             ])
     }
 
+    /// 承認できる run が複数あるときは、承認待ちになった時刻が通知（12:00）に最も近いものにする。10 分より離れた run は選ばない
+    /// （通知の run が承認された後に待ち始めた別の run を開かないため）。
+    @Test func takesTheApprovableRunClosestToTheNotification() async throws {
+        let (thread, endpoints) = try approvalThread()
+        let list = Self.runs([
+            Run("101", "Deploy", "2026-10-08T11:50:30Z"), Run("102", "Deploy", "2026-10-08T12:01:00Z"),
+        ])
+        let both = transport(list: list) { _ in Self.pending(canApprove: true) }
+        #expect(await fetch(thread, endpoints, both) == Self.found("102"))
+        let later = Self.runs([Run("103", "Deploy", "2026-10-08T12:20:00Z")])
+        #expect(
+            await fetch(thread, endpoints, transport(list: later) { _ in Self.pending(canApprove: true) })
+                == .unavailable)
+    }
+
     @Test func countsARunItCannotSeeAsNotApprovable() async throws {
         let (thread, endpoints) = try approvalThread()
         let transport = transport(list: Self.waiting(["101", "102"])) { id in
@@ -211,30 +226,26 @@ extension ThreadDetailsRequestTests {
 struct WorkflowRunSelectionTests {
     private let updatedAt = Date(timeIntervalSince1970: 1_791_460_800)  // 2026-10-08T12:00:00Z
 
-    private func run(_ id: Int64, _ name: String?, _ updatedAt: String) -> WorkflowRunSummary {
-        WorkflowRunSummary(id: id, name: name, updatedAt: updatedAt)
+    private func run(_ id: Int64, _ updatedAt: String) -> WorkflowRunSummary {
+        WorkflowRunSummary(id: id, name: "CI", updatedAt: updatedAt)
     }
 
-    @Test func takesTheClosestRunWithTheName() {
-        let runs = [run(1, "CI", "2026-10-08T11:55:00Z"), run(2, "CI", "2026-10-08T12:02:00Z")]
-        #expect(WorkflowRunSummary.closestRun(named: "CI", updatedNear: updatedAt, in: runs) == "2")
+    @Test func takesTheClosestRun() {
+        let runs = [run(1, "2026-10-08T11:55:00Z"), run(2, "2026-10-08T12:02:00Z")]
+        #expect(WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: runs) == "2")
     }
 
-    @Test func skipsRunsOutsideTheWindowOrWithOtherNames() {
+    @Test func skipsRunsOutsideTheWindowOrWithoutADate() {
         let runs = [
-            run(1, "CI", "2026-10-08T11:49:59Z"), run(2, "CI", "2026-10-08T12:10:01Z"),
-            run(3, nil, "2026-10-08T12:00:00Z"),
-            run(4, "Release", "2026-10-08T12:00:00Z"), run(5, "CI", "not a date"),
+            run(1, "2026-10-08T11:49:59Z"), run(2, "2026-10-08T12:10:01Z"), run(5, "not a date"),
+            run(-1, "2026-10-08T12:00:00Z"),
         ]
-        #expect(WorkflowRunSummary.closestRun(named: "CI", updatedNear: updatedAt, in: runs) == nil)
-        #expect(
-            WorkflowRunSummary.closestRun(
-                named: "CI", updatedNear: updatedAt, in: [run(6, "CI", "2026-10-08T12:10:00Z")])
-                == "6")
+        #expect(WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: runs) == nil)
+        #expect(WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: [run(6, "2026-10-08T12:10:00Z")]) == "6")
     }
 
     @Test func decidesNothingOnATie() {
-        let runs = [run(1, "CI", "2026-10-08T11:58:00Z"), run(2, "CI", "2026-10-08T12:02:00Z")]
-        #expect(WorkflowRunSummary.closestRun(named: "CI", updatedNear: updatedAt, in: runs) == nil)
+        let runs = [run(1, "2026-10-08T11:58:00Z"), run(2, "2026-10-08T12:02:00Z")]
+        #expect(WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: runs) == nil)
     }
 }
