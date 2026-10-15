@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/yshrsmz/mewbell/compare/v0.3.0...v0.4.0) (2026-10-15)
+
+
+### Features
+
+* open individual Discussion and Release pages (update-thread-open-url) ([#47](https://github.com/yshrsmz/mewbell/issues/47)) ([35709a3](https://github.com/yshrsmz/mewbell/commit/35709a31bd98af5d53bd08e213e398a2ebb4575c))
+* open the workflow run of Actions notifications (update-actions-open-url) ([#50](https://github.com/yshrsmz/mewbell/issues/50)) ([e065780](https://github.com/yshrsmz/mewbell/commit/e065780645b03071b091905b147a1b538fd4b2b4))
+
+
+### Bug Fixes
+
+* merge a conditional 200 into the notification list (fix-conditional-fetch-partial-list) ([#49](https://github.com/yshrsmz/mewbell/issues/49)) ([6dd714d](https://github.com/yshrsmz/mewbell/commit/6dd714da90c16dd7f7820c177a331521285680c8))
+* treat secondary rate limit 403 as a rate limit for the list and actions (fix-secondary-rate-limit-403) ([#45](https://github.com/yshrsmz/mewbell/issues/45)) ([e3b5d7f](https://github.com/yshrsmz/mewbell/commit/e3b5d7fa00071abe63c7b7b63514eb2a0c3ab72a))
+
 ## [0.3.0](https://github.com/yshrsmz/mewbell/compare/v0.2.0...v0.3.0) (2026-10-14)
 
 
