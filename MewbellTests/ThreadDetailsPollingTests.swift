@@ -104,6 +104,22 @@ struct ThreadDetailsPollingTests {
         fixture.poller.stop()
     }
 
+    /// 条件付きの 200 に入っていなかったスレッドは一覧に残るので、状態とイベントも外さず、取り直さない。
+    @Test func keepsTheDetailsOfThreadsMissingFromAConditional200() async throws {
+        let fixture = try PollerFixture()
+        respond(fixture, notifications: [Self.list([1]), Self.list([(2, 5)])])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        fixture.advance(by: 60)
+        await fixture.sleeper.waitForSleeps(2)
+        let notifications = fixture.transport.requests.filter { !Self.isDetails($0) }
+        #expect(notifications.last?.value(forHTTPHeaderField: "If-Modified-Since") == "LM-1")
+        #expect(fixture.lastIDs == ["2", "1"])
+        #expect(fixture.last?.threads.allSatisfy { $0.details == Self.commented } == true)
+        #expect(detailsRequests(fixture).count == 4)
+        fixture.poller.stop()
+    }
+
     @Test func doesNotRefetchUnchangedThreads() async throws {
         let fixture = try PollerFixture()
         respond(fixture, notifications: [Self.list([1]), Self.list([1])])

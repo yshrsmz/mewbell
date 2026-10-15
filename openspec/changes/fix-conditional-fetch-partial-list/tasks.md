@@ -2,14 +2,14 @@
 
 ## 1. 重ねる処理
 
-- [ ] 1.1 `Mewbell/Polling/ThreadListMerge.swift` に `enum ThreadListMerge` と `static func merge(_ fetched: [NotificationThread], into current: [NotificationThread]) -> [NotificationThread]` を置く（design.md D1）。受け取ったスレッドを受け取った順に、その後に `current` のうち ID が重ならないものを `current` の順に並べる。`project.xcproj` にファイルが入ることを `xcodebuild` で確かめる。
-- [ ] 1.2 `MewbellTests/ThreadListMergeTests.swift` に、同じ ID は受け取ったもので差し替わる（`updated_at` とタイトルが新しくなる）、無い ID は足される、受け取らなかったスレッドは残る、どちらかが空のとき、のテストを置く。`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test -only-testing:MewbellTests/ThreadListMergeTests` を通し、結果のスイート数を確かめる。
+- [x] 1.1 `Mewbell/Polling/ThreadListMerge.swift` に `enum ThreadListMerge` と `static func merge(_ fetched: [NotificationThread], into current: [NotificationThread]) -> [NotificationThread]` を置く（design.md D1）。受け取ったスレッドを受け取った順に、その後に `current` のうち ID が重ならないものを `current` の順に並べる。`project.xcproj` にファイルが入ることを `xcodebuild` で確かめる。
+- [x] 1.2 `MewbellTests/ThreadListMergeTests.swift` に、同じ ID は受け取ったもので差し替わる（`updated_at` とタイトルが新しくなる）、無い ID は足される、受け取らなかったスレッドは残る、どちらかが空のとき、のテストを置く。`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test -only-testing:MewbellTests/ThreadListMergeTests` を通し、結果のスイート数を確かめる。
 
 ## 2. ポーラー
 
-- [ ] 2.1 `Mewbell/Polling/AccountPoller.swift` の `fetch(with:)` で、`ifModifiedSince != nil` の `200` のとき、状態とイベントを取った後、2 回目の `HiddenThreads.revealOrHide` の前に `ThreadListMerge.merge(threads, into: state.threads)` で重ねる。`details.listed` には `ThreadListMerge.merge(fetched, into: state.threads)` を渡す（条件なしのときは今までどおり `fetched`）。`.updated` の `truncated` を「受け取った打ち切り または `state.isTruncated`」にする（D2・D3・D5）。
-- [ ] 2.2 `lastFullFetch` を `lastUnconditionalFetch` に改め、条件なしの取得の `200` のときだけ更新する。`PollSchedule.unconditionalFetchIsDue` の引数名と、両方の doc コメント、`unconditionalFetchInterval` の doc コメントを、条件付きの `200` は差分であることに合わせて直す（D4）。
-- [ ] 2.3 ポーラーのテストを足し、直す（`PollerFixture` を使う）。
+- [x] 2.1 `Mewbell/Polling/AccountPoller.swift` の `fetch(with:)` で、`ifModifiedSince != nil` の `200` のとき、状態とイベントを取った後、2 回目の `HiddenThreads.revealOrHide` の前に `ThreadListMerge.merge(threads, into: state.threads)` で重ねる。`details.listed` には `ThreadListMerge.merge(fetched, into: state.threads)` を渡す（条件なしのときは今までどおり `fetched`）。`.updated` の `truncated` を「受け取った打ち切り または `state.isTruncated`」にする（D2・D3・D5）。
+- [x] 2.2 `lastFullFetch` を `lastUnconditionalFetch` に改め、条件なしの取得の `200` のときだけ更新する。`PollSchedule.unconditionalFetchIsDue` の引数名と、両方の doc コメント、`unconditionalFetchInterval` の doc コメントを、条件付きの `200` は差分であることに合わせて直す（D4）。
+- [x] 2.3 ポーラーのテストを足し、直す（`PollerFixture` を使う）。
   - 条件なしの `200` で 3 件、条件付きの `200` で 1 件（うち 1 件は既存の ID で `updated_at` が進んだもの、または新しい ID）を返すと、一覧が重なった件数になり、差し替えたスレッドの `updated_at` が新しくなること。
   - 既読化のリクエストが終わっていない間の条件付きの `200` で、既読にしたスレッドが戻らないこと（受け取ったスレッドに入っているときも）。すべて既読の範囲も同じ。
   - `UnconditionalFetchTests.countsAConditional200AsAFullFetch` を、条件付きの `200` では 5 分の起点が動かない（最初の取得から 5 分で条件なしになる）テストに改める。
@@ -17,7 +17,7 @@
   - 条件付きの `200` で一覧に残ったスレッドの状態とイベント（`details`）が外れないこと。
   - ほかのテストのうち、条件付きの `200` で一覧が置き換わることを前提にしていたものを、新しい振る舞いに合わせて直す（全テストを回して見つける）。
   - `xcodebuild ... test -only-testing:` で該当のスイートを通し、結果のスイート数を確かめる。
-- [ ] 2.4 store を通したテストを足す: 条件なしの `200` の後の条件付きの `200` で、受け取らなかったスレッドの macOS の通知が取り下げられないこと（偽の notifier の取り下げの記録で確かめる）。その後の条件なしの `200` で消えたスレッドは取り下げられること。
+- [x] 2.4 store を通したテストを足す: 条件なしの `200` の後の条件付きの `200` で、受け取らなかったスレッドの macOS の通知が取り下げられないこと（偽の notifier の取り下げの記録で確かめる）。その後の条件なしの `200` で消えたスレッドは取り下げられること。
 
 ## 3. 確認
 

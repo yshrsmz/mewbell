@@ -25,12 +25,12 @@ enum PollSchedule {
         return .seconds(Int(clamped))
     }
 
-    /// 最後に 200 で一覧を取り直してから `interval` がたったか。時計が戻ったとき（差が負）も、たったものとして扱う
-    /// （戻った分だけ取り直しが遅れないように）。`lastModified` と `lastFullFetch` はどちらも 200 で入るので、
-    /// トークンの取り直しや停止で `lastModified` を消せば、時刻を消さなくても次は条件なしになる
-    static func unconditionalFetchIsDue(lastFullFetch: Date?, now: Date, interval: TimeInterval) -> Bool {
-        guard let lastFullFetch else { return true }
-        let elapsed = now.timeIntervalSince(lastFullFetch)
+    /// 最後に条件なしの 200 で一覧を取り直してから `interval` がたったか。時計が戻ったとき（差が負）も、たったものとして
+    /// 扱う（戻った分だけ取り直しが遅れないように）。`lastModified` が無ければ条件付きにできないので、トークンの取り直しや
+    /// 停止で `lastModified` を消せば、時刻を消さなくても次は条件なしになる
+    static func unconditionalFetchIsDue(lastUnconditionalFetch: Date?, now: Date, interval: TimeInterval) -> Bool {
+        guard let lastUnconditionalFetch else { return true }
+        let elapsed = now.timeIntervalSince(lastUnconditionalFetch)
         return elapsed >= interval || elapsed < 0
     }
 
