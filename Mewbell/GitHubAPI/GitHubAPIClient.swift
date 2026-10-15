@@ -403,10 +403,22 @@ extension GitHubAPIClient {
     /// 承認を待っている run を、`pending_deployments` で確かめる上限（これより多ければ決めない）
     private static let waitingRunLimit = 5
 
-    /// 承認を待っている run を探す（github-api「ワークフローの実行の検索のリクエスト」）。1〜5 件なら、ユーザーが承認できる
-    /// 待ちを持つ run のうち、`updated_at` が `updatedAt`（通知の時刻）に最も近いもの（1 件でも確かめる。通知の run が
-    /// 承認された後に、別の人の承認を待つ run や後から待ち始めた run を開かないように）。決まらなければ「無い」。
+    /// 種類が WorkflowRun のスレッドの run を探す（github-api「ワークフローの実行の検索のリクエスト」）。承認を待っている
+    /// run から決まらなければ、通知の時刻に動いていた run を探す。どちらでも決まらなければ「無い」。
     private func fetchWaitingWorkflowRun(
+        updatedAt: Date, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
+    ) async -> ThreadDetailsFetchResult {
+        let waiting = await fetchApprovableWaitingRun(
+            updatedAt: updatedAt, of: repository, endpoints: endpoints, token: token)
+        // 承認を待っている run から決まらなければ、通知の run がもう承認されたものとして、通知の時刻に動いていた run を探す
+        guard waiting == .unavailable else { return waiting }
+        return await fetchRunSpanning(updatedAt, of: repository, endpoints: endpoints, token: token)
+    }
+
+    /// 承認を待っている run（1〜5 件）のうち、ユーザーが承認できる待ちを持ち、承認待ちになった時刻（`updated_at`）が
+    /// `updatedAt`（通知の時刻）に最も近いもの（1 件でも確かめる。通知の run が承認された後に、別の人の承認を待つ run や
+    /// 後から待ち始めた run を開かないように）。決まらなければ「無い」。
+    private func fetchApprovableWaitingRun(
         updatedAt: Date, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
         let runsPath = Self.runsPath(of: repository)
@@ -456,6 +468,25 @@ extension GitHubAPIClient {
             }
         }
         return .success(approvable)
+    }
+
+    /// `date`（通知の時刻）より前に作られた run のうち、`date` に動いていた run が 1 件だけなら、その run。
+    private func fetchRunSpanning(
+        _ date: Date, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
+    ) async -> ThreadDetailsFetchResult {
+        let createdBefore = "<=" + date.formatted(.iso8601)
+        switch await fetchRuns(
+            of: repository, query: [("created", createdBefore), ("per_page", "30")], endpoints: endpoints,
+            token: token)
+        {
+        case .success(let page):
+            guard let id = WorkflowRunSummary.runSpanning(date, in: page.workflowRuns, now: now()) else {
+                return .unavailable
+            }
+            return .found(ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: id)))
+        case .failure(let stop):
+            return stop.result
+        }
     }
 
     /// 種類が CheckSuite のスレッドの run を、件名のブランチの run の一覧から探す（github-api「ワークフローの実行の検索の

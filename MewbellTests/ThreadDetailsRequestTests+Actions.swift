@@ -54,16 +54,30 @@ extension ThreadDetailsRequestTests {
         return HTTPResponse(statusCode: 200, body: Data(body.utf8))
     }
 
-    /// run の一覧には `list` を、`pending_deployments` には run の ID ごとの `pending` を返すトランスポート。
+    /// run の一覧には `list` を（`created` で絞った一覧には、`created` があればそれを）、`pending_deployments` には
+    /// run の ID ごとの `pending` を返すトランスポート。
     private func transport(
-        list: HTTPResponse,
+        list: HTTPResponse, created: HTTPResponse? = nil,
         pending: @escaping @Sendable (String) -> HTTPResponse = { _ in HTTPResponse(statusCode: 500) }
     ) -> FakeHTTPTransport {
         FakeHTTPTransport { request in
             let components = request.url?.pathComponents ?? []
-            guard components.last == "pending_deployments" else { return list }
+            guard components.last == "pending_deployments" else {
+                let isCreated = request.url?.query()?.contains("created=") == true
+                return isCreated ? created ?? list : list
+            }
             return pending(components[components.count - 2])
         }
+    }
+
+    /// 通知（12:00:00）の前に作られた run の一覧。`runs` は ID と (`run_started_at`, `updated_at`) で、どれも終わった run。
+    private static func created(_ runs: [(id: String, span: (startedAt: String, updatedAt: String))]) -> HTTPResponse {
+        let items = runs.map { run in
+            #"{"id": \#(run.id), "name": "cloudformation-apply", "status": "completed", "conclusion": "success", "#
+                + #""run_started_at": "\#(run.span.startedAt)", "updated_at": "\#(run.span.updatedAt)"}"#
+        }
+        let body = #"{"total_count": \#(runs.count), "workflow_runs": [\#(items.joined(separator: ","))]}"#
+        return HTTPResponse(statusCode: 200, body: Data(body.utf8))
     }
 
     private static func found(_ id: String) -> ThreadDetailsFetchResult {
@@ -141,7 +155,60 @@ extension ThreadDetailsRequestTests {
             Self.pending(canApprove: approvable[ids.firstIndex(of: id) ?? 0])
         }
         #expect(await fetch(thread, endpoints, transport) == .unavailable)
-        #expect(transport.requests.count == 1 + approvable.count)
+        // 承認を待っている run から決まらないので、通知の前に作られた run の一覧も取る
+        #expect(transport.requests.count == 2 + approvable.count)
+        #expect(transport.requests.last?.url?.query()?.contains("created=") == true)
+    }
+
+    /// 承認を待っている run が無ければ、通知の時刻に動いていた run を探す（承認された後の通知）。
+    @Test func takesTheRunSpanningAnApprovedNotification() async throws {
+        let (thread, endpoints) = try approvalThread()
+        let created = Self.created([
+            ("14190806", ("2026-10-08T11:59:55Z", "2026-10-08T12:05:16Z")),
+            ("14190661", ("2026-10-08T11:58:51Z", "2026-10-08T11:59:29Z")),
+        ])
+        let transport = transport(list: Self.waiting([]), created: created)
+        #expect(await fetch(thread, endpoints, transport) == Self.found("14190806"))
+        #expect(
+            transport.requests.map { $0.url?.absoluteString } == [
+                "https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=6",
+                "https://api.github.com/repos/octo/app/actions/runs?created=%3C%3D2026-10-08T12:00:00Z&per_page=30",
+            ])
+    }
+
+    @Test func findsNoRunWhenTwoRunsSpanTheNotification() async throws {
+        let (thread, endpoints) = try approvalThread()
+        let created = Self.created([
+            ("1", ("2026-10-08T11:50:00Z", "2026-10-08T12:10:00Z")),
+            ("2", ("2026-10-08T11:55:00Z", "2026-10-08T12:01:00Z")),
+        ])
+        #expect(await fetch(thread, endpoints, transport(list: Self.waiting([]), created: created)) == .unavailable)
+    }
+
+    /// 承認を待っている run の一覧が「無い」（Actions を読めないなど）でも探す。
+    @Test func searchesTheSpanningRunAfterANotFoundWaitingList() async throws {
+        let (thread, endpoints) = try approvalThread()
+        let created = Self.created([("14190806", ("2026-10-08T11:59:55Z", "2026-10-08T12:05:16Z"))])
+        let transport = transport(list: HTTPResponse(statusCode: 404), created: created)
+        #expect(await fetch(thread, endpoints, transport) == Self.found("14190806"))
+    }
+
+    /// 承認を待っている run から決まったとき、一覧が一時的な失敗・認証の失敗・レート制限のときは探さない。
+    @Test func doesNotSearchTheSpanningRunAfterAWaitingRunOrAFailure() async throws {
+        let (thread, endpoints) = try approvalThread()
+        let created = Self.created([("2", ("2026-10-08T11:59:55Z", "2026-10-08T12:05:16Z"))])
+        let decided = transport(list: Self.waiting(["1"]), created: created) { _ in Self.pending(canApprove: true) }
+        #expect(await fetch(thread, endpoints, decided) == Self.found("1"))
+        #expect(decided.requests.count == 2)
+        for (response, result) in [
+            (HTTPResponse(statusCode: 502), ThreadDetailsFetchResult.failed(.unexpectedStatus(502))),
+            (HTTPResponse(statusCode: 401), .unauthorized),
+            (FakeHTTPTransport.secondaryRateLimit(), .rateLimited(retryAt: now)),
+        ] {
+            let failing = transport(list: response, created: created)
+            #expect(await fetch(thread, endpoints, failing) == result)
+            #expect(failing.requests.count == 1)
+        }
     }
 
     /// 1〜20 桁の数字でない ID は受け付けない（`Int64` に入らない 21 桁は、形の崩れたボディになる）
@@ -244,7 +311,8 @@ struct WorkflowRunSelectionTests {
     private let updatedAt = Date(timeIntervalSince1970: 1_791_460_800)  // 2026-10-08T12:00:00Z
 
     private func run(_ id: Int64, _ updatedAt: String) -> WorkflowRunSummary {
-        WorkflowRunSummary(id: id, name: "CI", conclusion: "failure", updatedAt: updatedAt)
+        WorkflowRunSummary(
+            id: id, name: "CI", conclusion: "failure", status: "completed", runStartedAt: nil, updatedAt: updatedAt)
     }
 
     @Test func takesTheClosestRun() {
@@ -264,5 +332,55 @@ struct WorkflowRunSelectionTests {
     @Test func decidesNothingOnATie() {
         let runs = [run(1, "2026-10-08T11:58:00Z"), run(2, "2026-10-08T12:02:00Z")]
         #expect(WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: runs) == nil)
+    }
+
+    /// `runStartedAt`〜`updatedAt` の run。`status` が nil なら終わっていない run。
+    private func span(_ id: Int64, _ startedAt: String?, _ updatedAt: String, status: String? = "completed")
+        -> WorkflowRunSummary
+    {
+        WorkflowRunSummary(
+            id: id, name: "cloudformation-apply", conclusion: nil, status: status, runStartedAt: startedAt,
+            updatedAt: updatedAt)
+    }
+
+    private let now = Date(timeIntervalSince1970: 1_791_464_400)  // 2026-10-08T13:00:00Z
+
+    /// 通知（12:00）の時刻に動いていた run が 1 件だけならその run。前に終わった run と後に始まった run は数えない。
+    @Test func takesTheOnlyRunSpanningTheNotification() {
+        let runs = [
+            span(1, "2026-10-08T11:58:53Z", "2026-10-08T11:59:27Z"),
+            span(2, "2026-10-08T11:59:55Z", "2026-10-08T12:05:14Z"),
+            span(3, "2026-10-08T12:00:30Z", "2026-10-08T12:01:00Z"),
+        ]
+        #expect(WorkflowRunSummary.runSpanning(updatedAt, in: runs, now: now) == "2")
+    }
+
+    /// 終わっていない run は今まで動いているものとする。
+    @Test func countsARunningRunAsSpanningUntilNow() {
+        let running = span(4, "2026-10-08T11:59:55Z", "2026-10-08T11:59:56Z", status: "in_progress")
+        #expect(WorkflowRunSummary.runSpanning(updatedAt, in: [running], now: now) == "4")
+        let finished = span(5, "2026-10-08T11:59:55Z", "2026-10-08T11:59:56Z")
+        #expect(WorkflowRunSummary.runSpanning(updatedAt, in: [finished], now: now) == nil)
+    }
+
+    @Test func decidesNothingForTwoOrNoSpanningRuns() {
+        let two = [
+            span(1, "2026-10-08T11:50:00Z", "2026-10-08T12:10:00Z"),
+            span(2, "2026-10-08T11:55:00Z", "2026-10-08T11:56:00Z", status: nil),
+        ]
+        #expect(WorkflowRunSummary.runSpanning(updatedAt, in: two, now: now) == nil)
+        #expect(WorkflowRunSummary.runSpanning(updatedAt, in: [], now: now) == nil)
+        let unreadable = [span(3, nil, "2026-10-08T12:10:00Z"), span(4, "yesterday", "2026-10-08T12:10:00Z")]
+        #expect(WorkflowRunSummary.runSpanning(updatedAt, in: unreadable, now: now) == nil)
+    }
+
+    /// 始まった時刻・終わった時刻と通知の時刻が同じ run は挟む run に入る。
+    @Test func includesTheBoundaries() {
+        #expect(
+            WorkflowRunSummary.runSpanning(
+                updatedAt, in: [span(1, "2026-10-08T12:00:00Z", "2026-10-08T12:05:00Z")], now: now) == "1")
+        #expect(
+            WorkflowRunSummary.runSpanning(
+                updatedAt, in: [span(2, "2026-10-08T11:55:00Z", "2026-10-08T12:00:00Z")], now: now) == "2")
     }
 }

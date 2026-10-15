@@ -19,6 +19,9 @@ struct WorkflowRunSummary: Decodable, Sendable {
     let name: String?
     /// 結果（`failure`・`success` など）。終わっていなければ nil
     let conclusion: String?
+    /// 状態（`completed`・`in_progress`・`waiting` など）
+    let status: String?
+    let runStartedAt: String?
     let updatedAt: String
 
     /// 検証した run の ID（1〜20 桁の数字）。通らなければ nil。
@@ -43,6 +46,20 @@ struct WorkflowRunSummary: Decodable, Sendable {
         guard let closest = candidates.map(\.distance).min() else { return nil }
         let closestRuns = candidates.filter { $0.distance == closest }
         return closestRuns.count == 1 ? closestRuns[0].id : nil
+    }
+
+    /// `runs` のうち、`run_started_at` が `date` 以前で、終わった時刻（`status` が `completed` なら `updated_at`、
+    /// そうでなければ `now`）が `date` 以降のもの（`date` に動いていた run）が 1 件だけなら、その ID。日時を読めない run は数えない。
+    static func runSpanning(_ date: Date, in runs: [WorkflowRunSummary], now: Date) -> String? {
+        let spanning = runs.compactMap { run -> String? in
+            guard let id = run.validatedID,
+                let startedAt = run.runStartedAt.flatMap({ try? Date($0, strategy: .iso8601) }),
+                let updatedAt = try? Date(run.updatedAt, strategy: .iso8601)
+            else { return nil }
+            let endedAt = run.status == "completed" ? updatedAt : now
+            return startedAt <= date && date <= endedAt ? id : nil
+        }
+        return spanning.count == 1 ? spanning[0] : nil
     }
 }
 
