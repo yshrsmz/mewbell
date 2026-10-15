@@ -367,6 +367,7 @@ struct ReleaseTagTests {
     @Test(arguments: [
         ("v1.0.0", ["v1.0.0"]), ("rust-v0.163.0-alpha.10.1", ["rust-v0.163.0-alpha.10.1"]),
         ("cli/v1.2.0", ["cli", "v1.2.0"]), ("@scope/pkg@1.14.2", ["@scope", "pkg@1.14.2"]),
+        (String(repeating: "a", count: 255), [String(repeating: "a", count: 255)]),
     ])
     func acceptsTags(_ tag: String, _ components: [String]) {
         #expect(ThreadWebURL.releaseTagComponents(tag) == components)
@@ -378,9 +379,5 @@ struct ReleaseTagTests {
     ])
     func rejectsTags(_ tag: String) {
         #expect(ThreadWebURL.releaseTagComponents(tag) == nil)
-    }
-
-    @Test func accepts255Characters() {
-        #expect(ThreadWebURL.releaseTagComponents(String(repeating: "a", count: 255)) != nil)
     }
 }

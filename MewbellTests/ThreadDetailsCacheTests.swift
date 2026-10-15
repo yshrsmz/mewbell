@@ -7,11 +7,14 @@ struct ThreadDetailsCacheTests {
     private let now = Date(timeIntervalSince1970: 1_791_460_800)
     private let open = ThreadDetails(state: .open, event: ThreadEvent(kind: .commented, actor: "bob"))
 
-    private func thread(_ id: String, updatedAt: TimeInterval = 0, numbered: Bool = true) throws -> NotificationThread {
+    private func thread(
+        _ id: String, updatedAt: TimeInterval = 0, numbered: Bool = true, kind: SubjectKind = .issue,
+        releaseID: String? = nil
+    ) throws -> NotificationThread {
         NotificationThread(
             id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: updatedAt), title: "Thread \(id)",
-            kind: .issue, subjectURL: nil, repository: try #require(RepositoryName(fullName: "octo/app")),
-            subjectNumber: numbered ? id : nil)
+            kind: kind, subjectURL: nil, repository: try #require(RepositoryName(fullName: "octo/app")),
+            subjectNumber: numbered ? id : nil, releaseID: releaseID)
     }
 
     @Test func attachesOnlyWhenTheUpdateMatches() throws {
@@ -41,14 +44,12 @@ struct ThreadDetailsCacheTests {
     /// Commit）は選ばない。番号とリリースの ID の求め方は `ThreadWebURL` のテストで確かめる
     @Test func picksReleasesWithAnID() throws {
         var cache = ThreadDetailsCache()
-        let repository = try #require(RepositoryName(fullName: "octo/app"))
-        func other(_ id: String, _ kind: SubjectKind, releaseID: String? = nil) -> NotificationThread {
-            NotificationThread(
-                id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: 10), title: "Thread \(id)",
-                kind: kind, subjectURL: nil, repository: repository, subjectNumber: nil, releaseID: releaseID)
-        }
-        let release = other("1", .release, releaseID: "12")
-        let threads = [release, other("2", .release), other("3", .discussion), other("4", .commit)]
+        let release = try thread("1", numbered: false, kind: .release, releaseID: "12")
+        let threads = [
+            release, try thread("2", numbered: false, kind: .release),
+            try thread("3", numbered: false, kind: .discussion),
+            try thread("4", numbered: false, kind: .commit),
+        ]
         #expect(cache.pending(in: threads, newOnly: false, limit: 10, now: now).map(\.id) == ["1"])
         // 同じ updated_at でタグが「無い」だった Release は取り直さない
         cache.record(.unavailable, for: release)

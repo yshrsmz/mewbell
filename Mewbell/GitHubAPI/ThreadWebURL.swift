@@ -16,7 +16,8 @@ enum ThreadWebURL {
     static func subjectNumber(
         kind: SubjectKind, subjectURL: URL?, repository: RepositoryName, endpoints: APIEndpoints
     ) -> String? {
-        let target = target(kind: kind, subjectURL: subjectURL, repository: repository, endpoints: endpoints)
+        let target = target(
+            kind: kind, subjectURL: subjectURL, repository: repository, endpoints: endpoints, releaseTag: nil)
         guard url(repository: repository, target: target, endpoints: endpoints) != nil else { return nil }
         switch target {
         case .pullRequest(let id), .issue(let id): return id
@@ -113,18 +114,17 @@ enum ThreadWebURL {
     /// Release と Discussion は種類で決め、`subject.url` から個別のページを作れなければそれぞれの一覧のページにする。
     private static func target(
         kind: SubjectKind, subjectURL: URL?, repository: RepositoryName, endpoints: APIEndpoints,
-        releaseTag: String? = nil
+        releaseTag: String?
     ) -> Target? {
-        let subject = subjectPath(subjectURL, repository: repository, endpoints: endpoints)
-        switch kind {
-        case .release:
+        if case .release = kind {
             return releaseTag.flatMap(releaseTagComponents).map(Target.releaseTag) ?? .releases
-        case .discussion:
+        }
+        let subject = subjectPath(subjectURL, repository: repository, endpoints: endpoints)
+        if case .discussion = kind {
             guard let subject, subject.collection == "discussions", ThreadID.isValid(subject.id) else {
                 return .discussions
             }
             return .discussion(subject.id)
-        default: break
         }
         guard let subject else { return nil }
         switch subject.collection {

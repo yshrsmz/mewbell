@@ -5,7 +5,7 @@ import Testing
 
 /// `GitHubAPIClient.fetchDetails` のリクエストと結果（github-api「スレッドのイベントの取得のリクエスト」）。
 struct ThreadDetailsRequestTests {
-    private let now = Date(timeIntervalSince1970: 1_791_460_800)
+    let now = Date(timeIntervalSince1970: 1_791_460_800)
     private let token: AccessToken
     private let issue = TimelineJSON.issue(createdAt: "2026-10-08T10:00:00Z")
     private let comment = TimelineJSON.page([TimelineJSON.commented(at: "2026-10-08T11:59:40Z", by: "bob")])
@@ -14,7 +14,7 @@ struct ThreadDetailsRequestTests {
         token = try #require(AccessToken(ghOutput: Data("test-token-alice".utf8)))
     }
 
-    private func thread(
+    func thread(
         host: String = "github.com", repository: String = "octo/app", subjectURL: String?, type: String = "Issue"
     ) throws -> (NotificationThread, APIEndpoints) {
         let endpoints = try #require(APIEndpoints(host: host))
@@ -39,7 +39,7 @@ struct ThreadDetailsRequestTests {
         }
     }
 
-    private func fetch(_ thread: NotificationThread, _ endpoints: APIEndpoints, _ transport: FakeHTTPTransport)
+    func fetch(_ thread: NotificationThread, _ endpoints: APIEndpoints, _ transport: FakeHTTPTransport)
         async -> ThreadDetailsFetchResult
     {
         let now = now

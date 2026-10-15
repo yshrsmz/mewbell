@@ -5,7 +5,8 @@ import Testing
 
 // Release のスレッドのタグの取得
 extension ThreadDetailsPollingTests {
-    static let tagged = ThreadDetails(state: nil, event: nil, releaseTag: "rust-v1.0.0")
+    static let tag = "rust-v1.0.0"
+    static let tagged = ThreadDetails(state: nil, event: nil, releaseTag: tag)
 
     /// リリースの ID を持つ Release のスレッドの一覧。
     static func releases(_ ids: [Int]) -> HTTPResponse {
@@ -16,34 +17,21 @@ extension ThreadDetailsPollingTests {
         return PollerFixture.ok(body: Data("[\(json.joined(separator: ","))]".utf8))
     }
 
-    static func isRelease(_ request: URLRequest) -> Bool {
-        request.url?.path().contains("/releases/") == true
-    }
-
-    /// 通知の取得には `notifications` を順に返し（尽きたら通信の失敗）、リリースの取得にはタグ `rust-v1.0.0` を返す。
-    func respondWithReleases(_ fixture: PollerFixture, notifications: [HTTPResponse]) {
-        let queue = LockedValue(notifications)
-        fixture.transport.setHandler { request throws(TransportError) in
-            if Self.isRelease(request) {
-                return HTTPResponse(statusCode: 200, body: Data(#"{"tag_name": "rust-v1.0.0"}"#.utf8))
-            }
-            guard let next = queue.withLock({ $0.isEmpty ? nil : $0.removeFirst() }) else {
-                throw .network(code: URLError.Code.notConnectedToInternet.rawValue)
-            }
-            return next
-        }
+    /// リリースの取得にはタグ `tag` を返す。
+    static func release(_ request: URLRequest) -> HTTPResponse {
+        HTTPResponse(statusCode: 200, body: Data(#"{"tag_name": "\#(tag)"}"#.utf8))
     }
 
     @Test func fetchesTheTagOfNewReleasesBeforePublishing() async throws {
         let fixture = try PollerFixture()
-        respondWithReleases(fixture, notifications: [Self.releases([1]), Self.releases([1, 2])])
+        respond(fixture, notifications: [Self.releases([1]), Self.releases([1, 2])], details: Self.release)
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         fixture.advance(by: 60)
         await fixture.sleeper.waitForSleeps(2)
         let first = try #require(firstUpdate(containing: "2", fixture))
         #expect(first.threads.first { $0.id == "2" }?.details == Self.tagged)
-        let releaseRequests = fixture.transport.requests.filter(Self.isRelease)
+        let releaseRequests = detailsRequests(fixture)
         let releaseURLs = releaseRequests.compactMap { $0.url?.absoluteString }
         #expect(releaseURLs.contains("https://api.github.com/repos/octo/app/releases/2"))
         #expect(
@@ -53,13 +41,13 @@ extension ThreadDetailsPollingTests {
 
     @Test func tagsTheFirstListAfterPublishing() async throws {
         let fixture = try PollerFixture()
-        respondWithReleases(fixture, notifications: [Self.releases([1, 2])])
+        respond(fixture, notifications: [Self.releases([1, 2])], details: Self.release)
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         let first = try #require(fixture.updates.value.first { $0.phase != .loading })
         #expect(first.threads.allSatisfy { $0.details == nil })
         #expect(fixture.last?.threads.allSatisfy { $0.details == Self.tagged } == true)
-        #expect(fixture.transport.requests.filter(Self.isRelease).count == 2)
+        #expect(detailsRequests(fixture).count == 2)
         fixture.poller.stop()
     }
 }
