@@ -69,7 +69,7 @@
 ### D3. `.swiftlint.yml` と `docs/architecture.md` の関所の名前を直す（A6）
 
 - `.swiftlint.yml` の `authorization_header_outside_client` の `message` を「Authorization を付けて送るのは APIGateway.send だけ（A6、security.md）」に直す。正規表現と `included` は変えない。例外は `APIGateway.swift` の 1 行の `swiftlint:disable:next` だけになる。
-- `docs/architecture.md` は、スキル `update-architecture-doc` の手順で更新する。A6 の「原則」の `` `GitHubAPIClient.send` `` を `` `APIGateway.send` `` に直し、関所の内側の例（「`Authorization` を付ける `send` など」）を `APIGateway` の `transport` を含む形に合わせる。「既知の逸脱」から A6 の行を消し、A6 の「根拠」に `fix-api-client-gateway D1・D2` を足す。A10 の「関所の内側は A6 に従い、外さない」は、直した後の A6 と合っているかを読み直す。
+- `docs/architecture.md` は、スキル `update-architecture-doc` の手順で更新する。A6 の「原則」の `` `GitHubAPIClient.send` `` を `` `APIGateway.send` `` に直し、関所の内側の例（「`Authorization` を付ける `send` など」）を `APIGateway` が持つ `HTTPTransport` に直す。「関所のファイルが行数の上限に当たったら切り出す」という条件の書き方を、関所を `APIGateway` にした今の形と、使う側が上限に当たったら extension に分ける（A10）形に書き直す。採らなかった案の「`send` の `private` を外す」は、`send` が入口になったので「関所の内側の `private` を外す」と書き直す。「既知の逸脱」から A6 の行を消し、A6 の「根拠」に `fix-api-client-gateway D1・D2・D3` を足す。A10 の「関所の内側は A6 に従い、外さない」は、直した後の A6 と合っているかを読み直す。
 - `GitHubAPIClient` の doc コメント（「トークンを `Authorization` に付けるのはこの型だけ」）を、`APIGateway` を通して送る形に直す。
 
 この change で原則そのものは変えない（A6 が決めた形にコードを合わせ、名前を直すだけ）。

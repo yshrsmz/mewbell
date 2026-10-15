@@ -89,15 +89,15 @@
 
 ### A6. 危ない処理の関所は 1 か所にし、内側は private で守る
 
-- **原則**: `Authorization` を付けて送るのは `GitHubAPIClient.send` だけにする。ブラウザで開く URL の検査は `ThreadWebURL` だけで行い、API 由来の URL を開くのは `NotificationStore` の `openURL` だけにする。子プロセスの環境変数は `GhEnvironment` だけが作る。案内に出す gh のコマンドの文字列は `GhCommand` だけが作る。新しい処理は新しい経路を作らずに既存の関所を通す。関所の内側（`Authorization` を付ける `send` など、検査を経ずに危ない操作をする関数）は `private` を保つ。関所のファイルが行数の上限に当たったら、上限は緩めずに、関所（送り先を検査して `Authorization` を付けて送る処理と、それが使う `HTTPTransport`）を小さな型に切り出して、その型だけのファイルに置く。その型が外に見せるのは、検査を通る入口だけにする。
+- **原則**: `Authorization` を付けて送るのは `APIGateway.send` だけにする。ブラウザで開く URL の検査は `ThreadWebURL` だけで行い、API 由来の URL を開くのは `NotificationStore` の `openURL` だけにする。子プロセスの環境変数は `GhEnvironment` だけが作る。案内に出す gh のコマンドの文字列は `GhCommand` だけが作る。新しい処理は新しい経路を作らずに既存の関所を通す。関所の内側（`APIGateway` が持つ `HTTPTransport` など、検査を経ずに危ない操作をするもの）は `private` を保つ。送る関所は、送り先を検査して `Authorization` を付けて送る処理と、それが使う `HTTPTransport` だけを持つ小さな型（`APIGateway`）にして、その型だけのファイルに置く。その型が外に見せるのは、検査を通る入口だけにする。関所を使う側のファイルが行数の上限に当たったら、上限は緩めずに、使う側を extension に分ける（A10）。
 - **理由**: 検査を 1 か所に集めると、security.md の約束を確かめる場所とテストが 1 つで済む。内側を `private` にしておけば、関所を迂回する呼び出しをコンパイラが止める。関所だけを小さな型にすれば、関所の範囲がファイル 1 つで読め、取得の処理が増えても関所のファイルは大きくならない。
 - **採らなかった案**:
   - ブラウザで開く URL の組み立てを `APIEndpoints` に置く: `APIEndpoints` はトークンを送ってよい相手を決める型で、開く前の検査を持っていない
-  - 行数の上限に合わせて `send` の `private` を外す（add-thread-latest-event §2 の判断を改めた）: 「関所は 1 か所」が規約だけで守られる状態になる
+  - 行数の上限に合わせて、関所の内側（送り先の検査を経ずに送る処理）の `private` を外す（add-thread-latest-event §2 の判断を改めた）: 「関所は 1 か所」が規約だけで守られる状態になる
   - 関所のファイルだけ行数の上限を緩める（`swiftlint:disable file_length`）: 関所のファイルが際限なく大きくなれ、どこまでが関所かが読みにくくなる
   - 取得の処理を別の型にし、送る処理をクロージャで渡す: 渡したクロージャが関所と同じことをでき、関所が 1 か所であることをコンパイラで守れない。関所そのものを型にするのとは違い、検査を通らない送り方を外へ渡すことになる
 - **適用外**: 案内画面と通知の許可のバナーが開く固定の URL（gh のサイト、システム設定）は API 由来でないので、`NSWorkspace` で直接開く
-- **根拠**: add-gh-account-discovery D5、add-notification-fetch D2・D8、add-system-notifications D3・D5・D7、add-thread-actions D2、add-web-notifications-link D1・D2、update-list-readability D7、add-architecture-principles D7、fix-api-client-send-privacy D1・D2・D3、update-architecture-principles D6。`Authorization` は lint の `authorization_header_outside_client` で守る
+- **根拠**: add-gh-account-discovery D5、add-notification-fetch D2・D8、add-system-notifications D3・D5・D7、add-thread-actions D2、add-web-notifications-link D1・D2、update-list-readability D7、add-architecture-principles D7、fix-api-client-send-privacy D1・D2・D3、update-architecture-principles D6、fix-api-client-gateway D1・D2・D3。`Authorization` は lint の `authorization_header_outside_client` で守る
 
 ### A7. actor や store の中の判断は、値型か純粋な関数に切り出す
 
@@ -210,4 +210,3 @@
 
 | 原則 | 場所 | 直す change |
 | --- | --- | --- |
-| A6 | `GitHubAPIClient.swift`（`swiftlint:disable file_length` で行数の上限を緩めている） | fix-api-client-gateway |
