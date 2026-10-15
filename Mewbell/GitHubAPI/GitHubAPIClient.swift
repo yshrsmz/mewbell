@@ -342,7 +342,7 @@ extension GitHubAPIClient {
         case .release(let id):
             return await fetchReleaseTag(id, of: thread.repository, endpoints: endpoints, token: token)
         case .waitingWorkflowRun:
-            return await fetchWaitingWorkflowRun(
+            return await fetchApprovalRequestRun(
                 updatedAt: thread.updatedAt, of: thread.repository, endpoints: endpoints, token: token)
         case .checkSuite(let title):
             return await fetchCheckSuiteRun(
@@ -405,7 +405,7 @@ extension GitHubAPIClient {
 
     /// 種類が WorkflowRun のスレッドの run を探す（github-api「ワークフローの実行の検索のリクエスト」）。承認を待っている
     /// run から決まらなければ、通知の時刻に動いていた run を探す。どちらでも決まらなければ「無い」。
-    private func fetchWaitingWorkflowRun(
+    private func fetchApprovalRequestRun(
         updatedAt: Date, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
         let waiting = await fetchApprovableWaitingRun(
@@ -437,10 +437,7 @@ extension GitHubAPIClient {
         case .success(let approvable):
             // 通知の run が承認された後に待ち始めた別の run を選ばないように、承認待ちになった時刻（run の
             // `updated_at`）が通知に最も近いものにする
-            guard let id = WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: approvable) else {
-                return .unavailable
-            }
-            return .found(ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: id)))
+            return Self.workflowRunResult(WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: approvable))
         case .failure(let stop):
             return stop.result
         }
@@ -480,10 +477,7 @@ extension GitHubAPIClient {
             token: token)
         {
         case .success(let page):
-            guard let id = WorkflowRunSummary.runSpanning(date, in: page.workflowRuns, now: now()) else {
-                return .unavailable
-            }
-            return .found(ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: id)))
+            return Self.workflowRunResult(WorkflowRunSummary.runSpanning(date, in: page.workflowRuns, now: now()))
         case .failure(let stop):
             return stop.result
         }
@@ -502,13 +496,15 @@ extension GitHubAPIClient {
             let runs = page.workflowRuns.filter {
                 $0.name == title.workflowName && $0.conclusion == title.result.conclusion
             }
-            guard let id = WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: runs) else {
-                return .unavailable
-            }
-            return .found(ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: id)))
+            return Self.workflowRunResult(WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: runs))
         case .failure(let stop):
             return stop.result
         }
+    }
+
+    /// 選んだ run があればその run を開く詳細、無ければ「無い」。
+    private static func workflowRunResult(_ id: String?) -> ThreadDetailsFetchResult {
+        id.map { .found(ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: $0))) } ?? .unavailable
     }
 
     /// `repos/<owner>/<name>/actions/runs`

@@ -2,7 +2,7 @@
 
 ## Context
 
-`GitHubAPIClient.fetchWaitingWorkflowRun` は、`fetchRuns(of:query:endpoints:token:)` で `status=waiting&per_page=6` の run を取り、`approvableRuns` で `pending_deployments` を確かめ、`WorkflowRunSummary.closestRun(updatedNear:in:)` で通知の時刻に最も近い run を選ぶ。決まらなければ `.unavailable` を返し、`ThreadWebURL` は承認待ちの一覧を開く。`WorkflowRunSummary` は `id`・`name`・`conclusion`・`updatedAt`（文字列）を読む。
+`GitHubAPIClient.fetchApprovalRequestRun` は、`fetchRuns(of:query:endpoints:token:)` で `status=waiting&per_page=6` の run を取り、`approvableRuns` で `pending_deployments` を確かめ、`WorkflowRunSummary.closestRun(updatedNear:in:)` で通知の時刻に最も近い run を選ぶ。決まらなければ `.unavailable` を返し、`ThreadWebURL` は承認待ちの一覧を開く。`WorkflowRunSummary` は `id`・`name`・`conclusion`・`updatedAt`（文字列）を読む。
 
 GitHub の振る舞い（確かめたこと）:
 
@@ -26,7 +26,7 @@ GitHub の振る舞い（確かめたこと）:
 
 ### D1. 承認を待っている run から決まらないときだけ、通知の時刻を挟む run を探す（A7）
 
-`fetchWaitingWorkflowRun` の終わりで、承認を待っている run から run が決まらなかった（今 `.unavailable` を返している 3 か所: 0 件、6 件以上か ID が検証を通らない、承認できて近い run が無い）ときに、`fetchRuns(of:query:)` で `created=<=<T>&per_page=30` を取る（`T` はスレッドの `updated_at`）。一時的な失敗・認証の失敗・レート制限のときは、今までどおりその結果で終え、このリクエストは送らない。承認を待っている run の一覧が「無い」（`404` など）だったときは送る（どちらも Actions を読めなければ、同じく「無い」になる）。
+`fetchApprovalRequestRun` の終わりで、承認を待っている run から run が決まらなかった（今 `.unavailable` を返している 3 か所: 0 件、6 件以上か ID が検証を通らない、承認できて近い run が無い）ときに、`fetchRuns(of:query:)` で `created=<=<T>&per_page=30` を取る（`T` はスレッドの `updated_at`）。一時的な失敗・認証の失敗・レート制限のときは、今までどおりその結果で終え、このリクエストは送らない。承認を待っている run の一覧が「無い」（`404` など）だったときは送る（どちらも Actions を読めなければ、同じく「無い」になる）。
 
 選び方は `WorkflowRunSummary` の `static func runSpanning(_ date: Date, in runs: [WorkflowRunSummary], now: Date) -> String?` にする（A7。純粋な関数として単体でテストする）。`run_started_at` が `date` 以前で、終わった時刻（`status == "completed"` なら `updated_at`、そうでなければ `now`）が `date` 以降の run が 1 件だけならその ID、そうでなければ nil。日時を読めない run は数えない。`now` は `GitHubAPIClient` が持つ `now`（テストで差し替えている時計）を渡す。
 
@@ -46,7 +46,7 @@ GitHub の振る舞い（確かめたこと）:
 
 ### D4. 動く場所とテスト（A2・A5）
 
-今の `fetchWaitingWorkflowRun` と同じく、`AccountPoller`（actor）から呼ぶ `ThreadDetailsFetcher` の中で `GitHubAPIClient` が行う。テストは、`runSpanning` の単体のテスト（挟む 1 件、挟む 2 件、0 件、終わっていない run、日時を読めない run、境界の時刻）と、`FakeHTTPTransport` でリクエストの URL と、承認を待っている run から決まったときと失敗のときに送らないことを確かめるテストにする。
+今の `fetchApprovalRequestRun` と同じく、`AccountPoller`（actor）から呼ぶ `ThreadDetailsFetcher` の中で `GitHubAPIClient` が行う。テストは、`runSpanning` の単体のテスト（挟む 1 件、挟む 2 件、0 件、終わっていない run、日時を読めない run、境界の時刻）と、`FakeHTTPTransport` でリクエストの URL と、承認を待っている run から決まったときと失敗のときに送らないことを確かめるテストにする。
 
 ## Risks / Trade-offs
 

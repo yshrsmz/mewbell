@@ -6,7 +6,7 @@
 
 ## 2. リクエスト
 
-- [x] 2.1 `GitHubAPIClient.fetchWaitingWorkflowRun` で、承認を待っている run から決まらないときに `fetchRuns(of:query:)` で `created=<=<スレッドの updated_at>&per_page=30` を取り、`runSpanning` で選ぶ（D1・D3）。失敗・認証の失敗・レート制限のときは送らない。
+- [x] 2.1 `GitHubAPIClient.fetchApprovalRequestRun` で、承認を待っている run から決まらないときに `fetchRuns(of:query:)` で `created=<=<スレッドの updated_at>&per_page=30` を取り、`runSpanning` で選ぶ（D1・D3）。失敗・認証の失敗・レート制限のときは送らない。
 - [x] 2.2 リクエストのテスト（`ThreadDetailsRequestTests+Actions.swift`）: 承認を待っている run が 0 件のとき、`https://api.github.com/repos/octo/app/actions/runs?created=%3C%3D2026-10-08T12:00:00Z&per_page=30` を送り、挟む run を選ぶこと（delta spec の「承認された後の通知」の形）。挟む run が 2 件なら「無い」。承認を待っている run から決まったとき、承認を待っている run の一覧が `502`・`401`・レート制限のときは送らないこと。承認を待っている run の一覧が `404` のときは送ること。`xcodebuild ... test -only-testing:` で該当のスイートを通し、スイート数を確かめる。
 
 ## 3. 確認
@@ -20,6 +20,6 @@
 
 ## 4. レビュー
 
-- [ ] 4.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。
+- [x] 4.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。（2 件を取り込んだ: run の ID から結果を作る 3 か所を `workflowRunResult` にまとめた、`runStartedAt` に doc コメントを付けた。あわせて、承認待ちの run の後に通知の時刻に動いていた run も探すようになった `fetchWaitingWorkflowRun` を `fetchApprovalRequestRun` に改めた）
 - [ ] 4.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。
 - [ ] 4.3 ロジックの変更を含む修正が多ければ、4.2 を新しいサブエージェントでもう一度実行する。

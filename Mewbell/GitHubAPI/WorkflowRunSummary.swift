@@ -21,6 +21,7 @@ struct WorkflowRunSummary: Decodable, Sendable {
     let conclusion: String?
     /// 状態（`completed`・`in_progress`・`waiting` など）
     let status: String?
+    /// 始まった時刻（`run_started_at`）
     let runStartedAt: String?
     let updatedAt: String
 
