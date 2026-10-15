@@ -2,8 +2,8 @@ import SwiftUI
 
 /// 2 回押して実行するボタン。1 回目で確認の文の表示に変わり、5 秒以内にもう一度押したときだけ実行する。
 /// 確認の状態は呼び出し側が持つ（コンテキストメニューなど、ボタンの外から確認の表示にできるように）。
-/// 5 秒たったとき、押せなくなったとき、件数か最新のスレッドが変わったとき、消えたときは、実行せずに元の表示に戻す。
-struct ConfirmingButton<Icon: View>: View {
+/// 5 秒たったとき、押せなくなったとき、対象が変わったとき、消えたときは、実行せずに元の表示に戻す。
+struct ConfirmingButton<Icon: View, Target: Equatable>: View {
     @Binding var confirming: Bool
     /// 元の表示
     let icon: Icon
@@ -13,9 +13,8 @@ struct ConfirmingButton<Icon: View>: View {
     let help: String
     let accessibilityLabel: String
     var isEnabled = true
-    /// 対象の件数と最新のスレッドの `updated_at`。確認の途中で変わったら確認からやり直す
-    let count: Int
-    let newest: Date?
+    /// 操作の対象を表す値（件数と最新のスレッド、スレッドの ID など）。確認の途中で変わったら確認からやり直す
+    let target: Target
     /// `HoverHighlightButtonStyle` の塗りのはみ出し
     var outset: CGFloat = 0
     let action: () -> Void
@@ -53,9 +52,8 @@ struct ConfirmingButton<Icon: View>: View {
                 confirming = false
             }
         }
-        // 確認の途中で対象が変わったら（件数か最新のスレッド）、見ていないスレッドまで操作しないように確認からやり直す
-        .onChange(of: count) { confirming = false }
-        .onChange(of: newest) { confirming = false }
+        // 確認の途中で対象が変わったら、見ていないスレッドまで操作しないように確認からやり直す
+        .onChange(of: target) { confirming = false }
         .onDisappear { confirming = false }
     }
 }

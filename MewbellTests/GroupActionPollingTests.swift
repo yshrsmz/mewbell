@@ -86,6 +86,38 @@ struct GroupActionPollingTests {
         fixture.poller.stop()
     }
 
+    @Test func stopsSendingWhenThePollerIsStoppedMidway() async {
+        fixture.route(gets: [PollerFixture.ok(1...4)])
+        await startAndLoad()
+        fixture.transport.pausedWhere.value = Self.isThread("1")
+        let done = Task {
+            await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2"), .done(threadID: "3")])
+        }
+        await waitUntil { self.requests("DELETE").count == 1 }
+        // アカウントの無効化・削除・終了で止めたら、残りは送らない
+        fixture.poller.stop()
+        fixture.transport.pausedWhere.value = nil
+        await done.value
+        #expect(requests("DELETE").count == 1)
+    }
+
+    @Test func stopsSendingWhenTheTokenIsDiscardedMidway() async {
+        fixture.route(gets: [PollerFixture.ok(1...4)])
+        await startAndLoad()
+        fixture.transport.pausedWhere.value = Self.isThread("1")
+        let done = Task {
+            await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2"), .done(threadID: "3")])
+        }
+        await waitUntil { self.requests("DELETE").count == 1 }
+        // 送っている間に捨てたトークンで、残りを送らない
+        await fixture.tokens.discardToken(for: PollerFixture.alice)
+        fixture.transport.pausedWhere.value = nil
+        await done.value
+        #expect(requests("DELETE").count == 1)
+        #expect(fixture.last?.actionFailure == ActionFailure(action: .done, kind: .noToken, occurredAt: now))
+        fixture.poller.stop()
+    }
+
     @Test func showsAThreadThatArrivesWhileTheRequestsAreInFlight() async {
         fixture.route(gets: [PollerFixture.ok(1...2), PollerFixture.ok(1...3)])
         await startAndLoad()

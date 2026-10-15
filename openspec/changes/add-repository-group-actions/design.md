@@ -34,10 +34,11 @@
 `AccountPoller.perform(_ action: ThreadAction)` を `perform(_ actions: [ThreadAction])` に変え、1 件の操作は要素 1 つの配列で呼ぶ。中では次の順に行う。
 
 1. すべての対象を `HiddenThreads.beginRequest` で隠し、状態から外して 1 回だけ `publish` する
-2. トークンを 1 回だけ待つ。止まっていれば送らず、トークンが無ければ送らずに `.noToken` を失敗とする
-3. 対象を配列の順に 1 件ずつ送る。1 件の結果が出るたびに、そのスレッドの `HiddenThreads.endRequest` を呼び、同じ同期の区間で `unconditionalRequested = true` にする。結果が `.unauthorized` か `.rateLimited` なら残りは送らない
-4. 送らなかったスレッドの `HiddenThreads.endRequest` を呼び、`unconditionalRequested = true` にする
-5. 失敗が 1 つでもあれば、最後の失敗だけを `recordActionFailure` で 1 回記録する（知らせる失敗を 1 つにする。spec の「知らせる失敗は 1 つ」）
+2. 対象を配列の順に 1 本のループで回す。送っている間は、1 件ごとにトークンをメモリから読み直し、止まっていないか（`state.phase.isStopped`）と `stop()` の後でないか（`isDiscarded`）を確かめ直す。止まっていれば残りを送らず、失敗も記録しない。トークンが無ければ `.noToken` を失敗として残りを送らない。結果が `.unauthorized` か `.rateLimited` でも残りを送らない
+3. 送ったスレッドも送らなかったスレッドも、そのたびに `HiddenThreads.endRequest` を呼び、同じ同期の区間で `unconditionalRequested = true` にする
+4. 失敗が 1 つでもあれば、最後の失敗だけを `recordActionFailure` で 1 回記録する（知らせる失敗を 1 つにする。spec の「知らせる失敗は 1 つ」）
+
+トークンと停止を 1 件ごとに確かめ直すのは、送るのに数秒〜十数秒かかる間に、アカウントが止まったり、無効化・削除・終了でトークンを捨てたりしても、手元に取ったトークンで残りを送り続けないため（security.md の「トークンを破棄する」。code-review の指摘で、最初は 1 回だけ待っていた）。`AccountPoller.stop()` は取得のループの Task だけを取り消すので、操作の Task は `isDiscarded`（`loop` の `discarded` を読むだけのプロパティ。A10 の「extension に分けた型の中に閉じるメンバー」として `private` を外す）で見る。トークンの読み直しはメモリの actor を読むだけで、gh は起動しない。
 
 `unconditionalRequested` は取得を始めるときに読んで消すので、最後に 1 回立てるだけでは、送っている途中に始まった取得が条件付きのまま走り、先に結果が出たスレッドの「次の取得は条件なし」（polling「スレッドの既読化」）が守れない。1 件の結果が出るたびに `endRequest` と一緒に立てる。`endRequest` を記録の前に済ませるのは、今の 1 件の操作と同じ理由（知らせている間に始まった取得でスレッドが戻らないまま知らせが消えないように）。
 
@@ -57,9 +58,9 @@ View が渡すのは押したときの `RepositoryGroup`（値）なので、押
 
 ### D3. 確認の表示は、`MarkAllReadButton` から確認の部分を `ConfirmingButton` に切り出して共有する（A3・A4・A9・A16）
 
-5 秒の待ち、`isEnabled` が false になったとき・件数か最新のスレッドが変わったとき・`onDisappear` で解く処理を、新しいファイル `UI/ConfirmingButton.swift` の `ConfirmingButton` に移す。確認の状態は `@Binding var confirming: Bool` で受け取る。コンテキストメニューと VoiceOver の操作から確認の表示にするため、状態を持つのは見出しの View（`RepositoryGroupView` の `@State`）にする必要がある。`MarkAllReadButton` は `@State confirming` を持って `ConfirmingButton` に渡す薄い型にする（`init(confirming:)` のプレビュー用の引数は残す）。
+5 秒の待ち、`isEnabled` が false になったとき・対象が変わったとき・`onDisappear` で解く処理を、新しいファイル `UI/ConfirmingButton.swift` の `ConfirmingButton` に移す。確認の状態は `@Binding var confirming: Bool` で受け取る。コンテキストメニューと VoiceOver の操作から確認の表示にするため、状態を持つのは見出しの View（`RepositoryGroupView` の `@State`）にする必要がある。`MarkAllReadButton` は `@State confirming` を持って `ConfirmingButton` に渡す薄い型にする（`init(confirming:)` のプレビュー用の引数は残す）。
 
-`ConfirmingButton` の引数は、元の表示のアイコン、確認の文、ツールチップとアクセシビリティのラベル（確認中かどうかで変わる）、`isEnabled`、確認を解く値（件数と最新の更新日時）、`outset`、実行のクロージャ。見た目（確認の文を `.subheadline.weight(.semibold)`・アクセントカラー・`fixedSize` で出す）は今の `MarkAllReadButton` のまま。
+`ConfirmingButton` の引数は、元の表示のアイコン、確認の文、ツールチップとアクセシビリティのラベル（確認中かどうかで変わる）、`isEnabled`、確認を解く値（`target`。`Equatable` な値をジェネリックで受け取る）、`outset`、実行のクロージャ。すべて既読は時刻で区切るので、件数と最新の更新日時の組（`MarkAllReadButton` の private な `Target`）を渡す。リポジトリの Done はスレッドごとに効くので、グループのスレッド ID の並びを渡し、件数と最新が同じでもスレッドが入れ替わったら確認を解く（code-review の指摘で、最初は件数と最新だけで解いていた）。VoiceOver の操作で確認の表示にしたときは、表示が変わるだけでは何も読まれないので、`AccessibilityNotification.Announcement` で確認を待っていることを知らせる。見た目（確認の文を `.subheadline.weight(.semibold)`・アクセントカラー・`fixedSize` で出す）は今の `MarkAllReadButton` のまま。
 
 確認の状態は、ポップオーバーを閉じれば消えてよいので View の `@State` に置く（A3）。新しい型を足すのは、spec の 2 つの要件（すべて既読とリポジトリの Done）が同じ確認の振る舞いを求め、2 か所に書くと片方だけ直す不具合の種になるため（A9）。
 
@@ -99,15 +100,15 @@ View が渡すのは押したときの `RepositoryGroup`（値）なので、押
 
 ### D8. actor と `@MainActor` の境界（A2）
 
-View・`NotificationStore`・`ConfirmingButton` の状態は `@MainActor`。ポーラーの `perform` は `AccountPoller` の actor の中で動き、リクエストは actor の上で 1 件ずつ `await` する。順に送る間も actor は再入できるので、取得や別の操作は並行して進む（隠すスレッドは `HiddenThreads` がスレッドごとに数えるので、同じスレッドへの操作が重なっても崩れない）。
+View・`NotificationStore`・`ConfirmingButton` の状態は `@MainActor`。ポーラーの `perform` は `AccountPoller` の actor の中で動き、リクエストは actor の上で 1 件ずつ `await` する。順に送る間も actor は再入できるので、取得や別の操作は並行して進む（隠すスレッドは `HiddenThreads` がスレッドごとに数えるので、同じスレッドへの操作が重なっても崩れない）。同じアカウントでグループの操作を続けて押すと、2 つの操作は互いに並行して送られる。spec の「1 件ずつ」は 1 回の操作の中の約束で、人が押す速さなら並行は 2〜3 本に収まるので、アカウントごとの待ち行列は足さない（code-review の指摘に対し、ユーザーと決めた）。
 
 ## セキュリティ
 
-- トークンの流れ: 変わらない。トークンは `AccountPoller` が `tokens.currentToken(for:)` でメモリから受け取り、1 回の操作で 1 回だけ受け取って、各リクエストに `GitHubAPIClient` が付ける。ディスク・ログ・View に出さない。アカウントの削除・無効化・終了時の破棄は今のまま
+- トークンの流れ: トークンは `AccountPoller` が `tokens.currentToken(for:)` でメモリから受け取り、リクエストを 1 件送るたびに読み直して、各リクエストに `GitHubAPIClient` が付ける。ディスク・ログ・View に出さない。アカウントの削除・無効化・終了でトークンを捨てたり、ポーラーを止めたりしたら、残りのリクエストは送らない（D1）
 - 送り先: 新しいリクエストの種類は無く、既存の `markThreadRead`・`markThreadDone` を通すので、スレッド ID の検査（1〜20 桁の数字）、API ベースとのオリジン検査、リダイレクトの拒否、キャッシュなしがそのまま掛かる（A6。新しい経路を作らない）
 - ログ: 失敗のログは今の `recordActionFailure` の 1 か所（アカウント ID と失敗の種類だけ。スレッドの件名やレスポンスは出さない）
 - gh サブプロセス・URL を開く処理: 触れない
-- security.md の各項目のテストは今のまま（新しいリクエストの経路が無いので足さない）
+- security.md の各項目のテストは今のまま（新しいリクエストの経路が無いので足さない）。トークンの破棄については、送っている途中でトークンを捨てたときと `stop()` したときに残りを送らないテストを `GroupActionPollingTests` に足す
 
 ## Risks / Trade-offs
 

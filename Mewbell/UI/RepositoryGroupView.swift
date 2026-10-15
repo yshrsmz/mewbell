@@ -49,7 +49,11 @@ struct RepositoryGroupView: View {
             }
             // ホバーのボタンを使えない VoiceOver でも操作できるように（Done は確認の表示にするだけ）
             .accessibilityAction(named: labels.read, markRead)
-            .accessibilityAction(named: labels.done) { confirmingDone = true }
+            .accessibilityAction(named: labels.done) {
+                confirmingDone = true
+                // 見出しの表示が変わるだけでは何も読まれないので、確認を待っていることを知らせる
+                AccessibilityNotification.Announcement(labels.doneAccessibilityLabel(confirming: true)).post()
+            }
             .frame(maxWidth: .infinity, alignment: .leading)
             .overlay(alignment: .trailing) {
                 if showsActions {
@@ -79,7 +83,8 @@ struct RepositoryGroupView: View {
                 confirming: $confirmingDone, icon: HoverActionButtons.icon("checkmark"),
                 confirmation: labels.confirmation, help: labels.doneHelp(confirming: confirmingDone),
                 accessibilityLabel: labels.doneAccessibilityLabel(confirming: confirmingDone),
-                count: group.threads.count, newest: group.threads.first?.updatedAt
+                // Done はスレッドごとに効くので、件数や最新が同じでも、スレッドが入れ替わったら確認からやり直す
+                target: group.threads.map(\.id)
             ) {
                 actions.markGroupDone(group, account)
             }

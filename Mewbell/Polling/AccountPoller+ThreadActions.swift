@@ -12,7 +12,7 @@ extension AccountPoller {
     }
 
     /// スレッドを既読か Done にする。どれも一覧からすぐに外し、配列の順に 1 件ずつリクエストを送り、次の取得を条件なしにする。
-    /// 認証エラーかレート制限になったら残りは送らない。止まっているときとトークンが無いときは送らない
+    /// 認証エラーかレート制限になったら残りは送らない。止まっているとき・`stop()` の後・トークンが無いときは送らない
     /// （送らなかったスレッドは、次の条件なしの取得で未読のままなら一覧に戻る）。失敗は最後の 1 つだけを知らせる。
     func perform(_ actions: [ThreadAction]) async {
         guard !actions.isEmpty else { return }
@@ -24,16 +24,17 @@ extension AccountPoller {
             state.threads.removeAll { threadIDs.contains($0.id) }
             await publish(state)
         }
-        // 止まっているかはトークンを待った後に見る。止まっていれば送らず、失敗も記録しない（取得の状態で伝わる）
-        let token = await tokens.currentToken(for: accountID)
         var failure: (action: ThreadAction, kind: FailureKind)?
-        var sending = !state.phase.isStopped
+        var sending = true
         // 二次レート制限を避けるため、並行させずに 1 件ずつ送る
         for action in actions {
             if sending {
-                let kind: FailureKind? =
-                    if let token { FailureKind(await markThread(action, token: token)) } else { .noToken }
-                if let kind {
+                // 1 件ごとにトークンを読み直し、止まっていないかを確かめ直す（送っている間に止まったり、無効化・削除・終了で
+                // トークンを捨てたりしたら、手元のトークンで残りを送らない）。止まっているかはトークンを待った後に見る。
+                // 止まっていれば送らず、失敗も記録しない（取得の状態で伝わる）
+                let token = await tokens.currentToken(for: accountID)
+                sending = !state.phase.isStopped && !isDiscarded
+                if sending, let kind = await send(action, token: token) {
                     failure = (action, kind)
                     // トークンが無い・認証エラー・レート制限なら、残りも同じ理由で失敗するので送らない
                     sending = kind != .noToken && kind != .unauthorized && kind != .rateLimited
@@ -46,6 +47,12 @@ extension AccountPoller {
             unconditionalRequested = true
         }
         if let failure { await recordActionFailure(ThreadActionKind(failure.action), failure.kind) }
+    }
+
+    /// 操作のリクエストを送り、失敗の種類を返す。成功なら nil。トークンが無ければ送らずに `noToken`。
+    private func send(_ action: ThreadAction, token: AccessToken?) async -> FailureKind? {
+        guard let token else { return .noToken }
+        return FailureKind(await markThread(action, token: token))
     }
 
     /// 操作に応じて、`GitHubAPIClient` の既読か Done のメソッドを呼ぶ。

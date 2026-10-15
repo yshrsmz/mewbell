@@ -130,7 +130,13 @@ struct MarkAllReadButton: View {
             confirming: $confirming, icon: Image(systemName: "checkmark.circle"), confirmation: labels.confirmation,
             help: labels.help(confirming: confirming),
             accessibilityLabel: labels.accessibilityLabel(confirming: confirming), isEnabled: isEnabled,
-            count: count, newest: newest, outset: 3, action: action)
+            target: Target(count: count, newest: newest), outset: 3, action: action)
+    }
+
+    /// 確認の途中で変わったら確認からやり直す値。すべて既読は時刻で区切るので、件数と最新のスレッドで足りる
+    private struct Target: Equatable {
+        let count: Int
+        let newest: Date?
     }
 }
 
