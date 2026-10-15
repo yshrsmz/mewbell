@@ -277,7 +277,7 @@ actor AccountPoller {
                 return .stop
             }
             return await refreshToken() ? .retryNow : .stop
-        case .rateLimited(let retryAt):
+        case .rateLimited(let retryAt?):
             let delay = PollSchedule.afterRateLimit(retryAt: retryAt, now: now())
             state.phase = .retrying(after: delay, rateLimited: true, now: now())
             return .wait(delay)
@@ -290,10 +290,12 @@ actor AccountPoller {
             let delay = PollSchedule.afterSuccess(pollInterval: nil)
             state.phase = .retrying(after: delay, rateLimited: false, now: now())
             return .wait(delay)
-        case .forbidden, .invalidRequest, .failed:
+        case .rateLimited(retryAt: nil), .forbidden, .invalidRequest, .failed:
+            // 待ち時間が分からないレート制限も、失敗と同じく延ばしながら待つ（レート制限なので再読み込みでは早めない）
             consecutiveFailures += 1
             let delay = PollSchedule.afterFailure(consecutiveFailures: consecutiveFailures)
-            state.phase = .retrying(after: delay, rateLimited: false, now: now())
+            let rateLimited = result == .rateLimited(retryAt: nil)
+            state.phase = .retrying(after: delay, rateLimited: rateLimited, now: now())
             return .wait(delay)
         }
     }

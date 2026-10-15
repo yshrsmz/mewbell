@@ -67,6 +67,29 @@ struct AccountPollerTests {
         fixture.poller.stop()
     }
 
+    /// 待ち時間のヘッダーが無い二次レート制限は、失敗と同じく延ばしながら待ち、レート制限として扱う
+    @Test func backsOffASecondaryRateLimitWithoutAWait() async {
+        let secondary = FakeHTTPTransport.secondaryRateLimit(headers: ["X-OAuth-Scopes": "repo"])
+        fixture.respond([PollerFixture.ok(1...2), secondary, secondary, PollerFixture.ok(1...1)])
+        fixture.poller.start()
+        for count in 1...2 {
+            await fixture.sleeper.waitForSleeps(count)
+            fixture.sleeper.advance()
+        }
+        await fixture.sleeper.waitForSleeps(3)
+        #expect(fixture.sleeper.durations == [60, 60, 120].map { .seconds($0) })
+        #expect(fixture.last?.threads.count == 2)
+        #expect(
+            fixture.last?.phase
+                == .retrying(nextAttempt: PollerFixture.now.addingTimeInterval(120), rateLimited: true))
+        #expect(fixture.last?.diagnostics.lastFetchFailure?.kind == .rateLimited)
+        // 成功の後は 60 秒からに戻る
+        fixture.sleeper.advance()
+        await fixture.sleeper.waitForSleeps(4)
+        #expect(fixture.sleeper.durations.last == .seconds(60))
+        fixture.poller.stop()
+    }
+
     @Test func refreshesTheTokenOnceAfter401() async {
         fixture.tokens.refreshedValue.value = "test-token-alice-2"
         fixture.respond([PollerFixture.ok(1...1), HTTPResponse(statusCode: 401), PollerFixture.ok(1...2)])

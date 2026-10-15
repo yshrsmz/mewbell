@@ -40,8 +40,8 @@ enum NotificationsFetchResult: Sendable, Equatable {
     case notModified(pollInterval: Int?)
     /// 401
     case unauthorized
-    /// レート制限の 403（`retryAt` まで待つ）
-    case rateLimited(retryAt: Date)
+    /// レート制限の 403 / 429（`retryAt` まで待つ。nil は待ち時間のヘッダーが無く、待ち時間が分からない）
+    case rateLimited(retryAt: Date?)
     /// レート制限でない 403。`X-OAuth-Scopes` があれば、スコープ不足かどうかの判断に使う
     case forbidden(scopes: OAuthScopes)
     /// 422
@@ -181,19 +181,19 @@ struct GitHubAPIClient: Sendable {
         body: Data? = nil
     ) async -> ThreadActionResult {
         switch await send(url, method: method, endpoints: endpoints, token: token, ifModifiedSince: nil, body: body) {
-        case .success(let response): Self.classifyAction(response, success: success)
+        case .success(let response): classifyAction(response, success: success)
         case .failure(let failure): .failed(failure)
         }
     }
 
-    private static func classifyAction(_ response: HTTPResponse, success: Set<Int>) -> ThreadActionResult {
+    private func classifyAction(_ response: HTTPResponse, success: Set<Int>) -> ThreadActionResult {
         switch response.statusCode {
         case let status where success.contains(status):
             return .succeeded
         case 401:
             return .unauthorized
-        case 403 where isRateLimited(response), 429:
-            return .rateLimited
+        case 403, 429:
+            return rateLimit(response) == nil ? .failed(.unexpectedStatus(response.statusCode)) : .rateLimited
         default:
             return .failed(.unexpectedStatus(response.statusCode))
         }
@@ -248,10 +248,11 @@ struct GitHubAPIClient: Sendable {
         case 401:
             return .unauthorized
         case 403, 429:
-            guard let retryAt = rateLimitedUntil(response) else {
-                return .forbidden(scopes: OAuthScopes(header: response.header("X-OAuth-Scopes")))
+            switch rateLimit(response) {
+            case .until(let retryAt): return .rateLimited(retryAt: retryAt)
+            case .unknownWait: return .rateLimited(retryAt: nil)
+            case nil: return .forbidden(scopes: OAuthScopes(header: response.header("X-OAuth-Scopes")))
             }
-            return .rateLimited(retryAt: retryAt)
         case 422:
             return .invalidRequest
         default:
@@ -259,23 +260,36 @@ struct GitHubAPIClient: Sendable {
         }
     }
 
-    /// 403 / 429 のレスポンスがレート制限なら、制限が解ける時刻（`Retry-After` の秒数、`X-RateLimit-Reset`、どちらも無ければ今）。
-    /// 429 は常にレート制限として扱う（ヘッダーで示されていなければ今）。レート制限でない 403 なら nil。
-    private func rateLimitedUntil(_ response: HTTPResponse) -> Date? {
-        guard Self.isRateLimited(response) else { return response.statusCode == 429 ? now() : nil }
-        if let seconds = Self.retryAfterSeconds(response) {
-            return now().addingTimeInterval(TimeInterval(max(seconds, 0)))
-        }
-        let reset = response.header("X-RateLimit-Reset")
-            .flatMap { TimeInterval($0) }
-            .map(Date.init(timeIntervalSince1970:))
-        return reset ?? now()
+    /// 403 / 429 のレート制限の分け方。
+    private enum RateLimit {
+        /// 待ち時間のヘッダーがあり、制限が解ける時刻が分かる
+        case until(Date)
+        /// 待ち時間のヘッダーが無い（429、または本文が二次レート制限を示す 403）
+        case unknownWait
     }
 
-    /// 403 / 429 がレート制限を示すか（`X-RateLimit-Remaining: 0`、または `Retry-After` が秒数として読める）。
-    /// 取得と操作の両方の分類で使い、判定を揃える。
-    private static func isRateLimited(_ response: HTTPResponse) -> Bool {
-        response.header("X-RateLimit-Remaining") == "0" || retryAfterSeconds(response) != nil
+    /// 403 / 429 のレスポンスのレート制限。レート制限でない 403 なら nil。
+    /// 一覧の取得・操作・状態とイベントの取得の分類で使い、判定を揃える。
+    /// `Retry-After` が秒数として読めればその秒数後、`X-RateLimit-Remaining: 0` なら `X-RateLimit-Reset`（無ければ今）。
+    private func rateLimit(_ response: HTTPResponse) -> RateLimit? {
+        if let seconds = Self.retryAfterSeconds(response) {
+            return .until(now().addingTimeInterval(TimeInterval(max(seconds, 0))))
+        }
+        if response.header("X-RateLimit-Remaining") == "0" {
+            let reset = response.header("X-RateLimit-Reset")
+                .flatMap { TimeInterval($0) }
+                .map(Date.init(timeIntervalSince1970:))
+            return .until(reset ?? now())
+        }
+        if response.statusCode == 429 || Self.isSecondaryRateLimit(response) { return .unknownWait }
+        return nil
+    }
+
+    /// 二次レート制限の 403 か（本文の `message` が「secondary rate limit」を含む）。本文は見分けるのにだけ使い、残さない。
+    private static func isSecondaryRateLimit(_ response: HTTPResponse) -> Bool {
+        struct Message: Decodable { let message: String? }
+        let message = (try? JSONDecoder().decode(Message.self, from: response.body))?.message
+        return message?.localizedCaseInsensitiveContains("secondary rate limit") == true
     }
 
     private static func retryAfterSeconds(_ response: HTTPResponse) -> Int? {
@@ -411,13 +425,6 @@ extension GitHubAPIClient {
             .first { $0.name == "page" }?.value.flatMap { Int($0) }
     }
 
-    /// 二次レート制限の 403 か（本文の `message` が「secondary rate limit」を含む）。本文は見分けるのにだけ使い、残さない。
-    private static func isSecondaryRateLimit(_ response: HTTPResponse) -> Bool {
-        struct Message: Decodable { let message: String? }
-        let message = (try? JSONDecoder().decode(Message.self, from: response.body))?.message
-        return message?.localizedCaseInsensitiveContains("secondary rate limit") == true
-    }
-
     /// 状態とイベントの取得の `GET` を送り、`200` ならレスポンスを、そうでなければ結果を返す。
     private func get(
         _ url: URL, endpoints: APIEndpoints, token: AccessToken
@@ -433,10 +440,12 @@ extension GitHubAPIClient {
         case 401:
             return .failure(DetailsStop(.unauthorized))
         case 403, 429:
-            if let retryAt = rateLimitedUntil(response) { return .failure(DetailsStop(.rateLimited(retryAt: retryAt))) }
-            // 待ち時間のヘッダーが無い二次レート制限は、本文で見分けて止める（待つ時間は呼び出し元の最短の時間）
-            if Self.isSecondaryRateLimit(response) { return .failure(DetailsStop(.rateLimited(retryAt: now()))) }
-            return .failure(DetailsStop(.unavailable))
+            switch rateLimit(response) {
+            case .until(let retryAt): return .failure(DetailsStop(.rateLimited(retryAt: retryAt)))
+            // 待ち時間が分からなければ今にする（待つ時間は呼び出し元の最短の時間）
+            case .unknownWait: return .failure(DetailsStop(.rateLimited(retryAt: now())))
+            case nil: return .failure(DetailsStop(.unavailable))
+            }
         case 404, 410, 422:
             return .failure(DetailsStop(.unavailable))
         default:

@@ -53,6 +53,12 @@ struct MarkThreadReadTests {
         (HTTPResponse(statusCode: 429), .rateLimited),
         (HTTPResponse(statusCode: 403), .failed(.unexpectedStatus(403))),
         (HTTPResponse(statusCode: 403, headers: ["Retry-After": "soon"]), .failed(.unexpectedStatus(403))),
+        // 待ち時間のヘッダーが無い二次レート制限は本文で見分ける
+        (FakeHTTPTransport.secondaryRateLimit(), .rateLimited),
+        (
+            HTTPResponse(statusCode: 403, body: Data(#"{"message": "Resource not accessible by integration"}"#.utf8)),
+            .failed(.unexpectedStatus(403))
+        ),
         (HTTPResponse(statusCode: 422), .failed(.unexpectedStatus(422))),
         (HTTPResponse(statusCode: 500), .failed(.unexpectedStatus(500))),
         (HTTPResponse(statusCode: 307, headers: ["Location": "https://evil.example.com/"]), .failed(.redirect)),

@@ -211,7 +211,7 @@ struct GitHubAPIClientTests {
         (403, ["X-RateLimit-Remaining": "4999"], .forbidden(scopes: OAuthScopes(header: nil))),
         (403, ["X-OAuth-Scopes": "gist"], .forbidden(scopes: OAuthScopes(header: "gist"))),
         (429, ["Retry-After": "600"], .rateLimited(retryAt: Date(timeIntervalSince1970: 1_791_461_400))),
-        (429, [:], .rateLimited(retryAt: Date(timeIntervalSince1970: 1_791_460_800))),
+        (429, [:], .rateLimited(retryAt: nil)),
         (422, [:], .invalidRequest),
         (302, ["Location": "https://evil.example.com/"], .failed(.redirect)),
         (304, [:], .failed(.unexpectedStatus(304))),
@@ -225,6 +225,21 @@ struct GitHubAPIClientTests {
         let result = await client(transport).fetchNotifications(
             endpoints: github, token: aliceToken, ifModifiedSince: nil)
         #expect(result == expected)
+    }
+
+    /// 待ち時間のヘッダーが無い二次レート制限の 403 は、スコープが揃っていてもレート制限にする（拒否にしない）
+    @Test(arguments: [
+        "You have exceeded a secondary rate limit. Please wait a few minutes before you try again.",
+        "You have exceeded a SECONDARY RATE LIMIT.",
+    ])
+    func treatsASecondaryRateLimitAsARateLimit(_ message: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["message": message])
+        let transport = FakeHTTPTransport { _ in
+            HTTPResponse(statusCode: 403, headers: ["X-OAuth-Scopes": "repo, read:org"], body: body)
+        }
+        let result = await client(transport).fetchNotifications(
+            endpoints: github, token: aliceToken, ifModifiedSince: nil)
+        #expect(result == .rateLimited(retryAt: nil))
     }
 
     /// 通信の失敗の分類は `failsWhenALaterPageFails` で確かめる
