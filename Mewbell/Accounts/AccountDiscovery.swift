@@ -66,7 +66,7 @@ enum DiscoveryState: Sendable, Equatable {
     }
 }
 
-/// 読み直しの開始時点の設定（`AppSettings` から作る）。
+/// 読み直しの開始時点の設定。
 struct DiscoveryOptions: Sendable, Equatable {
     var overrides = GhOverrides()
     /// 無効にしたアカウント

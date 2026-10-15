@@ -111,7 +111,7 @@ struct AccountStoreSettingsTests {
         let settings = AppSettings(storage: InMemorySettingsStorage())
         settings.setEnabled(false, for: bob.id)
         settings.setGhExecutableOverride("/Users/me/bin/gh")
-        let store = AccountStore(discovery: discovery, settings: settings)
+        let store = AccountStore(discovery: discovery, options: { settings.discoveryOptions })
         discovery.finish()
         store.reload()
         await store.waitForReload()
@@ -124,7 +124,8 @@ struct AccountStoreSettingsTests {
     @Test func disablesAnAccountWithoutWaitingForAReload() async {
         let discovery = BlockingDiscovery()
         let settings = AppSettings(storage: InMemorySettingsStorage())
-        let store = AccountStore(discovery: discovery, settings: settings, state: accounts(.ready, .ready))
+        let store = AccountStore(
+            discovery: discovery, options: { settings.discoveryOptions }, state: accounts(.ready, .ready))
         var reported: [DiscoveryState] = []
         store.onStateChange = { reported.append($0) }
         settings.setEnabled(false, for: bob.id)
@@ -139,7 +140,8 @@ struct AccountStoreSettingsTests {
         let discovery = BlockingDiscovery()
         discovery.result = accounts(.ready, .ready)
         let settings = AppSettings(storage: InMemorySettingsStorage())
-        let store = AccountStore(discovery: discovery, settings: settings, state: accounts(.ready, .ready))
+        let store = AccountStore(
+            discovery: discovery, options: { settings.discoveryOptions }, state: accounts(.ready, .ready))
         store.reload()
         settings.setEnabled(false, for: bob.id)
         store.setEnabled(false, for: bob.id)
@@ -152,7 +154,8 @@ struct AccountStoreSettingsTests {
         let discovery = BlockingDiscovery()
         discovery.result = accounts(.ready, .ready)
         let settings = AppSettings(storage: InMemorySettingsStorage())
-        let store = AccountStore(discovery: discovery, settings: settings, state: accounts(.ready, .disabled))
+        let store = AccountStore(
+            discovery: discovery, options: { settings.discoveryOptions }, state: accounts(.ready, .disabled))
         discovery.finish()
         store.setEnabled(true, for: bob.id)
         await store.waitForReload()
@@ -162,7 +165,7 @@ struct AccountStoreSettingsTests {
 
     @Test func reloadsAsTheUserWhenTheGhPathChanges() async {
         let discovery = BlockingDiscovery()
-        let store = AccountStore(discovery: discovery, settings: AppSettings(storage: InMemorySettingsStorage()))
+        let store = AccountStore(discovery: discovery)
         discovery.finish()
         store.ghExecutableChanged()
         await store.waitForReload()
@@ -172,9 +175,7 @@ struct AccountStoreSettingsTests {
     @Test func discardsTokensAndIgnoresOlderReloadsWhenTheConfigDirectoryChanges() async {
         let discovery = BlockingDiscovery()
         discovery.result = accounts(.ready, .ready)
-        let store = AccountStore(
-            discovery: discovery, settings: AppSettings(storage: InMemorySettingsStorage()),
-            state: accounts(.ready, .ready))
+        let store = AccountStore(discovery: discovery, state: accounts(.ready, .ready))
         var reported: [DiscoveryState] = []
         store.onStateChange = { reported.append($0) }
         store.reload()
@@ -200,7 +201,7 @@ struct AccountStoreDisableOrderTests {
     @Test func reloadsAfterTheDisableWhenEnabledRightAway() async {
         let discovery = BlockingDiscovery()
         let settings = AppSettings(storage: InMemorySettingsStorage())
-        let store = AccountStore(discovery: discovery, settings: settings, state: .accounts([]))
+        let store = AccountStore(discovery: discovery, options: { settings.discoveryOptions }, state: .accounts([]))
         discovery.finish()
         store.setEnabled(false, for: bob)
         store.setEnabled(true, for: bob)
@@ -214,7 +215,7 @@ struct AccountStoreOptionsTimingTests {
     @Test func readsTheSettingsAfterWaitingForPendingDisables() async {
         let discovery = BlockingDiscovery()
         let settings = AppSettings(storage: InMemorySettingsStorage())
-        let store = AccountStore(discovery: discovery, settings: settings, state: .accounts([]))
+        let store = AccountStore(discovery: discovery, options: { settings.discoveryOptions }, state: .accounts([]))
         let alice = AccountID(host: "github.com", user: "alice")
         let bob = AccountID(host: "github.com", user: "bob")
         discovery.finish()

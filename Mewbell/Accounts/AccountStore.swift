@@ -12,8 +12,8 @@ final class AccountStore {
 
     @ObservationIgnored private static let logger = Logger(category: "Accounts")
     @ObservationIgnored private let discovery: (any AccountDiscovering)?
-    /// 読み直しに渡す設定（無効なアカウントと gh の上書き）。nil なら既定値
-    @ObservationIgnored private let settings: AppSettings?
+    /// 読み直しに渡す設定（無効なアカウントと gh の上書き）。読み直しの開始（待った後）と結果の反映のたびに呼ぶ
+    @ObservationIgnored private let options: @MainActor () -> DiscoveryOptions
     /// 設定ディレクトリを変えるたびに進める。前の設定ディレクトリで始めた読み直しの結果は捨てる
     @ObservationIgnored private var configGeneration = 0
     /// 次の読み直しの前に、すべてのトークンを捨てる（設定ディレクトリを変えたとき）
@@ -34,9 +34,13 @@ final class AccountStore {
     var isReloading: Bool { reloadTask != nil }
 
     /// `discovery` が nil のときは読み込みを行わない（テストのホストや SwiftUI プレビュー用）。
-    init(discovery: (any AccountDiscovering)?, settings: AppSettings? = nil, state: DiscoveryState = .checking) {
+    init(
+        discovery: (any AccountDiscovering)?,
+        options: @escaping @MainActor () -> DiscoveryOptions = { DiscoveryOptions() },
+        state: DiscoveryState = .checking
+    ) {
         self.discovery = discovery
-        self.settings = settings
+        self.options = options
         self.state = state
     }
 
@@ -68,8 +72,7 @@ final class AccountStore {
                 await discovery.discardAllTokens()
             }
             // 設定は待った後に読む（待っている間に無効にしたアカウントを、古い設定で取り直さないため）
-            let options = DiscoveryOptions(
-                overrides: settings?.ghOverrides ?? GhOverrides(), disabled: settings?.disabledAccounts ?? [])
+            let options = self.options()
             await discovery.reload(userInitiated: userInitiated, options: options) { state in
                 await self.apply(state, generation: generation)
             }
@@ -152,7 +155,7 @@ final class AccountStore {
 
     /// 今の設定で無効なアカウントを `.disabled` にする（無効にした直後に、前の設定で始めた読み直しが終わったときのため）。
     private func applyingSettings(to state: DiscoveryState) -> DiscoveryState {
-        settings.map { state.markingDisabled($0.disabledAccounts) } ?? state
+        state.markingDisabled(options().disabled)
     }
 
     private func apply(_ state: DiscoveryState, generation: Int) {
