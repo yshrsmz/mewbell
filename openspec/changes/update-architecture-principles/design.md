@@ -52,9 +52,9 @@
 
 `AccountStore` の `settings: AppSettings?` を、`options: @escaping () -> DiscoveryOptions` に置き換える。既定値は `{ DiscoveryOptions() }` で、今の `settings` が nil のときと同じ振る舞いになる。読み直しでは、待った後に `options()` を呼んで使う（今の「設定は待った後に読む」の位置を変えない）。`applyingSettings(to:)` は `options().disabled` で `.disabled` に置き換える。
 
-`AppSettings` には、今の `ghOverrides` と `disabledAccounts` から作る `discoveryOptions: DiscoveryOptions` を足す。`AppDelegate` は `AccountStore(discovery:options:)` に `{ settings.discoveryOptions }` を渡す。こうすると Settings → Accounts の向きだけが残る（`AppSettings` は、もともと `AccountID` を使っている）。
+`AppSettings` には、gh の上書き（`ghExecutableOverride`・`ghConfigDirectoryOverride`）と `disabledAccounts` から作る `discoveryOptions: DiscoveryOptions` を足す。`AppDelegate` は `AccountStore(discovery:options:)` に `{ settings.discoveryOptions }` を渡す。こうすると Settings → Accounts の向きだけが残る（`AppSettings` は、もともと `AccountID` を使っている）。
 
-`AccountStore` と `AppSettings` は、どちらも `@MainActor` の型。クロージャは `AccountStore` の `@MainActor` の文脈で呼ぶので、`@Sendable` は要らない。actor の `AccountDiscovery` には、今までどおり呼んだ時点の `DiscoveryOptions` の値を渡す（A2）。`ghOverrides` と `disabledAccounts` は `SettingsTests` が確かめている公開の経路なので、残す。
+`AccountStore` と `AppSettings` は、どちらも `@MainActor` の型。クロージャは `AccountStore` の `@MainActor` の文脈で呼ぶので、`@Sendable` は要らない。actor の `AccountDiscovery` には、今までどおり呼んだ時点の `DiscoveryOptions` の値を渡す（A2）。`disabledAccounts` は `SettingsTests` が確かめている公開の経路なので、残す。`ghOverrides` は `discoveryOptions` のほかに使う箇所が無くなるので、`discoveryOptions` の中に畳んで消す（A9）。
 
 `DiscoveryOptions` のドキュメントコメント「`AppSettings` から作る」は、`AppSettings.discoveryOptions` の側に書くことにし、`DiscoveryOptions` からは消す。Accounts の型が Settings の型の名前を書かないようにするため。
 
@@ -62,6 +62,8 @@
 
 - Accounts に `DiscoveryOptionsProviding` のようなプロトコルを置き、`AppSettings` を準拠させる: 呼ぶ関数は 1 つだけなので、プロトコルにしてもクロージャと同じことしかできず、型が 1 つ増える（A9）。
 - `AppDelegate` が読み直しのたびに `DiscoveryOptions` を引数で渡す: `reload` を呼ぶ場所が `AppDelegate` の外（ポップオーバーの `onAppear`、再読み込みのボタン）にもあり、どの場所でも設定を渡す必要が出る。
+
+この「ほかの部品の状態はクロージャで受け取る」というつなぎ方は、型の置き場所ではなく部品のつなぎ方の約束なので、A1 ではなく A14 に書く。A14 を「変化はコールバックで伝え、状態はクロージャで読む」に広げ、A1 には輪を断つ手段として A14 を引く 1 文だけを置く（simplify の指摘を受けて決めた）。
 
 ### D4. 書体の約束を新しい原則 A17 に分ける（A4 を改める）
 

@@ -6,7 +6,7 @@
 
 ## 2. Accounts↔Settings の輪を解く
 
-- [x] 2.1 `AppSettings` に、`ghOverrides` と `disabledAccounts` から作る `discoveryOptions: DiscoveryOptions` を足す。`DiscoveryOptions` のドキュメントコメントから `AppSettings` の名前を消し、同じ説明を `discoveryOptions` の側に書く（design.md D3）。`SettingsTests` に、無効にしたアカウントと gh の上書きが `discoveryOptions` に入ることを確かめるテストを 1 本足し、通ることを確かめる。（足さなかった。`AccountStoreSettingsTests.passesTheCurrentSettingsToEachReload` が `settings.discoveryOptions` を通して両方を確かめていて、同じことを確かめ直すだけになるため。A12）
+- [x] 2.1 `AppSettings` に、gh の上書きと `disabledAccounts` から作る `discoveryOptions: DiscoveryOptions` を足す。`DiscoveryOptions` のドキュメントコメントから `AppSettings` の名前を消し、同じ説明を `discoveryOptions` の側に書く（design.md D3）。`SettingsTests` に、無効にしたアカウントと gh の上書きが `discoveryOptions` に入ることを確かめるテストを 1 本足し、通ることを確かめる。（足さなかった。`AccountStoreSettingsTests.passesTheCurrentSettingsToEachReload` が `settings.discoveryOptions` を通して両方を確かめていて、同じことを確かめ直すだけになるため。A12）
 - [x] 2.2 `AccountStore` の `settings: AppSettings?` を `options: () -> DiscoveryOptions`（既定値 `{ DiscoveryOptions() }`）に置き換える。読み直しの開始（待った後）と結果の反映（`applyingSettings(to:)`）で `options()` を使う。`AppDelegate` は `{ settings.discoveryOptions }` を渡す。`AccountStoreTests` と `GhDiagnosticsTests` の `settings: settings` を `options: { settings.discoveryOptions }` に置き換え、確かめる振る舞いを変えずに `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test -only-testing:MewbellTests/AccountStoreTests -only-testing:MewbellTests/AccountStoreSettingsTests -only-testing:MewbellTests/AccountStoreDisableOrderTests -only-testing:MewbellTests/AccountStoreOptionsTimingTests -only-testing:MewbellTests/AccountStoreGhDiagnosticsTests -only-testing:MewbellTests/SettingsStorageTests -only-testing:MewbellTests/AppSettingsTests` が通ることを確かめる（結果のスイート数も確かめる）。
 - [x] 2.3 `Mewbell/Accounts/` の中で `Settings/` に宣言された型を使っている箇所が無いことを grep で確かめる。中間の層のディレクトリの間で、型の参照が輪になっていないことを確かめる（Context の表と同じ手順で、コメントの中の名前は除く）。
 
@@ -23,10 +23,10 @@
   - `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` で全テストを通す。
   - `MEWBELL_WARNINGS_AS_ERRORS=YES` で、Debug と Release のビルドを通す。
   - `bash scripts/lint.sh` と `pnpm exec openspec validate --all --strict` を通す。
-- [ ] 4.2 `bash scripts/run.sh` で起動し、手元で確かめる。アカウントの一覧が出ること。設定でアカウントを無効にすると見出しが無効の表示になり、有効に戻すと取り直すこと。gh の設定ディレクトリの上書きを変えると読み直すこと。
+- [x] 4.2 `bash scripts/run.sh` で起動し、手元で確かめる。アカウントの一覧が出ること。設定でアカウントを無効にすると見出しが無効の表示になり、有効に戻すと取り直すこと。gh の設定ディレクトリの上書きを変えると読み直すこと。
 
 ## 5. レビュー
 
-- [ ] 5.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。
+- [x] 5.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。（直したもの 1 件: `AppSettings.ghOverrides` を `discoveryOptions` にまとめた。原則への異議 1 件: クロージャでつなぐ約束を A1 から A14 に移した。design.md D3）
 - [ ] 5.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。
 - [ ] 5.3 ロジックの変更を含む修正が多ければ、5.2 を新しいサブエージェントでもう一度実行する。
