@@ -55,10 +55,13 @@ struct RepositoryGroupView: View {
                 AccessibilityNotification.Announcement(labels.doneAccessibilityLabel(confirming: true)).post()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            // ボタンは常に並べて幅を測っておき、出さないときは見えず・押せず・読まれないようにする
+            // （出してから測ると、最初のホバーの 1 フレームだけ、リポジトリ名と件数がボタンに重なる）
             .overlay(alignment: .trailing) {
-                if showsActions {
-                    actionButtons
-                }
+                actionButtons
+                    .opacity(showsActions ? 1 : 0)
+                    .allowsHitTesting(showsActions)
+                    .accessibilityHidden(!showsActions)
             }
             .onHover { isHovering = $0 }
             .contextMenu {

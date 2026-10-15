@@ -31,10 +31,12 @@ extension AccountPoller {
             if sending {
                 // 1 件ごとにトークンを読み直し、止まっていないかを確かめ直す（送っている間に止まったり、無効化・削除・終了で
                 // トークンを捨てたりしたら、手元のトークンで残りを送らない）。止まっているかはトークンを待った後に見る。
-                // 止まっていれば送らず、失敗も記録しない（取得の状態で伝わる）
+                // 止まっていれば送らず、それまでの失敗も記録しない（取得の状態で伝わる）
                 let token = await tokens.currentToken(for: accountID)
-                sending = !state.phase.isStopped && !isDiscarded
-                if sending, let kind = await send(action, token: token) {
+                if state.phase.isStopped || isDiscarded {
+                    sending = false
+                    failure = nil
+                } else if let kind = await send(action, token: token) {
                     failure = (action, kind)
                     // トークンが無い・認証エラー・レート制限なら、残りも同じ理由で失敗するので送らない
                     sending = kind != .noToken && kind != .unauthorized && kind != .rateLimited

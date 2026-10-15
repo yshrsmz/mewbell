@@ -19,6 +19,12 @@ struct HoverActionButtons<Done: View>: View {
         }
         .buttonStyle(HoverHighlightButtonStyle())
         .padding(.horizontal, 2)
+        // ボタンの間と左右のすき間を押しても、下の行や見出し（開く・折りたたむ）に届かないようにする
+        .background {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {}
+        }
     }
 }
 

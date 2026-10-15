@@ -87,18 +87,20 @@ struct GroupActionPollingTests {
     }
 
     @Test func stopsSendingWhenThePollerIsStoppedMidway() async {
-        fixture.route(gets: [PollerFixture.ok(1...4)])
+        fixture.route(gets: [PollerFixture.ok(1...4)], ["DELETE": HTTPResponse(statusCode: 500)])
         await startAndLoad()
         fixture.transport.pausedWhere.value = Self.isThread("1")
         let done = Task {
             await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2"), .done(threadID: "3")])
         }
         await waitUntil { self.requests("DELETE").count == 1 }
-        // アカウントの無効化・削除・終了で止めたら、残りは送らない
+        // アカウントの無効化・削除・終了で止めたら、残りは送らず、止まる前の失敗も知らせない
         fixture.poller.stop()
         fixture.transport.pausedWhere.value = nil
         await done.value
         #expect(requests("DELETE").count == 1)
+        #expect(fixture.last?.actionFailure == nil)
+        #expect(fixture.last?.diagnostics.lastActionFailure == nil)
     }
 
     @Test func stopsSendingWhenTheTokenIsDiscardedMidway() async {
