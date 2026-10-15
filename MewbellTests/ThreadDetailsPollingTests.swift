@@ -189,9 +189,11 @@ struct ThreadDetailsPollingTests {
         fixture.poller.stop()
     }
 
-    @Test func doesNotBringBackThreadsReadWhilePrefetching() async throws {
+    /// 条件付きの 200 に、既読にしたスレッドが入っているときも入っていないとき（今の一覧から重ねるとき）も戻さない。
+    @Test(arguments: [false, true])
+    func doesNotBringBackThreadsReadWhilePrefetching(fetchedAgain: Bool) async throws {
         let fixture = try PollerFixture()
-        respond(fixture, notifications: [Self.list([1]), Self.list([1, 2])])
+        respond(fixture, notifications: [Self.list([1]), Self.list(fetchedAgain ? [1, 2] : [2])])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         fixture.transport.pausedWhere.value = { Self.isDetails($0) }

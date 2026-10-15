@@ -11,7 +11,7 @@ struct ConditionalFetchTests {
         fixture = try PollerFixture()
     }
 
-    /// `items` のスレッドの一覧（`updatedAt` は 12:SS:00 の分）。
+    /// `items` のスレッドの一覧（`updatedAt` は 2026-10-08 12:MM:00 で、`minute` が MM）。
     private static func list(_ items: [(id: Int, minute: Int)], lastModified: String) -> HTTPResponse {
         let json = items.map { item in
             FakeHTTPTransport.threadJSON(
