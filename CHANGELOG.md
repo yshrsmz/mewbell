@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/yshrsmz/mewbell/compare/v0.4.0...v0.5.0) (2026-10-15)
+
+
+### Features
+
+* mark a repository group as read or done ([#59](https://github.com/yshrsmz/mewbell/issues/59)) ([22d7cdf](https://github.com/yshrsmz/mewbell/commit/22d7cdfecc91784ae5af3b31e55bca6749de115b))
+
+
+### Bug Fixes
+
+* open the run of an already approved deployment request ([#53](https://github.com/yshrsmz/mewbell/issues/53)) ([93674aa](https://github.com/yshrsmz/mewbell/commit/93674aaf081841901cbc728203e83c8690363790))
+
 ## [0.4.0](https://github.com/yshrsmz/mewbell/compare/v0.3.0...v0.4.0) (2026-10-15)
 
 
