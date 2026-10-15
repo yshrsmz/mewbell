@@ -50,7 +50,7 @@ struct RepositoryGroupView: View {
                 title: "Make the menu bar popover remember its scroll position across openings and restarts",
                 kind: number == nil ? .release : .pullRequest,
                 subjectURL: number.flatMap { URL(string: "https://api.github.com/repos/\(repo)/pulls/\($0)") },
-                repository: repository, subjectNumber: number.map(String.init))
+                repository: repository, detailsSubject: number.map { .number(String($0)) })
         }
     }
     let expansion = ListExpansion()

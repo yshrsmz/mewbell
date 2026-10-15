@@ -8,7 +8,7 @@ private let alice = AccountID(host: "github.com", user: "alice")
 private func thread(_ id: String) throws -> NotificationThread {
     NotificationThread(
         id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: 0), title: "Thread \(id)", kind: .issue,
-        subjectURL: nil, repository: try #require(RepositoryName(fullName: "octo/app")), subjectNumber: nil)
+        subjectURL: nil, repository: try #require(RepositoryName(fullName: "octo/app")), detailsSubject: nil)
 }
 
 /// 設定（アカウントごとの通知のオフ、音）での `SystemNotifier`。

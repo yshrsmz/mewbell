@@ -41,6 +41,17 @@ struct IssueSummary: Decodable, Sendable {
     }
 }
 
+/// `GET /repos/{owner}/{repo}/releases/{id}` のうち、開く URL を組み立てるのに使うタグだけ。`html_url` や本文などは
+/// 型に載せない。
+struct ReleaseSummary: Decodable, Sendable {
+    let tagName: String
+
+    /// レスポンスボディを読む。形が崩れていれば nil。
+    static func decode(from data: Data) -> ReleaseSummary? {
+        try? APIJSON.decoder().decode(ReleaseSummary.self, from: data)
+    }
+}
+
 /// Timeline の 1 項目のうち、イベントを決めるのに使う値だけ。コメントの本文などは型に載せない。
 struct TimelineItem: Decodable, Sendable {
     struct Committer: Decodable, Sendable {

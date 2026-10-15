@@ -78,9 +78,14 @@ struct ThreadRow: View {
     /// 件名の下の行の、更新日時の前の部分（番号、イベント、理由）。
     private var details: [String] {
         [
-            thread.subjectNumber.map { "#\($0)" }, thread.details?.event.map(ThreadEventText.text),
-            ThreadReason.text(thread.reason),
+            number, thread.details?.event.map(ThreadEventText.text), ThreadReason.text(thread.reason),
         ].compactMap { $0 }
+    }
+
+    /// Issue・Pull request の番号（`#<番号>`）。番号を持たなければ nil。
+    private var number: String? {
+        guard case .number(let number) = thread.detailsSubject else { return nil }
+        return "#\(number)"
     }
 
     private var icon: ThreadIcon {
@@ -267,7 +272,7 @@ struct RelativeTimeText: View {
         RepositoryName(owner: "octo", name: "app").map { repository in
             NotificationThread(
                 id: id, reason: "subscribed", updatedAt: Date().addingTimeInterval(-180), title: "Fix the login flow",
-                kind: kind, subjectURL: nil, repository: repository, subjectNumber: "42",
+                kind: kind, subjectURL: nil, repository: repository, detailsSubject: .number("42"),
                 details: ThreadDetails(state: state, event: event))
         }
     }
@@ -294,7 +299,8 @@ struct RelativeTimeText: View {
             NotificationThread(
                 id: "1", reason: "review_requested", updatedAt: Date().addingTimeInterval(-300),
                 title: "Make the menu bar popover remember its scroll position across openings and restarts",
-                kind: .pullRequest, subjectURL: nil, repository: repository, subjectNumber: number)
+                kind: .pullRequest, subjectURL: nil, repository: repository,
+                detailsSubject: number.map(DetailsSubject.number))
         }
     }
     return VStack(alignment: .leading) {

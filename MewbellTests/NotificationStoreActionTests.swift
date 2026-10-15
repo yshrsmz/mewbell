@@ -114,7 +114,7 @@ struct NotificationStoreActionTests {
     private static func thread() throws -> NotificationThread {
         NotificationThread(
             id: "1", reason: "subscribed", updatedAt: .now, title: "Thread", kind: .issue, subjectURL: nil,
-            repository: try #require(RepositoryName(owner: "octo", name: "app")), subjectNumber: nil)
+            repository: try #require(RepositoryName(owner: "octo", name: "app")), detailsSubject: nil)
     }
 
     /// 取得し終えていて、スレッドがあるときだけ、すべて既読にできる。

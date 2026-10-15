@@ -58,6 +58,14 @@ enum SubjectKind: Hashable, Sendable {
     }
 }
 
+/// スレッドの件名の詳細を取りに行く先。番号とリリースの ID は排他（Release は番号の代わりにタグを取る）。
+enum DetailsSubject: Hashable, Sendable {
+    /// Issue・Pull request の番号（一覧に `#<番号>` を出し、状態とイベントを取る）
+    case number(String)
+    /// Release のリリースの ID（タグを取る）
+    case release(id: String)
+}
+
 /// 未読の通知スレッド。API のレスポンスから、検証を通ったものだけを作る。
 struct NotificationThread: Hashable, Sendable, Identifiable {
     let id: String
@@ -68,15 +76,15 @@ struct NotificationThread: Hashable, Sendable, Identifiable {
     /// `subject.url`（API の URL。Web で開くときは `ThreadWebURL` で組み立て直す）
     let subjectURL: URL?
     let repository: RepositoryName
-    /// Issue・Pull request の番号。読み取るときに `ThreadWebURL.subjectNumber` で求める（開く URL と同じ検証を通らなければ nil）
-    let subjectNumber: String?
-    /// 件名の状態とイベント。API のデコードでは nil で、ポーラーが取得した後に付ける
+    /// 件名の詳細を取りに行く先。読み取るときに `ThreadWebURL.detailsSubject` で求める（検証を通らなければ nil）
+    let detailsSubject: DetailsSubject?
+    /// 件名の状態とイベント（Release ではタグ）。API のデコードでは nil で、ポーラーが取得した後に付ける
     var details: ThreadDetails?
 }
 
 extension NotificationThread {
     /// `GET /notifications` のレスポンスボディを読む。形の崩れたスレッドは 1 件ずつ読み飛ばす。
-    /// ボディ全体が JSON の配列でなければ nil。番号（`subjectNumber`）は `endpoints` で求める。
+    /// ボディ全体が JSON の配列でなければ nil。詳細を取りに行く先（`detailsSubject`）は `endpoints` で求める。
     static func decodeList(from data: Data, endpoints: APIEndpoints) -> [NotificationThread]? {
         APIJSON.decodeArray(ThreadDTO.self, from: data)?.compactMap { $0.thread(endpoints: endpoints) }
     }
@@ -132,7 +140,7 @@ private struct ThreadDTO: Decodable {
         return NotificationThread(
             id: id, reason: reason ?? "", updatedAt: updatedAt, title: subject.title, kind: kind,
             subjectURL: subjectURL, repository: repository,
-            subjectNumber: ThreadWebURL.subjectNumber(
+            detailsSubject: ThreadWebURL.detailsSubject(
                 kind: kind, subjectURL: subjectURL, repository: repository, endpoints: endpoints))
     }
 }

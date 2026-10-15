@@ -1,6 +1,6 @@
 import Foundation
 
-/// 1 アカウントの、スレッドの件名の状態とイベントの記録（polling「スレッドのイベントの取得」）。メモリにだけ持つ。
+/// 1 アカウントの、スレッドの件名の状態とイベント（Release ではリリースのタグ）の記録（polling「スレッドのイベントの取得」）。メモリにだけ持つ。
 /// `AccountPoller` の中で使う。
 struct ThreadDetailsCache {
     private struct Entry {
@@ -35,7 +35,7 @@ struct ThreadDetailsCache {
         if let pausedUntil, now < pausedUntil { return [] }
         if newOnly && previous == nil { return [] }
         let waiting = threads.filter { thread in
-            guard thread.subjectNumber != nil, entries[thread.id]?.updatedAt != thread.updatedAt else {
+            guard thread.detailsSubject != nil, entries[thread.id]?.updatedAt != thread.updatedAt else {
                 return false
             }
             guard newOnly, let previous else { return true }

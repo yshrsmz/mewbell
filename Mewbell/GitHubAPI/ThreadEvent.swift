@@ -43,10 +43,18 @@ enum SubjectState: Hashable, Sendable {
     case closedNotPlanned
 }
 
-/// スレッドの件名の状態とイベント。イベントを取得できたスレッドにだけ付く。
+/// スレッドの件名の状態とイベント（Release ではリリースのタグ）。取得できたスレッドにだけ付く。
 struct ThreadDetails: Hashable, Sendable {
     /// 分からなければ nil
     let state: SubjectState?
     /// 決められなければ nil
     let event: ThreadEvent?
+    /// Release のリリースのタグ（`ThreadWebURL.releaseTagComponents` の検証を通ったもの）。ほかの種類では nil
+    let releaseTag: String?
+
+    init(state: SubjectState?, event: ThreadEvent?, releaseTag: String? = nil) {
+        self.state = state
+        self.event = event
+        self.releaseTag = releaseTag
+    }
 }

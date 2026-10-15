@@ -77,7 +77,7 @@ struct MenuBarContentView: View {
                                 id: "\(index)", reason: "subscribed",
                                 updatedAt: Date().addingTimeInterval(-Double(index) * 600),
                                 title: "Thread \(index)", kind: .issue, subjectURL: nil,
-                                repository: repository, subjectNumber: nil)
+                                repository: repository, detailsSubject: nil)
                         }
                     })
             ]),

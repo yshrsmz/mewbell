@@ -19,7 +19,7 @@ struct ListExpansionTests {
     private func thread(_ id: String, in repository: RepositoryName) -> NotificationThread {
         NotificationThread(
             id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: 0), title: "Thread \(id)",
-            kind: .issue, subjectURL: nil, repository: repository, subjectNumber: nil)
+            kind: .issue, subjectURL: nil, repository: repository, detailsSubject: nil)
     }
 
     @Test func togglesAccountsAndRepositoriesSeparately() {

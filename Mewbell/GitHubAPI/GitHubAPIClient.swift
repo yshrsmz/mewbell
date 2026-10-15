@@ -304,7 +304,8 @@ struct GitHubAPIClient: Sendable {
 /// スレッドの件名の状態とイベントの取得の結果。
 enum ThreadDetailsFetchResult: Sendable, Equatable {
     case found(ThreadDetails)
-    /// 番号を持たない、`404` / `410` / レート制限でない `403` / `422`（その `updated_at` の間は取り直さない）
+    /// 番号もリリースの ID も持たない、`404` / `410` / レート制限でない `403` / `422`、検証を通らないタグ
+    /// （その `updated_at` の間は取り直さない）
     case unavailable
     /// 401
     case unauthorized
@@ -329,12 +330,20 @@ extension GitHubAPIClient {
     private static let timelinePerPage = 100
 
     /// スレッドの件名の状態とイベントを取る（`GET /repos/{owner}/{repo}/issues/{number}` と、その `timeline` の
-    /// 1 ページ目、最後のページ、その前のページ）。URL は `subject.url` ではなく検証済みのリポジトリ名と番号から組み立てる。
-    /// 番号を持たないスレッドには何も送らない。
+    /// 1 ページ目、最後のページ、その前のページ）。リリースの ID を持つ Release のスレッドは、代わりにタグを取る
+    /// （`GET /repos/{owner}/{repo}/releases/{id}`）。URL は `subject.url` ではなく検証済みのリポジトリ名と番号・ID から
+    /// 組み立てる。番号もリリースの ID も持たないスレッドには何も送らない。
     func fetchDetails(
         for thread: NotificationThread, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
-        guard let number = thread.subjectNumber, ThreadID.isValid(number) else { return .unavailable }
+        let number: String
+        switch thread.detailsSubject {
+        case .number(let value): number = value
+        case .release(let id):
+            return await fetchReleaseTag(id, of: thread.repository, endpoints: endpoints, token: token)
+        case nil: return .unavailable
+        }
+        guard ThreadID.isValid(number) else { return .unavailable }
         let issuePath = "repos/\(thread.repository.owner)/\(thread.repository.name)/issues/\(number)"
         let issue: IssueSummary
         switch await get(endpoints.apiURL(path: issuePath), endpoints: endpoints, token: token) {
@@ -360,6 +369,23 @@ extension GitHubAPIClient {
             ThreadDetails(
                 state: state,
                 event: ThreadEventResolver.event(issue: issue, timeline: timeline, updatedAt: thread.updatedAt)))
+    }
+
+    /// リリースのタグを取る（github-api「リリースのタグの取得のリクエスト」）。読むのは `tag_name` だけで、
+    /// 検証を通らなければタグは「無い」。
+    private func fetchReleaseTag(
+        _ releaseID: String, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
+    ) async -> ThreadDetailsFetchResult {
+        guard ThreadID.isValid(releaseID) else { return .unavailable }
+        let path = "repos/\(repository.owner)/\(repository.name)/releases/\(releaseID)"
+        switch await get(endpoints.apiURL(path: path), endpoints: endpoints, token: token) {
+        case .success(let response):
+            guard let release = ReleaseSummary.decode(from: response.body) else { return .failed(.malformedBody) }
+            guard ThreadWebURL.releaseTagComponents(release.tagName) != nil else { return .unavailable }
+            return .found(ThreadDetails(state: nil, event: nil, releaseTag: release.tagName))
+        case .failure(let stop):
+            return stop.result
+        }
     }
 
     /// Timeline の 1 ページ目と、`rel="last"` があれば最後のページ、最後のページが近さの幅の始まりまで届いていなければ

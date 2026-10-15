@@ -78,7 +78,7 @@ struct NotificationThreadTests {
         #expect(thread.subjectURL?.absoluteString == "https://api.github.com/repos/octo/app/pulls/42")
         #expect(thread.updatedAt == Date(timeIntervalSince1970: 1_791_460_800))
         // 番号は読み取るときに求める
-        #expect(thread.subjectNumber == "42")
+        #expect(thread.detailsSubject == .number("42"))
     }
 
     @Test func acceptsANullSubjectURL() throws {
