@@ -124,7 +124,7 @@ struct AccountStoreGhDiagnosticsTests {
         let discovery = BlockingDiscovery()
         discovery.ghDetection = detection
         let settings = AppSettings(storage: InMemorySettingsStorage())
-        let store = AccountStore(discovery: discovery, settings: settings)
+        let store = AccountStore(discovery: discovery, options: { settings.discoveryOptions })
         discovery.finish()
         store.reload()
         await store.waitForReload()

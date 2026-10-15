@@ -44,6 +44,11 @@ final class AppSettings {
         GhOverrides(executablePath: ghExecutableOverride, configDirectory: ghConfigDirectoryOverride)
     }
 
+    /// アカウントの読み直しに渡す、今の設定（`AccountStore` が読み直しのたびに読む）。
+    var discoveryOptions: DiscoveryOptions {
+        DiscoveryOptions(overrides: ghOverrides, disabled: disabledAccounts)
+    }
+
     func setEnabled(_ enabled: Bool, for id: AccountID) {
         guard update(id, { $0.isEnabled = enabled }) else { return }
         onAccountEnabledChange?(id, enabled)

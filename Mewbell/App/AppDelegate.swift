@@ -44,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             self.settings = settings
-            accountStore = AccountStore(discovery: discovery, settings: settings)
+            accountStore = AccountStore(discovery: discovery, options: { settings.discoveryOptions })
             self.notificationStore = notificationStore
             notificationPermission = NotificationPermission(center: center)
             clickHandler = NotificationClickHandler { request in

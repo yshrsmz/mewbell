@@ -34,15 +34,17 @@
 
 ### A1. 依存は下の層へ向け、型は使う層のうち最も下に置く
 
-- **原則**: 層は 3 段に分け、その下にどの層からも使ってよい最下段 `Shared/` を置く。下の層は `GhCLI/` と `GitHubAPI/`、中間の層は `Accounts/`・`Polling/`・`Notifications/`・`Settings/`・`Diagnostics/`、上の層は `UI/` と `App/` である。下の層は中間と上の層の型を使わない。中間の層は同じ高さとして互いの型を使ってよいが、上の層の型は使わない。`Shared/` はほかのどのディレクトリの型も使わない。`Shared/` に置いてよいのは、アプリの領域の型（アカウント・スレッド・ホストなど）を知らず、下の層を含む 2 つ以上の層が使う小さな道具（`Logger(category:)`）だけにする。store と actor を持つのは中間の層で、`UI/` は表示と、表示だけに使う状態（折りたたみの `ListExpansion`、アニメーションの `DisclosureAnimations`）を受け持つ。SwiftUI と AppKit を import するのは `UI/` と `App/` だけにする。本物の部品は `AppDelegate` で組み立て、長いものは `.live(...)` にまとめて `AppDelegate` から呼ぶ。型や値は、それを使う層のうち最も下の層に置く。1 つの層だけが使うならその層に、複数の層が使うなら共通の依存先に置く（`RepositoryGroup` は `Polling/`、`hostLabel` は `UI/`、ポップオーバーと通知の両方が使う `AccountID.displayName` と、`UI/` と `Diagnostics/` が使う `HostKind.displayName` は `Accounts/`、一覧と通知の両方が使う `ThreadReason`・`ThreadEventText` は `Notifications/`）。
-- **理由**: 下の層を UI 抜きで単体テストでき、トークンを扱う層が表示の都合で変わらない。置き場所を決める軸を 1 つにすると、移す・移さないの判断がレビューの周ごとに揺れない。
+- **原則**: 層は 3 段に分け、その下にどの層からも使ってよい最下段 `Shared/` を置く。下の層は `GhCLI/` と `GitHubAPI/`、中間の層は `Accounts/`・`Polling/`・`Notifications/`・`Settings/`・`Diagnostics/`、上の層は `UI/` と `App/` である。下の層は中間と上の層の型を使わない。中間の層は同じ高さとして互いの型を使ってよいが、ディレクトリの間の依存を輪にせず、上の層の型は使わない。`Shared/` はほかのどのディレクトリの型も使わない。`Shared/` に置いてよいのは、アプリの領域の型（アカウント・スレッド・ホストなど）を知らず、下の層を含む 2 つ以上の層が使う小さな道具（`Logger(category:)`）だけにする。store と actor を持つのは中間の層で、`UI/` は表示と、表示だけに使う状態（折りたたみの `ListExpansion`、アニメーションの `DisclosureAnimations`）を受け持つ。SwiftUI と AppKit を import するのは `UI/` と `App/` だけにする。本物の部品は `AppDelegate` で組み立て、長いものは `.live(...)` にまとめて `AppDelegate` から呼ぶ。型や値は、それを使う層のうち最も下の層に置く。1 つの層だけが使うならその層に、複数の層が使うなら共通の依存先に置く。同じ高さの 2 つの層が使うなら、もう一方に依存している側ではなく、依存されている側に置く（`RepositoryGroup` は `Polling/`、`hostLabel` は `UI/`、ポップオーバーと通知の両方が使う `AccountID.displayName` と、`UI/` と `Diagnostics/` が使う `HostKind.displayName` は `Accounts/`、`Accounts/` の `AccountDiscovery` が準拠して `Polling/` が使う `TokenProviding` は `Accounts/`、一覧と通知の両方が使う `ThreadReason`・`ThreadEventText` は `Notifications/`）。依存されている側の部品が、依存している側の状態を読むときは、その型を持たずに、`AppDelegate` がつなぐクロージャで値を受け取る（`AccountStore` は読み直しの設定を、`AppSettings.discoveryOptions` を返すクロージャで受け取る）。
+- **理由**: 下の層を UI 抜きで単体テストでき、トークンを扱う層が表示の都合で変わらない。置き場所を決める軸を 1 つにすると、移す・移さないの判断がレビューの周ごとに揺れない。輪になった 2 つのディレクトリは、片方だけを読んでも理解できず、片方だけを組んでもテストできない。輪が無ければ、順序を前もって決めなくても、その時点の依存から読む順序が 1 つに決まる。
 - **採らなかった案**:
   - 値を作る層に置く: 表示のためだけに作る値（`hostLabel` など）の置き場所を別に決める必要がある
+  - 中間の層どうしの輪を許す: 同じ高さだからとどちらに置いてもよくなり、置き場所の判断がレビューのたびに揺れる
+  - 輪を型の宣言と参照の突き合わせで機械的に検査する: grep ではコメントの中の型名で誤検知し、コメントを除く処理が要る。輪がまた入ることが続くまでは、レビューで守る
   - 中間の層にも順序を決めて上への参照を禁じる: 設定・アカウント・ポーリング・通知は互いの変化に応じて動き、順序を決めても参照を間接にする部品が増えるだけになる
   - SwiftPM のモジュールに分けて依存の向きをコンパイラで守る: プロジェクトの構成を変える大きさに見合わない。import だけを lint で守る
   - どの層からも使う道具も、使う層のうち最も下の層（`GhCLI/`）に置く: ロガーの拡張が gh の部品に住み、次に似た道具が出たときの置き場所としても読めてしまう
 - **適用外**: なし
-- **根拠**: add-gh-account-discovery D1、add-notification-fetch D1、add-system-notifications D1、add-settings D1、add-diagnostics D1、update-notification-list D1・D6、update-list-readability D8、add-architecture-principles D6・D7、fix-lower-layer-dependencies D1〜D6、fix-shared-thread-text-placement D1。import は lint の `ui_frameworks_outside_ui` で守る
+- **根拠**: add-gh-account-discovery D1、add-notification-fetch D1、add-system-notifications D1、add-settings D1、add-diagnostics D1、update-notification-list D1・D6、update-list-readability D8、add-architecture-principles D6・D7、fix-lower-layer-dependencies D1〜D6、fix-shared-thread-text-placement D1、update-architecture-principles D1・D2・D3・D5。import は lint の `ui_frameworks_outside_ui` で守る
 
 ### A2. View と store は @MainActor、外部とのやり取りは actor に閉じ込める
 
@@ -68,14 +70,13 @@
 
 ### A4. View に ViewModel の層を置かず、文言は View の外で決める
 
-- **原則**: データの store（`AccountStore`、`NotificationStore`、`AppSettings`、`LaunchAtLogin` など、中間の層の状態を持つ `@Observable` の型）を直接受け取るのは、シーンのルートの View（`MenuBarContentView`、`SettingsView`、`MenuBarLabel`）だけにする。それ以外の View は、値と、操作のクロージャ（`ThreadListActions`、`SettingsActions` など）と、表示の状態の型（`ListExpansion`、`AccountExpansion`）だけを受け取る。表示する文言・記号・コマンドは、View の外の純粋な enum や値型で決め、単体テストする（`ThreadReason`、`ThreadEventText`、`ThreadIcon`、`ActionFailureMessage`、`GhCommand`、`UnreadBadge`）。書体の大きさはテキストスタイルで指定し、ポイント数を書かない。
+- **原則**: データの store（`AccountStore`、`NotificationStore`、`AppSettings`、`LaunchAtLogin` など、中間の層の状態を持つ `@Observable` の型）を直接受け取るのは、シーンのルートの View（`MenuBarContentView`、`SettingsView`、`MenuBarLabel`）だけにする。それ以外の View は、値と、操作のクロージャ（`ThreadListActions`、`SettingsActions` など）と、表示の状態の型（`ListExpansion`、`AccountExpansion`）だけを受け取る。表示する文言・記号・コマンドは、View の外の純粋な enum や値型で決め、単体テストする（`ThreadReason`、`ThreadEventText`、`ThreadIcon`、`ActionFailureMessage`、`GhCommand`、`UnreadBadge`）。
 - **理由**: `@Observable` の store をルートが読めば、変換のための層を挟まずに済む。下位の View が値とクロージャだけを受け取れば、プレビューとテストで store を組まずに済み、どの操作が起きるかが引数で読める。文言を View の外に置けば、描画抜きでテストできる。
 - **採らなかった案**:
   - View ごとに ViewModel を置く: store と同じ状態を二重に持ち、同期の経路が増える
   - View で `@Environment(\.openURL)` を使って開く: テストで開いた URL を確かめられず、開く前の検査の場所が分かれる
-  - 書体を共有の型（`ListTypography` など）にまとめる: ほとんどが 1 行の modifier で、型を挟むと読む場所が増えるだけになる
 - **適用外**: なし
-- **根拠**: add-notification-fetch D9、add-system-notifications D8、add-thread-actions D7、add-web-notifications-link D2、update-list-readability D1・D7、add-thread-latest-event §2、fix-settings-view-inputs D1・D2。書体のポイント数は lint の `fixed_font_size` で守る
+- **根拠**: add-notification-fetch D9、add-system-notifications D8、add-thread-actions D7、add-web-notifications-link D2、update-list-readability D7、add-thread-latest-event §2、fix-settings-view-inputs D1・D2、update-architecture-principles D4
 
 ### A5. 外部はプロトコルかクロージャの裏に置き、テストでは本物に触れない
 
@@ -88,13 +89,15 @@
 
 ### A6. 危ない処理の関所は 1 か所にし、内側は private で守る
 
-- **原則**: `Authorization` を付けて送るのは `GitHubAPIClient.send` だけにする。ブラウザで開く URL の検査は `ThreadWebURL` だけで行い、API 由来の URL を開くのは `NotificationStore` の `openURL` だけにする。子プロセスの環境変数は `GhEnvironment` だけが作る。案内に出す gh のコマンドの文字列は `GhCommand` だけが作る。新しい処理は新しい経路を作らずに既存の関所を通す。関所の内側（`Authorization` を付ける `send` など、検査を経ずに危ない操作をする関数）は `private` を保つ。行数の上限でファイルを分けるときも、関所の内側は分けずに、そのファイルだけ上限を緩める（`swiftlint:disable file_length`）。
-- **理由**: 検査を 1 か所に集めると、security.md の約束を確かめる場所とテストが 1 つで済む。内側を `private` にしておけば、関所を迂回する呼び出しをコンパイラが止める。
+- **原則**: `Authorization` を付けて送るのは `GitHubAPIClient.send` だけにする。ブラウザで開く URL の検査は `ThreadWebURL` だけで行い、API 由来の URL を開くのは `NotificationStore` の `openURL` だけにする。子プロセスの環境変数は `GhEnvironment` だけが作る。案内に出す gh のコマンドの文字列は `GhCommand` だけが作る。新しい処理は新しい経路を作らずに既存の関所を通す。関所の内側（`Authorization` を付ける `send` など、検査を経ずに危ない操作をする関数）は `private` を保つ。関所のファイルが行数の上限に当たったら、上限は緩めずに、関所（送り先を検査して `Authorization` を付けて送る処理と、それが使う `HTTPTransport`）を小さな型に切り出して、その型だけのファイルに置く。その型が外に見せるのは、検査を通る入口だけにする。
+- **理由**: 検査を 1 か所に集めると、security.md の約束を確かめる場所とテストが 1 つで済む。内側を `private` にしておけば、関所を迂回する呼び出しをコンパイラが止める。関所だけを小さな型にすれば、関所の範囲がファイル 1 つで読め、取得の処理が増えても関所のファイルは大きくならない。
 - **採らなかった案**:
   - ブラウザで開く URL の組み立てを `APIEndpoints` に置く: `APIEndpoints` はトークンを送ってよい相手を決める型で、開く前の検査を持っていない
   - 行数の上限に合わせて `send` の `private` を外す（add-thread-latest-event §2 の判断を改めた）: 「関所は 1 か所」が規約だけで守られる状態になる
+  - 関所のファイルだけ行数の上限を緩める（`swiftlint:disable file_length`）: 関所のファイルが際限なく大きくなれ、どこまでが関所かが読みにくくなる
+  - 取得の処理を別の型にし、送る処理をクロージャで渡す: 渡したクロージャが関所と同じことをでき、関所が 1 か所であることをコンパイラで守れない。関所そのものを型にするのとは違い、検査を通らない送り方を外へ渡すことになる
 - **適用外**: 案内画面と通知の許可のバナーが開く固定の URL（gh のサイト、システム設定）は API 由来でないので、`NSWorkspace` で直接開く
-- **根拠**: add-gh-account-discovery D5、add-notification-fetch D2・D8、add-system-notifications D3・D5・D7、add-thread-actions D2、add-web-notifications-link D1・D2、update-list-readability D7、add-architecture-principles D7、fix-api-client-send-privacy D1・D2・D3。`Authorization` は lint の `authorization_header_outside_client` で守る
+- **根拠**: add-gh-account-discovery D5、add-notification-fetch D2・D8、add-system-notifications D3・D5・D7、add-thread-actions D2、add-web-notifications-link D1・D2、update-list-readability D7、add-architecture-principles D7、fix-api-client-send-privacy D1・D2・D3、update-architecture-principles D6。`Authorization` は lint の `authorization_header_outside_client` で守る
 
 ### A7. actor や store の中の判断は、値型か純粋な関数に切り出す
 
@@ -192,9 +195,19 @@
 - **適用外**: なし
 - **根拠**: update-popover-hover-feedback D1・D3、update-heading-hit-target D1・D2・D5。振る舞いは `openspec/specs/ui/spec.md` の「ポップオーバーの押せる要素のホバーの反応」。lint の規則 `no_plain_button_style`
 
+### A17. 書体の大きさはテキストスタイルで指定し、ポイント数を書かない
+
+- **原則**: 文字の大きさは `.body`・`.subheadline` などのテキストスタイルで指定し、`.system(size:)` のようにポイント数を書かない。spec に書いたポイント数は、macOS の今のテキストスタイルの大きさとして読み、実装はスタイルで指定する。
+- **理由**: macOS がテキストスタイルの大きさを変えたり、ユーザーの文字の大きさの設定に追従するようになったりしたときに、そのまま効く。
+- **採らなかった案**:
+  - 書体を共有の型（`ListTypography` など）にまとめる: ほとんどが 1 行の modifier で、型を挟むと読む場所が増えるだけになる（A9）
+- **適用外**: なし
+- **根拠**: update-list-readability D1、update-architecture-principles D4。lint の規則 `fixed_font_size`
+
 ## 既知の逸脱
 
 原則に合わない今のコード。直したら行を消す。
 
 | 原則 | 場所 | 直す change |
 | --- | --- | --- |
+| A6 | `GitHubAPIClient.swift`（`swiftlint:disable file_length` で行数の上限を緩めている） | fix-api-client-gateway |

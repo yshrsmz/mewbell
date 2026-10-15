@@ -59,7 +59,7 @@ custom_rules:
     name: "Fixed font size"
     regex: '\b(system|custom|systemFont)\([^)]*\b(size|ofSize):'
     included: 'Mewbell/(UI|App)/'
-    message: "書体の大きさはテキストスタイルで指定し、ポイント数を書かない（A4）"
+    message: "書体の大きさはテキストスタイルで指定し、ポイント数を書かない（A17）"
     severity: error
   no_plain_button_style:
     name: "No plain or borderless button style"

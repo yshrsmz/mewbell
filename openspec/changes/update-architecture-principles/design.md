@@ -32,7 +32,7 @@
 
 中間の層どうしは、今までどおり互いの型を使ってよい。ただし、ディレクトリの間の依存を輪にしない。2 つの層の両方が使う型は、もう一方に依存している側の層ではなく、依存されている側の層に置く。今の「複数の層が使うなら共通の依存先に置く」と同じ考え方を、同じ高さの層にも当てはめたもの。
 
-理由: 輪になった 2 つのディレクトリは、片方だけを読んでも理解できず、片方だけを組んでもテストできない。輪が無ければ、順序を前もって決めなくても、その時点の依存から読む順序が 1 つに決まる。
+理由は A1 の「理由」に書く（輪になったディレクトリは片方だけでは読めず、テストもできない。輪が無ければ、読む順序が依存から決まる）。
 
 採らなかった案:
 
@@ -65,7 +65,7 @@
 
 ### D4. 書体の約束を新しい原則 A17 に分ける（A4 を改める）
 
-A4 から「書体の大きさはテキストスタイルで指定し、ポイント数を書かない」と、その採らなかった案（`ListTypography`）、根拠のうち書体の分を A17 に移す。A17 の理由は update-list-readability D1 の「macOS がテキストスタイルの大きさを変えたり、ユーザーの文字の大きさの設定に追従するようになったりしたときに、そのまま効く」。根拠は update-list-readability D1 と、lint の `fixed_font_size`。A4 の根拠からは update-list-readability D1 と lint の `fixed_font_size` を外し、D7 は残す（`GhCommand` の根拠のため）。`.swiftlint.yml` の `fixed_font_size` の `message` の ID を A17 に引き直す。
+A4 から「書体の大きさはテキストスタイルで指定し、ポイント数を書かない」と、その採らなかった案（`ListTypography`）、根拠のうち書体の分を A17 に移す。A17 の理由は update-list-readability D1 から取る（macOS のテキストスタイルの大きさや、文字の大きさの設定の変化に追従する）。根拠は update-list-readability D1 と、lint の `fixed_font_size`。A4 の根拠からは update-list-readability D1 と lint の `fixed_font_size` を外し、D7 は残す（`GhCommand` の根拠のため）。`.swiftlint.yml` の `fixed_font_size` の `message` の ID を A17 に引き直す。
 
 採らなかった案:
 
