@@ -52,18 +52,21 @@ struct UnconditionalFetchTests {
         fixture.poller.stop()
     }
 
-    @Test func countsAConditional200AsAFullFetch() async {
+    /// 条件付きの 200 は差分なので、条件なしで取り直す 5 分の起点にしない。
+    @Test func doesNotCountAConditional200AsAFullFetch() async {
         fixture.respond([
-            PollerFixture.ok(1...1), PollerFixture.ok(1...2, lastModified: "LM-2"), PollerFixture.notModified,
+            PollerFixture.ok(1...1), PollerFixture.ok(2...2, lastModified: "LM-2"), PollerFixture.ok(2...2),
         ])
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         fixture.advance(by: 240)
         await fixture.sleeper.waitForSleeps(2)
-        // 条件付きの 200 から 5 分たっていないので、最初の取得から 5 分を過ぎても条件付きのまま
+        #expect(fixture.lastIDs == ["2", "1"])
+        // 最初の取得（条件なし）から 5 分を過ぎたので、条件なしで取り直す
         fixture.advance(by: 120)
         await fixture.sleeper.waitForSleeps(3)
-        #expect(fixture.ifModifiedSince == [nil, "LM-1", "LM-2"])
+        #expect(fixture.ifModifiedSince == [nil, "LM-1", nil])
+        #expect(fixture.lastIDs == ["2"])
         fixture.poller.stop()
     }
 

@@ -10,8 +10,9 @@ actor AccountPoller {
     typealias Sleep = @Sendable (Duration) async throws -> Void
 
     static let logger = Logger(category: "Polling")
-    /// 条件なしの取得の間隔。`Last-Modified` は未読の `updated_at` の最新値なので、それより古いスレッドの増減は
-    /// `304` に隠れる。その分のずれを、この間隔で取り直して直す
+    /// 条件なしの取得の間隔。`Last-Modified` は未読の `updated_at` の最新値で、条件付きの取得はそれより後に更新された
+    /// スレッドしか返さないので、それより古いスレッドの増減は `304` にも条件付きの `200` にも出ない。その分のずれを、
+    /// この間隔で取り直して直す
     static let unconditionalFetchInterval: TimeInterval = 300
 
     let accountID: AccountID
@@ -32,8 +33,8 @@ actor AccountPoller {
     var state = FeedState.loading
     /// 最後にすべてのページを取り終えた 200 の `Last-Modified`
     private var lastModified: String?
-    /// 最後に 200 で全ページを取り終えた時刻（`If-Modified-Since` を付けた取得でも 200 なら一覧はすべて取り直される）
-    private var lastFullFetch: Date?
+    /// 最後に条件なしの取得の 200 で全ページを取り終えた時刻（条件付きの 200 は差分なので数えない）
+    private var lastUnconditionalFetch: Date?
     /// 今のトークンでスコープを確かめたか
     var scopesVerified = false
     private var consecutiveFailures = 0
@@ -199,8 +200,8 @@ actor AccountPoller {
         refreshWaiters.finish(all: true)
     }
 
-    /// 1 回の取得をして、結果と取得の番号を返す。再読み込みの後と、最後に 200 で一覧を取り直してから間隔がたった後は
-    /// `If-Modified-Since` を付けない。
+    /// 1 回の取得をして、結果と取得の番号を返す。再読み込みの後と、最後に条件なしの 200 で一覧を取り直してから間隔が
+    /// たった後は `If-Modified-Since` を付けない。条件付きの 200 は今の一覧に重ねる。
     private func fetch(with token: AccessToken) async -> (NotificationsFetchResult, Int) {
         // 印は送る前に下ろす（取得中に押された再読み込みを、その前に始めた取得で消さないため）
         let requested = unconditionalRequested
@@ -208,7 +209,7 @@ actor AccountPoller {
         let isDue =
             requested
             || PollSchedule.unconditionalFetchIsDue(
-                lastFullFetch: lastFullFetch, now: now(), interval: Self.unconditionalFetchInterval)
+                lastUnconditionalFetch: lastUnconditionalFetch, now: now(), interval: Self.unconditionalFetchInterval)
         if isDue, lastModified != nil {
             Self.logger.info("Fetching \(self.accountID) without If-Modified-Since")
         }
@@ -227,17 +228,22 @@ actor AccountPoller {
                 fetched, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt)
             await prefetchNewDetails(in: threads, token: token, fetchNumber: number)
             guard !Task.isCancelled else { return (result, number) }
+            // 条件付きの 200 は `If-Modified-Since` より後に更新されたスレッドだけなので、今の一覧に重ねる。
+            // 状態とイベントを取っている間に一覧から外したスレッドは、重ねる元に入らない。隠すスレッドは増える一方なので、
+            // 隠す前の受け取ったスレッドを重ねてから除いても、1 回目に除いたスレッドは戻らない
+            let isConditional = ifModifiedSince != nil
+            let listed = isConditional ? ThreadListMerge.merge(fetched, into: state.threads) : fetched
             threads = HiddenThreads.revealOrHide(
-                threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt)
+                listed, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt)
             // 隠したスレッドの記録も残す（既読にできずに一覧に戻ったときに、新着として取り直さないため）
-            details.listed(fetched)
+            details.listed(listed)
             result = .updated(
                 threads: threads, lastModified: lastModified, pollInterval: pollInterval, scopes: scopes,
-                truncated: truncated)
-        }
-        if case .updated = result {
-            // 条件付きでも 200 なら全ページを取り直しているので、条件なしと同じく一覧は最新になる
-            lastFullFetch = now()
+                // 条件付きの 200 の一覧の残りは前の取得のものなので、前の打ち切りを保つ
+                truncated: truncated || (isConditional && state.isTruncated))
+            if !isConditional {
+                lastUnconditionalFetch = now()
+            }
         } else if requested {
             // 取り終えられなかったので、次の取得もまた条件なしにする
             unconditionalRequested = true
