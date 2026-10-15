@@ -87,7 +87,7 @@ struct ThreadDetailsRequestTests {
         #expect(transport.requests.first?.url?.absoluteString == "https://api.github.com/repos/octo/app/issues/7")
     }
 
-    /// 番号を持つかどうかの判定は `ThreadWebURL.subjectNumber` のテストで確かめる
+    /// 番号を持つかどうかの判定は `ThreadWebURL.detailsSubject` のテストで確かめる
     @Test func sendsNothingWithoutANumber() async throws {
         let (thread, endpoints) = try thread(subjectURL: "https://evil.example.com/repos/octo/app/issues/7")
         let transport = transport(issue: Self.ok(issue)) { _ in Self.ok(comment) }

@@ -300,7 +300,7 @@ struct AccountDisclosure: Equatable {
             NotificationThread(
                 id: id, reason: reason, updatedAt: now.addingTimeInterval(-minutesAgo * 60),
                 title: "Make the menu bar popover remember its scroll position across openings", kind: kind,
-                subjectURL: nil, repository: repository, subjectNumber: nil)
+                subjectURL: nil, repository: repository, detailsSubject: nil)
         }
     }
     let feeds: [AccountID: FeedState] = [
@@ -371,7 +371,7 @@ struct AccountDisclosure: Equatable {
             NotificationThread(
                 id: "\(index)", reason: "subscribed", updatedAt: now.addingTimeInterval(-Double(index) * 60),
                 title: "Thread \(index)", kind: .issue, subjectURL: nil, repository: repository,
-                subjectNumber: nil)
+                detailsSubject: nil)
         }
     }
     let feeds = [alice.id: FeedState(phase: .loaded(updatedAt: now), threads: threads, isTruncated: true)]

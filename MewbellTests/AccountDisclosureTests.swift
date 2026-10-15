@@ -16,7 +16,7 @@ struct AccountDisclosureTests {
             NotificationThread(
                 id: "\(index + 1)", reason: "subscribed", updatedAt: Date(timeIntervalSince1970: Double(index)),
                 title: "Thread \(index + 1)", kind: .issue, subjectURL: nil, repository: repository,
-                subjectNumber: nil)
+                detailsSubject: nil)
         }
         return FeedState(phase: phase, threads: threads)
     }

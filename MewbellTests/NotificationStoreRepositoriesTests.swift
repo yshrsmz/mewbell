@@ -11,7 +11,7 @@ private func thread(_ id: String, _ repository: String, updatedAt: TimeInterval)
     NotificationThread(
         id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: updatedAt), title: "Thread \(id)",
         kind: .issue, subjectURL: nil, repository: try #require(RepositoryName(fullName: repository)),
-        subjectNumber: nil)
+        detailsSubject: nil)
 }
 
 /// ポーラーの `onUpdate` を受け取っておく（ポーラー自身の更新は捨て、テストが流す `FeedState` だけを届ける）。

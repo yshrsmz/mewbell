@@ -73,7 +73,7 @@ extension ThreadDetailsRequestTests {
         #expect(opened.absoluteString == "https://github.com/octo/app/releases/tag/v1.0.0")
     }
 
-    /// リリースの ID を持つかどうかの判定は `ThreadWebURL.releaseID` のテストで確かめる
+    /// リリースの ID を持つかどうかの判定は `ThreadWebURL.detailsSubject` のテストで確かめる
     @Test func sendsNothingWithoutAReleaseID() async throws {
         let (thread, endpoints) = try releaseThread(subjectURL: "https://evil.example.com/repos/octo/app/releases/12")
         let (result, transport) = await fetch(thread, endpoints, Self.release(tagName: "v1.0.0"))

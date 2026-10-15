@@ -11,7 +11,7 @@ private func thread(
     NotificationThread(
         id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: updatedAt), title: "Thread \(id)",
         kind: kind, subjectURL: subjectURL.flatMap(URL.init(string:)),
-        repository: try #require(RepositoryName(fullName: repository)), subjectNumber: nil,
+        repository: try #require(RepositoryName(fullName: repository)), detailsSubject: nil,
         details: releaseTag.map { ThreadDetails(state: nil, event: nil, releaseTag: $0) }
     )
 }
@@ -259,7 +259,7 @@ struct ThreadWebURLTests {
     }
 }
 
-struct ThreadSubjectNumberTests {
+struct ThreadDetailsSubjectTests {
     private let github: APIEndpoints
     private let ghes: APIEndpoints
 
@@ -268,30 +268,32 @@ struct ThreadSubjectNumberTests {
         ghes = try #require(APIEndpoints(host: "ghe.example.com"))
     }
 
-    /// スレッドの部品から番号を求める（スレッドを作る前に呼ぶ形）。
-    private func number(
+    /// スレッドの部品から詳細を取りに行く先を求める（スレッドを作る前に呼ぶ形）。
+    private func subject(
         repository: String = "octo/app", kind: SubjectKind = .pullRequest, subjectURL: String?,
         endpoints: APIEndpoints
-    ) throws -> String? {
-        ThreadWebURL.subjectNumber(
+    ) throws -> DetailsSubject? {
+        ThreadWebURL.detailsSubject(
             kind: kind, subjectURL: subjectURL.flatMap(URL.init(string:)),
             repository: try #require(RepositoryName(fullName: repository)), endpoints: endpoints)
     }
 
     @Test func readsPullRequestAndIssueNumbers() throws {
-        #expect(try number(subjectURL: "https://api.github.com/repos/octo/app/pulls/42", endpoints: github) == "42")
         #expect(
-            try number(
+            try subject(subjectURL: "https://api.github.com/repos/octo/app/pulls/42", endpoints: github)
+                == .number("42"))
+        #expect(
+            try subject(
                 repository: "team/svc", kind: .issue,
-                subjectURL: "https://ghe.example.com/api/v3/repos/team/svc/issues/7", endpoints: ghes) == "7")
+                subjectURL: "https://ghe.example.com/api/v3/repos/team/svc/issues/7", endpoints: ghes) == .number("7"))
     }
 
     /// 番号は `subject.url` の形で決まり、`subject.type` には依らない（Release と Discussion を除く）。
     @Test func readsTheNumberFromThePullRequestURLForOtherKinds() throws {
         #expect(
-            try number(
+            try subject(
                 kind: .checkSuite, subjectURL: "https://api.github.com/repos/octo/app/pulls/42", endpoints: github)
-                == "42")
+                == .number("42"))
     }
 
     @Test(arguments: [
@@ -302,46 +304,28 @@ struct ThreadSubjectNumberTests {
         "https://api.github.com/repos/octo/app/commits/0123abcdef",
     ])
     func readsNoNumberFromOtherSubjects(_ subjectURL: String?) throws {
-        #expect(try number(subjectURL: subjectURL, endpoints: github) == nil)
+        #expect(try subject(subjectURL: subjectURL, endpoints: github) == nil)
     }
 
-    @Test(arguments: [SubjectKind.release, .discussion])
-    func readsNoNumberForOtherKinds(_ kind: SubjectKind) throws {
-        let subject = "https://api.github.com/repos/octo/app/pulls/42"
-        #expect(try number(kind: kind, subjectURL: subject, endpoints: github) == nil)
-    }
-
-    @Test func readsNoNumberForADiscussion() throws {
-        let subject = "https://api.github.com/repos/octo/app/discussions/2045"
-        #expect(try number(kind: .discussion, subjectURL: subject, endpoints: github) == nil)
-    }
-}
-
-struct ThreadReleaseIDTests {
-    private let github: APIEndpoints
-    private let ghes: APIEndpoints
-
-    init() throws {
-        github = try #require(APIEndpoints(host: "github.com"))
-        ghes = try #require(APIEndpoints(host: "ghe.example.com"))
-    }
-
-    private func releaseID(
-        repository: String = "octo/app", kind: SubjectKind = .release, subjectURL: String?, endpoints: APIEndpoints
-    ) throws -> String? {
-        ThreadWebURL.releaseID(
-            kind: kind, subjectURL: subjectURL.flatMap(URL.init(string:)),
-            repository: try #require(RepositoryName(fullName: repository)), endpoints: endpoints)
+    @Test(arguments: [
+        (SubjectKind.release, "https://api.github.com/repos/octo/app/pulls/42"),
+        (.discussion, "https://api.github.com/repos/octo/app/pulls/42"),
+        (.discussion, "https://api.github.com/repos/octo/app/discussions/2045"),
+    ])
+    func readsNoNumberForReleasesAndDiscussions(_ kind: SubjectKind, _ subjectURL: String) throws {
+        #expect(try subject(kind: kind, subjectURL: subjectURL, endpoints: github) == nil)
     }
 
     @Test func readsTheReleaseID() throws {
         #expect(
-            try releaseID(subjectURL: "https://api.github.com/repos/octo/app/releases/413167889", endpoints: github)
-                == "413167889")
+            try subject(
+                kind: .release, subjectURL: "https://api.github.com/repos/octo/app/releases/413167889",
+                endpoints: github) == .release(id: "413167889"))
         #expect(
-            try releaseID(
-                repository: "team/svc", subjectURL: "https://ghe.example.com/api/v3/repos/team/svc/releases/12",
-                endpoints: ghes) == "12")
+            try subject(
+                repository: "team/svc", kind: .release,
+                subjectURL: "https://ghe.example.com/api/v3/repos/team/svc/releases/12", endpoints: ghes)
+                == .release(id: "12"))
     }
 
     @Test(arguments: [
@@ -350,16 +334,15 @@ struct ThreadReleaseIDTests {
         "https://api.github.com/repos/other/repo/releases/1",
         "https://api.github.com/repos/octo/app/releases/v1.0.0",
         "https://api.github.com/repos/octo/app/releases/123456789012345678901",
-        "https://api.github.com/repos/octo/app/pulls/1",
     ])
-    func readsNoIDFromOtherSubjects(_ subjectURL: String?) throws {
-        #expect(try releaseID(subjectURL: subjectURL, endpoints: github) == nil)
+    func readsNoReleaseIDFromOtherSubjects(_ subjectURL: String?) throws {
+        #expect(try subject(kind: .release, subjectURL: subjectURL, endpoints: github) == nil)
     }
 
     @Test(arguments: [SubjectKind.pullRequest, .discussion, .commit])
-    func readsNoIDForOtherKinds(_ kind: SubjectKind) throws {
-        let subject = "https://api.github.com/repos/octo/app/releases/1"
-        #expect(try releaseID(kind: kind, subjectURL: subject, endpoints: github) == nil)
+    func readsNoReleaseIDForOtherKinds(_ kind: SubjectKind) throws {
+        let subjectURL = "https://api.github.com/repos/octo/app/releases/1"
+        #expect(try subject(kind: kind, subjectURL: subjectURL, endpoints: github) == nil)
     }
 }
 

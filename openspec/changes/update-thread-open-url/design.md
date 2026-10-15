@@ -3,7 +3,7 @@
 ## Context
 
 - 開く URL は `ThreadWebURL.make(for:endpoints:)` が組み立てる。種類が Release と Discussion のときは `subject.url` を見ずに `.releases` / `.discussions` を返している。ポップオーバーのクリック（`NotificationStore.open`）と macOS の通知（`ThreadNotificationContent` が通知を出すときに URL を作って `userInfo` に入れる）の 2 つの経路が同じ関数を使う
-- Issue と Pull request の件名の状態とイベントは、`AccountPoller+ThreadDetails` が `ThreadDetailsFetcher`（同時に 4 件、20 秒の打ち切り、レート制限で残りをやめる）で取り、`ThreadDetailsCache`（スレッドの ID と `updated_at` ごとの記録、失敗の回数、レート制限の待ち）に覚え、`NotificationThread.details` に付ける。新着は一覧を知らせる前に取るので、新着の macOS の通知は `details` を付けたスレッドから作られる。取る対象は `ThreadDetailsCache.pending` が `subjectNumber != nil` で選ぶ
+- Issue と Pull request の件名の状態とイベントは、`AccountPoller+ThreadDetails` が `ThreadDetailsFetcher`（同時に 4 件、20 秒の打ち切り、レート制限で残りをやめる）で取り、`ThreadDetailsCache`（スレッドの ID と `updated_at` ごとの記録、失敗の回数、レート制限の待ち）に覚え、`NotificationThread.details` に付ける。新着は一覧を知らせる前に取るので、新着の macOS の通知は `details` を付けたスレッドから作られる。取る対象は `ThreadDetailsCache.pending` が `subjectNumber != nil` で選ぶ（この change の前の形）
 - `GitHubAPIClient.fetchDetails` は `subjectNumber` から Issue と Timeline の URL を組み立て、`get`（ステータスコードを `ThreadDetailsFetchResult` に振り分ける）で送る
 - 手元の github.com で確かめた API の値: Discussion の `subject.url` は `.../repos/<owner>/<name>/discussions/<番号>`、`latest_comment_url` は `null`。Release の `subject.url` と `latest_comment_url` は `.../repos/<owner>/<name>/releases/<数値の ID>`。`GET .../releases/<ID>` は `tag_name` と `html_url`（`.../releases/tag/<タグ>`）を返す。Web の `/releases/<ID>` は 404
 
@@ -26,19 +26,20 @@
 
 ### D1. Discussion の番号は `subject.url` から、Pull request・Issue と同じ検証で読む（A6、A9）
 
-`ThreadWebURL.target` の種類ごとの早期 return をやめ、`subject.url` を API ベースの下・`repos/<owner>/<name>/<種類>/<id>`・リポジトリの一致の順に検証してから、種類と組み合わせて `Target` を決める。種類が Discussion で `discussions/<1〜20 桁の数字>` なら `.discussion(番号)`（パスは `discussions/<番号>`）、それ以外なら今の `.discussions`。`subjectNumber` は今までどおり Pull request と Issue の番号だけを返す（Discussion の番号を返すと `#<番号>` が出て、イベントの取得の対象にもなるため）。
+`ThreadWebURL.target` の種類ごとの早期 return をやめ、`subject.url` を API ベースの下・`repos/<owner>/<name>/<種類>/<id>`・リポジトリの一致の順に検証してから、種類と組み合わせて `Target` を決める。種類が Discussion で `discussions/<1〜20 桁の数字>` なら `.discussion(番号)`（パスは `discussions/<番号>`）、それ以外なら今の `.discussions`。番号（D2 の `DetailsSubject.number`）は今までどおり Pull request と Issue だけにする（Discussion の番号を入れると `#<番号>` が出て、イベントの取得の対象にもなるため）。
 
 - 代替案: `latest_comment_url` から読む → Discussion では `null` で使えない
 - 代替案: 種類を見ずに `discussions/<番号>` の形だけで決める → spec は種類で分けているので、Issue の種類で `discussions` の URL が来たときの扱いを増やさない
 
 ### D2. Release のタグは、イベントの取得の仕組みで一覧を取るときに取る（A3、A7）
 
-`NotificationThread` に、デコードするときに `ThreadWebURL.releaseID(kind:subjectURL:repository:endpoints:)` で求めた `releaseID: String?` を足す（`subjectNumber` と同じ求め方。D1 と同じ検証を通った `releases/<1〜20 桁の数字>` で、種類が Release のときだけ）。`ThreadDetailsCache.pending` の対象を `subjectNumber != nil || releaseID != nil` にする。`GitHubAPIClient.fetchDetails` は `releaseID` があれば `GET repos/<owner>/<name>/releases/<ID>` を `get` で 1 回送り、タグを付けた `ThreadDetails` を返す。覚え方・失敗の回数・レート制限・再読み込みでの中断は今のものをそのまま使う。
+今の形: `NotificationThread` の `subjectNumber: String?` を、件名の詳細を取りに行く先 `detailsSubject: DetailsSubject?` に置き換える。`DetailsSubject` は `.number(String)`（Pull request と Issue の番号。一覧に `#<番号>` を出し、状態とイベントを取る）と `.release(id: String)`（リリースの ID。タグを取る）の enum で、`NotificationThread.swift` に置く（A1: GitHubAPI・Polling・UI が使うので、そのうち最も下の層）。spec では番号とリリースの ID は排他（Release は番号の「代わりに」タグを取る）なので、2 つの欄ではなく 1 つの enum で表し、ありえない組み合わせを作れないようにする。デコードのときに `ThreadWebURL.detailsSubject(kind:subjectURL:repository:endpoints:)` で 1 回だけ求める（D1 と同じ検証を通った Pull request・Issue の番号か、種類が Release で `releases/<1〜20 桁の数字>` の ID）。`ThreadDetailsCache.pending` の対象は `detailsSubject != nil`。`GitHubAPIClient.fetchDetails` は `detailsSubject` を `default` の無い `switch` で振り分け（A12: 取りに行く先を増やしたらコンパイラが気づかせる）、`.release` なら `GET repos/<owner>/<name>/releases/<ID>` を `get` で 1 回送り、タグを付けた `ThreadDetails` を返す。覚え方・失敗の回数・レート制限・再読み込みでの中断は今のものをそのまま使う。`NotificationThread` には欄の既定値のための手書きの init を置かず、合成される memberwise init を使う（`ThreadDetails` は、`releaseTag` を持たない Issue と Pull request の呼び出し元のために、既定値付きの init を持つ）。
 
 `ThreadDetails` に `releaseTag: String?` を足す。Release のスレッドでは `state` と `event` は nil、Issue と Pull request では `releaseTag` は nil になる。
 
 - 代替案: クリックしたときに取る → ブラウザが開くまで通信を待つ。macOS の通知の経路は起動の直後でトークンが無いことがあり、2 つの経路で別々に取る処理が要る（ユーザーと確認して採らなかった）
 - 代替案: `ThreadDetails` を Issue 用と Release 用の enum にする → 状態のアイコンやイベントの表示（`details?.state`、`details?.event`）の読み出しをすべて変えることになる。足す値が 1 つなので、任意の値を 1 つ足す（A9）
+- 代替案: `subjectNumber` を残し、`releaseID: String?` を別の欄として足す（最初の実装の形）→ 排他の 2 つの欄の組み合わせの意味を `pending` と `fetchDetails` の両方が知る必要があり、`subject.url` の検証もデコードで 2 回走る。新しい欄の既定値のために手書きの init も要った。simplify と code-review の指摘を受け、経緯を渡さないサブエージェントに要件・原則・最小であることで評価させて、ユーザーと確かめて enum にした
 - 代替案: タグを `ThreadDetailsCache` とは別の記録に持つ → 覚え方・失敗の回数・レート制限・止まったときに捨てる処理を二重に持つことになる（A3 の正本は 1 か所）
 
 ### D3. タグの検証と URL への足し方は `ThreadWebURL` に置く（A6）
@@ -77,6 +78,7 @@
 
 - [Release のスレッドごとにリクエストが 1 回増える] → `updated_at` が変わったときだけ取り、イベントの取得と同じ件数の上限・同時に取る数・レート制限の待ちに従う。Release のスレッドは `updated_at` がほとんど変わらない
 - [最初の一覧や、11 件目以降の新着の Release は、通知を出した後にタグを取る] → その macOS の通知のクリックは今の `/releases` を開く。ポップオーバーからは、タグを取った後なら個別のページを開く
+- [Release のタグも、Issue と Pull request のイベントと同じ件数の上限（知らせる前は新着 10 件、知らせた後は 30 件）を更新日時の新しい順に分け合う。新着の Release が一度に 10 件以上来ると、それより古い新着の Pull request の macOS の通知はイベントの文なしで出る] → spec のとおり更新日時の新しい順のままにする（ユーザーと確かめた）。後回しになったスレッドも、知らせた後に取って一覧に付け直すので、欠けるのは一部の通知の文か、一部の Release の通知のクリックの行き先だけ。Issue と Pull request を先に取る案と、Release に別の枠を設ける案は、spec を変えてまで避けるほどの影響ではないので採らない
 - [`appending(path:)` のエスケープの仕方が想定と違う（`%` をそのまま残すなど）] → テストで `?`・`#`・`%`・空白以外の記号を含むタグの URL を確かめ、合わなければ `URLComponents` の `percentEncodedPath` で組み立てる
 - [GHES で Discussion の `subject.url` が `null` のまま] → 今の `/discussions` に戻るので、悪くはならない
 - [ドラフトのリリースなどで `GET /releases/<ID>` が `404`] → タグは「無い」になり、その `updated_at` の間は取り直さない

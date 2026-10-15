@@ -336,10 +336,14 @@ extension GitHubAPIClient {
     func fetchDetails(
         for thread: NotificationThread, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
-        if let releaseID = thread.releaseID {
-            return await fetchReleaseTag(releaseID, of: thread.repository, endpoints: endpoints, token: token)
+        let number: String
+        switch thread.detailsSubject {
+        case .number(let value): number = value
+        case .release(let id):
+            return await fetchReleaseTag(id, of: thread.repository, endpoints: endpoints, token: token)
+        case nil: return .unavailable
         }
-        guard let number = thread.subjectNumber, ThreadID.isValid(number) else { return .unavailable }
+        guard ThreadID.isValid(number) else { return .unavailable }
         let issuePath = "repos/\(thread.repository.owner)/\(thread.repository.name)/issues/\(number)"
         let issue: IssueSummary
         switch await get(endpoints.apiURL(path: issuePath), endpoints: endpoints, token: token) {

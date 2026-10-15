@@ -35,9 +35,7 @@ struct ThreadDetailsCache {
         if let pausedUntil, now < pausedUntil { return [] }
         if newOnly && previous == nil { return [] }
         let waiting = threads.filter { thread in
-            guard thread.subjectNumber != nil || thread.releaseID != nil,
-                entries[thread.id]?.updatedAt != thread.updatedAt
-            else {
+            guard thread.detailsSubject != nil, entries[thread.id]?.updatedAt != thread.updatedAt else {
                 return false
             }
             guard newOnly, let previous else { return true }

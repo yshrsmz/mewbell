@@ -14,7 +14,7 @@ struct ThreadDetailsCacheTests {
         NotificationThread(
             id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: updatedAt), title: "Thread \(id)",
             kind: kind, subjectURL: nil, repository: try #require(RepositoryName(fullName: "octo/app")),
-            subjectNumber: numbered ? id : nil, releaseID: releaseID)
+            detailsSubject: releaseID.map { .release(id: $0) } ?? (numbered ? .number(id) : nil))
     }
 
     @Test func attachesOnlyWhenTheUpdateMatches() throws {

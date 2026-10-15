@@ -10,33 +10,27 @@ enum ThreadWebURL {
         return url(repository: thread.repository, target: target, endpoints: endpoints)
     }
 
-    /// Issue・Pull request の番号。`make` と同じ `subject.url` の検証（API ベース URL の下にあること、リポジトリの一致、
-    /// 番号の形）を通った Pull request と Issue の番号だけを返す。開く URL を組み立てられない（`make` が nil の）ときも nil。
-    /// スレッドを作る前に求めるので、スレッドではなくその部品を受け取る。
-    static func subjectNumber(
+    /// 件名の詳細を取りに行く先。`make` と同じ `subject.url` の検証（API ベース URL の下にあること、リポジトリの一致、
+    /// 番号・ID の形）を通った、Pull request と Issue の番号か、種類が Release の `releases/<1〜20 桁の数字>` の ID だけを
+    /// 返す。開く URL を組み立てられない（`make` が nil の）ときも nil。スレッドを作る前に求めるので、スレッドではなく
+    /// その部品を受け取る。
+    static func detailsSubject(
         kind: SubjectKind, subjectURL: URL?, repository: RepositoryName, endpoints: APIEndpoints
-    ) -> String? {
+    ) -> DetailsSubject? {
         let target = target(
             kind: kind, subjectURL: subjectURL, repository: repository, endpoints: endpoints, releaseTag: nil)
         guard url(repository: repository, target: target, endpoints: endpoints) != nil else { return nil }
         switch target {
-        case .pullRequest(let id), .issue(let id): return id
-        case .commit, .discussion, .discussions, .releaseTag, .releases, nil: return nil
+        case .pullRequest(let id), .issue(let id):
+            return .number(id)
+        case .releases:
+            guard let subject = subjectPath(subjectURL, repository: repository, endpoints: endpoints),
+                subject.collection == "releases", ThreadID.isValid(subject.id)
+            else { return nil }
+            return .release(id: subject.id)
+        case .commit, .discussion, .discussions, .releaseTag, nil:
+            return nil
         }
-    }
-
-    /// Release のリリースの ID。種類が Release で、`subject.url` が `make` と同じ検証（API ベース URL の下にあること、
-    /// リポジトリの一致）を通った `releases/<1〜20 桁の数字>` のときだけ返す。リリースのページを開けないときも nil。
-    /// スレッドを作る前に求めるので、スレッドではなくその部品を受け取る。
-    static func releaseID(
-        kind: SubjectKind, subjectURL: URL?, repository: RepositoryName, endpoints: APIEndpoints
-    ) -> String? {
-        guard case .release = kind,
-            let subject = subjectPath(subjectURL, repository: repository, endpoints: endpoints),
-            subject.collection == "releases", ThreadID.isValid(subject.id),
-            url(repository: repository, target: .releases, endpoints: endpoints) != nil
-        else { return nil }
-        return subject.id
     }
 
     /// リリースのタグを、Web の URL のパスに足す要素に分ける。空・UTF-8 で 255 バイトより長い・空白か制御文字を含む・
