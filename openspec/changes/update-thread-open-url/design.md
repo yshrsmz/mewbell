@@ -43,7 +43,7 @@
 
 ### D3. タグの検証と URL への足し方は `ThreadWebURL` に置く（A6）
 
-ブラウザで開く URL の関所は `ThreadWebURL` なので、タグの検証も `ThreadWebURL.releaseTagComponents(_:) -> [String]?` に置く（空でない、255 文字以下、空白・制御文字を含まない、`/` で区切った要素に空・`.`・`..` が無い。満たせば要素の配列を返す）。`GitHubAPIClient` はレスポンスを読むときにこれで確かめ、通らなければ `.unavailable`（タグが「無い」）を返す。`ThreadWebURL.make` は覚えたタグをもう一度これで要素に分け、`releases`・`tag` に続けて要素ごとに `appending(path:)` で足す。`/` を含むタグ（`cli/v1.2.0`）は GitHub の Web と同じく `/` のまま、要素の中の `?`・`#`・`%` などはパスの要素としてエスケープされることを、テストで確かめる。
+ブラウザで開く URL の関所は `ThreadWebURL` なので、タグの検証も `ThreadWebURL.releaseTagComponents(_:) -> [String]?` に置く（空でない、UTF-8 で 255 バイト以下（結合文字を重ねて URL を長くできないように、文字数ではなくバイト数で数える）、空白・制御文字を含まない、`/` で区切った要素に空・`.`・`..` が無い。満たせば要素の配列を返す）。`GitHubAPIClient` はレスポンスを読むときにこれで確かめ、通らなければ `.unavailable`（タグが「無い」）を返す。`ThreadWebURL.make` は覚えたタグをもう一度これで要素に分け、`releases`・`tag` に続けて要素ごとに `appending(path:)` で足す。`/` を含むタグ（`cli/v1.2.0`）は GitHub の Web と同じく `/` のまま、要素の中の `?`・`#`・`%` などはパスの要素としてエスケープされることを、テストで確かめる。
 
 - 代替案: レスポンスの `html_url` をオリジンとパスの前置きで確かめて使う → API の URL をそのまま開かない約束（security.md・ui spec）に外れる。`tag_name` だけを読み、`html_url` はデコードの型に載せない
 

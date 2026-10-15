@@ -376,6 +376,8 @@ struct ReleaseTagTests {
     @Test(arguments: [
         "", String(repeating: "a", count: 256), "v1 0", "v1\t0", "v1\u{7}", "..", ".", "a/../b", "a/./b", "a//b",
         "/v1", "v1/",
+        // 文字数は 1 でも UTF-8 では 255 バイトを超える（結合文字を重ねて URL を長くしない）
+        "a" + String(repeating: "\u{301}", count: 200),
     ])
     func rejectsTags(_ tag: String) {
         #expect(ThreadWebURL.releaseTagComponents(tag) == nil)

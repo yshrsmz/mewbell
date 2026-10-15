@@ -39,10 +39,10 @@ enum ThreadWebURL {
         return subject.id
     }
 
-    /// リリースのタグを、Web の URL のパスに足す要素に分ける。空・255 文字より長い・空白か制御文字を含む・
+    /// リリースのタグを、Web の URL のパスに足す要素に分ける。空・UTF-8 で 255 バイトより長い・空白か制御文字を含む・
     /// `/` で区切った要素に空か `.` か `..` があるときは nil（タグとして受け付けない）。
     static func releaseTagComponents(_ tag: String) -> [String]? {
-        guard !tag.isEmpty, tag.count <= 255,
+        guard !tag.isEmpty, tag.utf8.count <= 255,
             tag.unicodeScalars.allSatisfy({
                 !CharacterSet.whitespacesAndNewlines.contains($0) && !CharacterSet.controlCharacters.contains($0)
             })
