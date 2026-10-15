@@ -253,12 +253,12 @@ final class NotificationStore {
     /// （起動の直後に通知をクリックされたとき）。Done はポーラーが無ければ何もしない（一覧の行はポーラーがあるときだけ出る）。
     private func perform(_ actions: [ThreadAction], in account: AccountID) {
         let poller = pollers[account]?.poller
-        let actions = poller == nil ? actions.filter { if case .read = $0 { true } else { false } } : actions
+        let actions = poller == nil ? actions.filter { ThreadActionKind($0) == .read } : actions
         guard !actions.isEmpty else { return }
         let threadIDs = Set(actions.map(\.threadID))
         feeds[account]?.threads.removeAll { threadIDs.contains($0.id) }
-        for action in actions {
-            threadChanges.threadRemoved(action.threadID, for: account)
+        for threadID in threadIDs {
+            threadChanges.threadRemoved(threadID, for: account)
         }
         if let poller {
             Task { await poller.perform(actions) }

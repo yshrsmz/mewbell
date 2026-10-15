@@ -26,37 +26,26 @@ extension AccountPoller {
         }
         // 止まっているかはトークンを待った後に見る。止まっていれば送らず、失敗も記録しない（取得の状態で伝わる）
         let token = await tokens.currentToken(for: accountID)
-        var failure: FailedAction?
-        var unsent = actions[...]
-        if !state.phase.isStopped {
-            failure = if let token { await send(&unsent, token: token) } else { (actions[0], .noToken) }
-        }
-        // 失敗を知らせる前に済ませる（知らせている間に始まった取得で、スレッドが戻らないまま知らせが消えないように）
-        for action in unsent {
-            HiddenThreads.endRequest(for: action.threadID, fetchCount: fetchCount, in: &hidden)
-        }
-        unconditionalRequested = true
-        if let failure { await recordActionFailure(ThreadActionKind(failure.action), failure.kind) }
-    }
-
-    /// 失敗した操作と、その失敗の種類
-    private typealias FailedAction = (action: ThreadAction, kind: FailureKind)
-
-    /// `actions` の先頭から 1 件ずつ送り、送った分を取り除く。二次レート制限を避けるため、並行させない。
-    /// 認証エラーかレート制限になったら、残りも同じ理由で失敗するので送らずに残す。最後の失敗を返す。
-    private func send(_ actions: inout ArraySlice<ThreadAction>, token: AccessToken) async -> FailedAction? {
-        var failure: FailedAction?
-        while let action = actions.popFirst() {
-            let kind = FailureKind(await markThread(action, token: token))
-            // 結果が 304 に隠れないように、また失敗したスレッドが一覧に戻るように、次は条件なしで取り直す
-            // （取得を始めるときに読んで消すので、残りを送っている間に始まる取得にも効くよう、1 件ごとに立てる）
+        var failure: (action: ThreadAction, kind: FailureKind)?
+        var sending = !state.phase.isStopped
+        // 二次レート制限を避けるため、並行させずに 1 件ずつ送る
+        for action in actions {
+            if sending {
+                let kind: FailureKind? =
+                    if let token { FailureKind(await markThread(action, token: token)) } else { .noToken }
+                if let kind {
+                    failure = (action, kind)
+                    // トークンが無い・認証エラー・レート制限なら、残りも同じ理由で失敗するので送らない
+                    sending = kind != .noToken && kind != .unauthorized && kind != .rateLimited
+                }
+            }
+            // 結果が 304 に隠れないように、また失敗したスレッドや送らなかったスレッドが一覧に戻るように、次は条件なしで取り直す
+            // （取得を始めるときに読んで消すので、残りを送っている間に始まる取得にも効くよう、1 件ごとに立てる）。
+            // 失敗を知らせる前に済ませる（知らせている間に始まった取得で、スレッドが戻らないまま知らせが消えないように）
             HiddenThreads.endRequest(for: action.threadID, fetchCount: fetchCount, in: &hidden)
             unconditionalRequested = true
-            guard let kind else { continue }
-            failure = (action, kind)
-            if kind == .unauthorized || kind == .rateLimited { break }
         }
-        return failure
+        if let failure { await recordActionFailure(ThreadActionKind(failure.action), failure.kind) }
     }
 
     /// 操作に応じて、`GitHubAPIClient` の既読か Done のメソッドを呼ぶ。
