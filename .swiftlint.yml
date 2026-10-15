@@ -50,7 +50,7 @@ custom_rules:
     message: "SwiftUI・AppKit（Cocoa を含む）を import するのは UI/ と App/ だけ（A1）"
     severity: error
   authorization_header_outside_client:
-    name: "Authorization header outside the API client"
+    name: "Authorization header outside APIGateway"
     regex: '(?i)"authorization"'
     included: 'Mewbell/'
     message: "Authorization を付けて送るのは APIGateway.send だけ（A6、security.md）"
