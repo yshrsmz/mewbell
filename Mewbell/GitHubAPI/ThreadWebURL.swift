@@ -4,31 +4,34 @@ import Foundation
 enum ThreadWebURL {
     /// 組み立てた URL。`https` でホストがアカウントのホストと一致しなければ nil（開かない）。
     static func make(for thread: NotificationThread, endpoints: APIEndpoints) -> URL? {
-        let target = target(
-            kind: thread.kind, subjectURL: thread.subjectURL, repository: thread.repository, endpoints: endpoints,
-            releaseTag: thread.details?.releaseTag)
+        let subject = subjectPath(thread.subjectURL, repository: thread.repository, endpoints: endpoints)
+        let target = target(kind: thread.kind, title: thread.title, subject: subject, details: thread.details)
         return url(repository: thread.repository, target: target, endpoints: endpoints)
     }
 
     /// 件名の詳細を取りに行く先。`make` と同じ `subject.url` の検証（API ベース URL の下にあること、リポジトリの一致、
-    /// 番号・ID の形）を通った、Pull request と Issue の番号か、種類が Release の `releases/<1〜20 桁の数字>` の ID だけを
-    /// 返す。開く URL を組み立てられない（`make` が nil の）ときも nil。スレッドを作る前に求めるので、スレッドではなく
-    /// その部品を受け取る。
+    /// 番号・ID の形）を通った、Pull request と Issue の番号か、種類が Release の `releases/<1〜20 桁の数字>` の ID か、
+    /// WorkflowRun と CheckSuite（件名を読めるもの）の run の探し方だけを返す。開く URL を組み立てられない（`make` が
+    /// nil の）ときも nil。スレッドを作る前に求めるので、スレッドではなくその部品を受け取る。
     static func detailsSubject(
-        kind: SubjectKind, subjectURL: URL?, repository: RepositoryName, endpoints: APIEndpoints
+        kind: SubjectKind, title: String, subjectURL: URL?, repository: RepositoryName, endpoints: APIEndpoints
     ) -> DetailsSubject? {
-        let target = target(
-            kind: kind, subjectURL: subjectURL, repository: repository, endpoints: endpoints, releaseTag: nil)
+        let subject = subjectPath(subjectURL, repository: repository, endpoints: endpoints)
+        let target = target(kind: kind, title: title, subject: subject, details: nil)
         guard url(repository: repository, target: target, endpoints: endpoints) != nil else { return nil }
         switch target {
         case .pullRequest(let id), .issue(let id):
             return .number(id)
         case .releases:
-            guard let subject = subjectPath(subjectURL, repository: repository, endpoints: endpoints),
-                subject.collection == "releases", ThreadID.isValid(subject.id)
-            else { return nil }
+            guard let subject, subject.collection == "releases", ThreadID.isValid(subject.id) else { return nil }
             return .release(id: subject.id)
-        case .commit, .discussion, .discussions, .releaseTag, nil:
+        case .actions:
+            switch kind {
+            case .workflowRun: return .waitingWorkflowRun
+            case .checkSuite: return CheckSuiteTitle(title).map(DetailsSubject.checkSuite)
+            case .pullRequest, .issue, .commit, .release, .discussion, .other: return nil
+            }
+        case .commit, .discussion, .discussions, .releaseTag, .workflowRun, nil:
             return nil
         }
     }
@@ -51,6 +54,9 @@ enum ThreadWebURL {
         var url = repositoryBase(repository, endpoints: endpoints)
         if let target {
             url = target.pathComponents.reduce(url) { $0.appending(path: $1) }
+            if let query = target.query {
+                url = url.appending(queryValue: query, for: "query")
+            }
         }
         return isOpenable(url, host: endpoints.host) ? url : nil
     }
@@ -89,6 +95,10 @@ enum ThreadWebURL {
         /// 個別のディスカッション（番号）
         case discussion(String)
         case discussions
+        /// 個別のワークフローの実行（run の ID）
+        case workflowRun(String)
+        /// Actions の一覧（`query` があれば、それで絞り込む）
+        case actions(query: String?)
 
         /// リポジトリのページより後ろのパスの要素。
         var pathComponents: [String] {
@@ -100,33 +110,78 @@ enum ThreadWebURL {
             case .releases: ["releases"]
             case .discussion(let id): ["discussions", id]
             case .discussions: ["discussions"]
+            case .workflowRun(let id): ["actions", "runs", id]
+            case .actions: ["actions"]
             }
+        }
+
+        /// パスの後ろに付ける `query` の値。
+        var query: String? {
+            if case .actions(let query) = self { query } else { nil }
         }
     }
 
     /// リポジトリのページより後ろに足すページ。組み立てられなければ nil（リポジトリのページを開く）。
     /// Release と Discussion は種類で決め、`subject.url` から個別のページを作れなければそれぞれの一覧のページにする。
+    /// WorkflowRun と CheckSuite は、`subject.url` が Pull request・Issue・Commit を指さなければ、覚えた run のページか
+    /// Actions の一覧にする。
+    /// `subject` は `subjectPath` で読んだ `subject.url`。
     private static func target(
-        kind: SubjectKind, subjectURL: URL?, repository: RepositoryName, endpoints: APIEndpoints,
-        releaseTag: String?
+        kind: SubjectKind, title: String, subject: (collection: String, id: String)?, details: ThreadDetails?
     ) -> Target? {
         if case .release = kind {
-            return releaseTag.flatMap(releaseTagComponents).map(Target.releaseTag) ?? .releases
+            guard case .release(let tag)? = details?.resource, let components = releaseTagComponents(tag) else {
+                return .releases
+            }
+            return .releaseTag(components)
         }
-        let subject = subjectPath(subjectURL, repository: repository, endpoints: endpoints)
         if case .discussion = kind {
             guard let subject, subject.collection == "discussions", ThreadID.isValid(subject.id) else {
                 return .discussions
             }
             return .discussion(subject.id)
         }
-        guard let subject else { return nil }
+        return subject.flatMap(subjectPage) ?? actionsTarget(kind: kind, title: title, details: details)
+    }
+
+    /// `subject.url` が指す Pull request・Issue・Commit のページ。当たらなければ nil。
+    private static func subjectPage(_ subject: (collection: String, id: String)) -> Target? {
         switch subject.collection {
-        case "pulls" where ThreadID.isValid(subject.id): return .pullRequest(subject.id)
-        case "issues" where ThreadID.isValid(subject.id): return .issue(subject.id)
-        case "commits" where isCommitSHA(subject.id): return .commit(subject.id)
-        default: return nil
+        case "pulls" where ThreadID.isValid(subject.id): .pullRequest(subject.id)
+        case "issues" where ThreadID.isValid(subject.id): .issue(subject.id)
+        case "commits" where isCommitSHA(subject.id): .commit(subject.id)
+        default: nil
         }
+    }
+
+    /// WorkflowRun と CheckSuite の、覚えた run のページか Actions の一覧。ほかの種類は nil。
+    private static func actionsTarget(kind: SubjectKind, title: String, details: ThreadDetails?) -> Target? {
+        var runID: String?
+        if case .workflowRun(let id)? = details?.resource, ThreadID.isValid(id) { runID = id }
+        switch kind {
+        case .workflowRun:
+            return runID.map(Target.workflowRun) ?? .actions(query: "is:waiting")
+        case .checkSuite:
+            return runID.map(Target.workflowRun) ?? .actions(query: CheckSuiteTitle(title).map(actionsFilter))
+        default:
+            return nil
+        }
+    }
+
+    /// 種類が CheckSuite の run が決まらないときの、Actions の一覧の絞り込み（ワークフロー名・結果・ブランチの順）。
+    /// ワークフロー名が `"` を含むときと、ブランチが `"` か空白を含むときは、絞り込みの意味が変わらないようにそれでは絞らない。
+    private static func actionsFilter(_ title: CheckSuiteTitle) -> String {
+        let status =
+            switch title.result {
+            case .failed, .failedAtStartup: "failure"
+            case .cancelled: "cancelled"
+            case .skipped: "skipped"
+            case .succeeded: "success"
+            }
+        let workflow = title.workflowName.contains("\"") ? nil : "workflow:\"\(title.workflowName)\""
+        let quotesOrSpaces = CharacterSet(charactersIn: "\"").union(.whitespaces)
+        let branch = title.branch.rangeOfCharacter(from: quotesOrSpaces) == nil ? "branch:\(title.branch)" : nil
+        return [workflow, "is:\(status)", branch].compactMap { $0 }.joined(separator: " ")
     }
 
     /// `subject.url` のうち、API ベース URL の下の `repos/<owner>/<name>/<collection>/<id>` で、`<owner>/<name>` が

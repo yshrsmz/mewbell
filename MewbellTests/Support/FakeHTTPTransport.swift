@@ -46,12 +46,12 @@ final class FakeHTTPTransport: HTTPTransport {
     /// `subjectURL` を渡すと、そのスレッドは番号を持つ（状態とイベントを取る対象になる）。
     static func threadJSON(
         id: String, repository: String = "octo/app", updatedAt: String = "2026-10-08T12:00:00Z",
-        subjectURL: String? = nil, type: String = "Issue"
+        subjectURL: String? = nil, type: String = "Issue", title: String? = nil
     ) -> String {
         """
         {"id": "\(id)", "unread": true, "reason": "subscribed", "updated_at": "\(updatedAt)",
          "repository": {"full_name": "\(repository)"},
-         "subject": {"title": "Thread \(id)", "url": \(subjectURL.map { "\"\($0)\"" } ?? "null"), "type": "\(type)"}}
+         "subject": {"title": "\(title ?? "Thread \(id)")", "url": \(subjectURL.map { "\"\($0)\"" } ?? "null"), "type": "\(type)"}}
         """
     }
 

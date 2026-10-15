@@ -6,7 +6,7 @@ import Testing
 // Release のスレッドのタグの取得
 extension ThreadDetailsPollingTests {
     static let tag = "rust-v1.0.0"
-    static let tagged = ThreadDetails(state: nil, event: nil, releaseTag: tag)
+    static let tagged = ThreadDetails(state: nil, event: nil, resource: .release(tag: tag))
 
     /// リリースの ID を持つ Release のスレッドの一覧。
     static func releases(_ ids: [Int]) -> HTTPResponse {

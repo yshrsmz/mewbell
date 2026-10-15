@@ -47,7 +47,7 @@ struct ThreadIcon: Equatable {
         case .commit: "point.3.connected.trianglepath.dotted"
         case .release: "tag"
         case .discussion: "bubble.left.and.bubble.right"
-        case .checkSuite, .other: "bell"
+        case .checkSuite, .workflowRun, .other: "bell"
         }
     }
 
@@ -59,6 +59,7 @@ struct ThreadIcon: Equatable {
         case .release: "Release"
         case .discussion: "Discussion"
         case .checkSuite: "Check suite"
+        case .workflowRun: "Workflow run"
         case .other: "Notification"
         }
     }

@@ -1,8 +1,8 @@
 import Foundation
 
-// スレッドの件名の状態とイベント（Release ではリリースのタグ）の取得（polling「スレッドのイベントの取得」）。結果で取得の状態や失敗の記録は変えない
+// スレッドの件名の状態とイベント（Release ではリリースのタグ、WorkflowRun と CheckSuite では run の ID）の取得（polling「スレッドのイベントの取得」）。結果で取得の状態や失敗の記録は変えない
 extension AccountPoller {
-    /// 新着（前に知らせた一覧から増えたか `updated_at` が進んだスレッド）の状態とイベント（Release ではタグ）を、一覧を知らせる前に取る。
+    /// 新着（前に知らせた一覧から増えたか `updated_at` が進んだスレッド）の状態とイベント（Release ではタグ、WorkflowRun と CheckSuite では run の ID）を、一覧を知らせる前に取る。
     /// 最初の一覧と、スコープを確かめていないとき（トークンを取り直した直後）は取らない。再読み込みで止める。
     func prefetchNewDetails(in threads: [NotificationThread], token: AccessToken, fetchNumber: Int) async {
         guard scopesVerified else { return }
@@ -17,7 +17,7 @@ extension AccountPoller {
         details.record(results, now: now())
     }
 
-    /// 一覧のスレッドのうち、まだ状態とイベント（Release ではタグ）を取っていないものを取り、取れたものを付けて知らせ直す。取ったら true。
+    /// 一覧のスレッドのうち、まだ状態とイベント（Release ではタグ、WorkflowRun と CheckSuite では run の ID）を取っていないものを取り、取れたものを付けて知らせ直す。取ったら true。
     /// 取っている間に一覧から外したスレッドは戻さない（今の一覧に付ける）。直前の取得の知らせる前に取ったスレッドは、
     /// 失敗していても取り直さない（失敗の回数を 1 回の取得で 2 回数えないため）。再読み込みで止める。
     func fillDetails() async -> Bool {

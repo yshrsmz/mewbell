@@ -54,7 +54,7 @@ struct ThreadDetailsCacheTests {
         // 同じ updated_at でタグが「無い」だった Release は取り直さない
         cache.record(.unavailable, for: release)
         #expect(cache.pending(in: threads, newOnly: false, limit: 10, now: now).isEmpty)
-        let tagged = ThreadDetails(state: nil, event: nil, releaseTag: "v1.0.0")
+        let tagged = ThreadDetails(state: nil, event: nil, resource: .release(tag: "v1.0.0"))
         cache.record(.found(tagged), for: release)
         #expect(cache.attach(to: [release]).first?.details == tagged)
     }
