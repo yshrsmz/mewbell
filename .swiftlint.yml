@@ -49,7 +49,7 @@ custom_rules:
     excluded: 'Mewbell/(UI|App)/'
     message: "SwiftUI・AppKit（Cocoa を含む）を import するのは UI/ と App/ だけ（A1）"
     severity: error
-  authorization_header_outside_client:
+  authorization_header_outside_gateway:
     name: "Authorization header outside APIGateway"
     regex: '(?i)"authorization"'
     included: 'Mewbell/'

@@ -97,7 +97,7 @@
   - 関所のファイルだけ行数の上限を緩める（`swiftlint:disable file_length`）: 関所のファイルが際限なく大きくなれ、どこまでが関所かが読みにくくなる
   - 取得の処理を別の型にし、送る処理をクロージャで渡す: 渡したクロージャが関所と同じことをでき、関所が 1 か所であることをコンパイラで守れない。関所そのものを型にするのとは違い、検査を通らない送り方を外へ渡すことになる
 - **適用外**: 案内画面と通知の許可のバナーが開く固定の URL（gh のサイト、システム設定）は API 由来でないので、`NSWorkspace` で直接開く
-- **根拠**: add-gh-account-discovery D5、add-notification-fetch D2・D8、add-system-notifications D3・D5・D7、add-thread-actions D2、add-web-notifications-link D1・D2、update-list-readability D7、add-architecture-principles D7、fix-api-client-send-privacy D1・D2・D3、update-architecture-principles D6、fix-api-client-gateway D1・D2・D3。`Authorization` は lint の `authorization_header_outside_client` で守る
+- **根拠**: add-gh-account-discovery D5、add-notification-fetch D2・D8、add-system-notifications D3・D5・D7、add-thread-actions D2、add-web-notifications-link D1・D2、update-list-readability D7、add-architecture-principles D7、fix-api-client-send-privacy D1・D2・D3、update-architecture-principles D6、fix-api-client-gateway D1・D2・D3。`Authorization` は lint の `authorization_header_outside_gateway` で守る
 
 ### A7. actor や store の中の判断は、値型か純粋な関数に切り出す
 
@@ -210,3 +210,4 @@
 
 | 原則 | 場所 | 直す change |
 | --- | --- | --- |
+| なし | | |

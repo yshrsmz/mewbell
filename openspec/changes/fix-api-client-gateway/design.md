@@ -32,7 +32,7 @@
 - `private let transport: any HTTPTransport` を持ち、`init(transport:)` で受け取る。`transport` は外から読めない（A6 の「関所の内側は `private`」）。
 - 外に見せるのは `func send(_ url: URL, method: String, endpoints: APIEndpoints, token: AccessToken, ifModifiedSince: String?, body: Data? = nil) async -> Result<HTTPResponse, FetchFailure>` だけ。送り先の検査、ヘッダー、ボディの上限、リダイレクトと通信の失敗の分類、ログを、この関数の中で行う。検査を通らない送り方は、この型の外に無い。
 - `bodyLimit`、`userAgent`、ロガーも `APIGateway` に移す。`bodyLimit` を外から読んでいる箇所は無いので `private` にする。ログのカテゴリは今と同じ `GitHubAPI`（A11。モジュール名）。
-- `// swiftlint:disable:next authorization_header_outside_client` は、`Authorization` を付ける 1 行と一緒に移す。
+- `// swiftlint:disable:next authorization_header_outside_gateway` は、`Authorization` を付ける 1 行と一緒に移す。
 
 `GitHubAPIClient` は `private let transport` の代わりに `let gateway: APIGateway` を持ち、今 `send(...)` を呼んでいる 3 か所（一覧の取得、操作、状態とイベントの `get`）を `gateway.send(...)` に変える。`init(transport:now:)` の形は変えず、中で `APIGateway(transport:)` を作る。呼び出し側（`NotificationStore.live` とテスト）は変えない。
 
@@ -68,8 +68,8 @@
 
 ### D3. `.swiftlint.yml` と `docs/architecture.md` の関所の名前を直す（A6）
 
-- `.swiftlint.yml` の `authorization_header_outside_client` の `message` を「Authorization を付けて送るのは APIGateway.send だけ（A6、security.md）」に直す。正規表現と `included` は変えない。例外は `APIGateway.swift` の 1 行の `swiftlint:disable:next` だけになる。
-- `docs/architecture.md` は、スキル `update-architecture-doc` の手順で更新する。A6 の「原則」の `` `GitHubAPIClient.send` `` を `` `APIGateway.send` `` に直し、関所の内側の例（「`Authorization` を付ける `send` など」）を `APIGateway` が持つ `HTTPTransport` に直す。「関所のファイルが行数の上限に当たったら切り出す」という条件の書き方を、関所を `APIGateway` にした今の形と、使う側が上限に当たったら extension に分ける（A10）形に書き直す。採らなかった案の「`send` の `private` を外す」は、`send` が入口になったので「関所の内側の `private` を外す」と書き直す。「既知の逸脱」から A6 の行を消し、A6 の「根拠」に `fix-api-client-gateway D1・D2・D3` を足す。A10 の「関所の内側は A6 に従い、外さない」は、直した後の A6 と合っているかを読み直す。
+- `.swiftlint.yml` の `authorization_header_outside_client` の `message` を「Authorization を付けて送るのは APIGateway.send だけ（A6、security.md）」に直す。規則の ID も `authorization_header_outside_gateway` に改名し、`name` も合わせる（`swiftlint:disable:next` と A6 の根拠の規則名も直す）。正規表現と `included` は変えない。例外は `APIGateway.swift` の 1 行の `swiftlint:disable:next` だけになる。
+- `docs/architecture.md` は、スキル `update-architecture-doc` の手順で更新する。A6 の「原則」の `` `GitHubAPIClient.send` `` を `` `APIGateway.send` `` に直し、関所の内側の例（「`Authorization` を付ける `send` など」）を `APIGateway` が持つ `HTTPTransport` に直す。「関所のファイルが行数の上限に当たったら切り出す」という条件の書き方を、関所を `APIGateway` にした今の形と、使う側が上限に当たったら extension に分ける（A10）形に書き直す。採らなかった案の「`send` の `private` を外す」は、`send` が入口になったので「関所の内側の `private` を外す」と書き直す。「既知の逸脱」から A6 の行を消し（表が空になるので「なし」の行を置く）、A6 の「根拠」に `fix-api-client-gateway D1・D2・D3` を足す。A10 の「関所の内側は A6 に従い、外さない」は、直した後の A6 と合っているかを読み直す。
 - `GitHubAPIClient` の doc コメント（「トークンを `Authorization` に付けるのはこの型だけ」）を、`APIGateway` を通して送る形に直す。
 
 この change で原則そのものは変えない（A6 が決めた形にコードを合わせ、名前を直すだけ）。

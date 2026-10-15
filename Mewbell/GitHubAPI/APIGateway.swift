@@ -29,7 +29,7 @@ struct APIGateway: Sendable {
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        // swiftlint:disable:next authorization_header_outside_client
+        // swiftlint:disable:next authorization_header_outside_gateway
         request.setValue("Bearer \(token.value)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")

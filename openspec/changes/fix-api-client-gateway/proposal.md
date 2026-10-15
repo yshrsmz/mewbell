@@ -10,8 +10,8 @@
 - `GitHubAPIClient` は `APIGateway` を持ち、すべてのリクエストをその `send` で送る。`init(transport:now:)` の形は変えず、中で `APIGateway` を作る。
 - 状態とイベントの取得の extension（`ThreadDetailsFetchResult` と `DetailsStop` を含む）を `GitHubAPIClient+ThreadDetails.swift` に移す。関所が別の型になったので、別のファイルの extension からでも検査を通らずに送ることはできない。extension から使うメンバー（関所、`now`、レート制限の判定、日時の書き方）だけ `private` を外す（A10）。
 - `GitHubAPIClient.swift` の `// swiftlint:disable file_length` を消す。3 つのファイルとも行数の上限（400 行）に収める。
-- `.swiftlint.yml` の `authorization_header_outside_client` の `message` を新しい関所の名前に直す。`swiftlint:disable:next` の例外は、`Authorization` を付ける 1 行と一緒に `APIGateway.swift` に移す。
-- `docs/architecture.md` の A6 の本文の関所の名前を `APIGateway.send` に直し、「既知の逸脱」から A6 の行を消し、A6 の「根拠」にこの change を足す。
+- `.swiftlint.yml` の `authorization_header_outside_client` の規則を、ID・`name`・`message` とも新しい関所の名前（`authorization_header_outside_gateway`）に直す。`swiftlint:disable:next` の例外は、`Authorization` を付ける 1 行と一緒に `APIGateway.swift` に移す。
+- `docs/architecture.md` の A6 の本文の関所の名前を `APIGateway.send` に直し、「既知の逸脱」から A6 の行を消し（表には「なし」の行を置く）、A6 の「根拠」にこの change を足す。
 
 アプリの振る舞いは変えない。
 
