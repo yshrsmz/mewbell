@@ -281,7 +281,7 @@ Mewbell はユーザーごとに同時に 1 つだけ動かなければならな
 
 ### Requirement: 通知のスレッドを開く
 
-ポップオーバーの一覧でスレッドをクリックすると、Mewbell はそのスレッドの Web ページを既定のブラウザで開き、続けてそのスレッドを既読にしなければならない（SHALL。polling「スレッドの既読化」）。開く URL は、API のレスポンスに含まれる URL や文字列をそのまま使わず、アカウントの Web ベース URL、リポジトリの `owner/name`、`subject.url` のパス、覚えたリリースのタグ（polling「スレッドのイベントの取得」）から次のように組み立てなければならない（MUST）。
+ポップオーバーの一覧でスレッドをクリックすると、Mewbell はそのスレッドの Web ページを既定のブラウザで開き、続けてそのスレッドを既読にしなければならない（SHALL。polling「スレッドの既読化」）。開く URL は、API のレスポンスに含まれる URL や文字列をそのまま使わず、アカウントの Web ベース URL、リポジトリの `owner/name`、`subject.url` のパス、覚えたリリースのタグと run の ID（polling「スレッドのイベントの取得」）、件名から次のように組み立てなければならない（MUST）。
 
 - `subject.url` が API ベース URL と同じオリジンで、パスが API ベース URL のパスに続く `repos/<owner>/<name>/pulls/<番号>` のとき: `<Web ベース>/<owner>/<name>/pull/<番号>`
 - 同じく `.../issues/<番号>` のとき: `<Web ベース>/<owner>/<name>/issues/<番号>`
@@ -290,9 +290,12 @@ Mewbell はユーザーごとに同時に 1 つだけ動かなければならな
 - 種類が Discussion で、上に当たらないとき: `<Web ベース>/<owner>/<name>/discussions`
 - 種類が Release で、そのスレッドのリリースのタグを覚えているとき: `<Web ベース>/<owner>/<name>/releases/tag/<タグ>`
 - 種類が Release で、タグを覚えていないとき（取る前、取れなかった、タグが検証を通らなかったなど）: `<Web ベース>/<owner>/<name>/releases`
+- 種類が `WorkflowRun` か `CheckSuite` で（`subject.url` が上の Pull request・Issue・Commit に当たらないとき。以下の 2 つも同じ）、そのスレッドの run の ID を覚えているとき: `<Web ベース>/<owner>/<name>/actions/runs/<run の ID>`
+- 種類が `WorkflowRun` で、run の ID を覚えていないとき（取る前、取れなかった、決まらなかったなど）: `<Web ベース>/<owner>/<name>/actions?query=is:waiting`
+- 種類が `CheckSuite` で、run の ID を覚えていないとき: `<Web ベース>/<owner>/<name>/actions` に、件名（github-api「ワークフローの実行の検索のリクエスト」の形）から作った絞り込みを `query` に付けたもの。絞り込みは、ワークフロー名が `"` を含まなければ `workflow:"<ワークフロー名>"`、結果が `failed` か `failed at startup` なら `is:failure`、`cancelled` なら `is:cancelled`、`skipped` なら `is:skipped`、`succeeded` なら `is:success`、ブランチが `"` も空白も含まなければ `branch:<ブランチ>` を、この順に空白でつなげたもの。件名が読めなければ `query` を付けない
 - それ以外（`subject.url` が無い、形が合わない、`subject.url` の `<owner>/<name>` がスレッドのリポジトリと一致しない、などを含む）: `<Web ベース>/<owner>/<name>`
 
-番号は 1〜20 桁の数字だけを受け付けなければならない（MUST）。タグは `/` で区切った要素ごとに、URL のパスの要素としてエスケープして足さなければならない（MUST）（`?` や `#` で URL の意味が変わらないように）。
+番号と run の ID は 1〜20 桁の数字だけを受け付けなければならない（MUST）。`query` の値は URL のクエリの値としてエスケープし、`+` も `%2B` にエスケープしなければならない（MUST）。タグは `/` で区切った要素ごとに、URL のパスの要素としてエスケープして足さなければならない（MUST）（`?` や `#` で URL の意味が変わらないように）。
 
 開く前に、組み立てた URL のスキームが `https` で、ホストがアカウントのホストと一致することを確かめ、一致しなければ開いてはならない（MUST NOT）。開かなかったときは、既読にもしてはならない（MUST NOT）。
 
@@ -354,9 +357,39 @@ Mewbell はユーザーごとに同時に 1 つだけ動かなければならな
 
 #### Scenario: subject.url が無い
 
-- **GIVEN** スレッドの種類が CheckSuite で、`subject.url` が無い
+- **GIVEN** スレッドの種類が Issue で、`subject.url` が無い
 - **WHEN** ユーザーがそのスレッドをクリックする
 - **THEN** リポジトリのページが開く
+
+#### Scenario: 承認リクエストの run を開く
+
+- **GIVEN** `github.com/alice` の種類が `WorkflowRun` のスレッドのリポジトリが `octo/app` で、その run の ID `38692691414` を覚えている
+- **WHEN** ユーザーがそのスレッドをクリックする
+- **THEN** 既定のブラウザで `https://github.com/octo/app/actions/runs/38692691414` が開く
+
+#### Scenario: run が決まらない承認リクエストを開く
+
+- **GIVEN** `github.com/alice` の種類が `WorkflowRun` のスレッドのリポジトリが `octo/app` で、その run の ID を覚えていない
+- **WHEN** ユーザーがそのスレッドをクリックする
+- **THEN** run を探すのを待たずに、既定のブラウザで `https://github.com/octo/app/actions?query=is:waiting` が開く
+
+#### Scenario: 失敗したワークフローの run を開く
+
+- **GIVEN** `github.com/alice` の種類が `CheckSuite` のスレッドのリポジトリが `octo/app` で、その run の ID `201` を覚えている
+- **WHEN** ユーザーがそのスレッドをクリックする
+- **THEN** 既定のブラウザで `https://github.com/octo/app/actions/runs/201` が開く
+
+#### Scenario: run が決まらない失敗の通知を開く
+
+- **GIVEN** `github.com/alice` の種類が `CheckSuite` のスレッドのリポジトリが `octo/app`、件名が `Build and test workflow run, Attempt #2 failed for feat/a+b branch` で、その run の ID を覚えていない
+- **WHEN** ユーザーがそのスレッドをクリックする
+- **THEN** 既定のブラウザで `https://github.com/octo/app/actions?query=workflow:%22Build%20and%20test%22%20is:failure%20branch:feat/a%2Bb` が開く
+
+#### Scenario: 件名を読めない CheckSuite を開く
+
+- **GIVEN** `github.com/alice` の種類が `CheckSuite` のスレッドのリポジトリが `octo/app`、件名が `Something happened` で、その run の ID を覚えていない
+- **WHEN** ユーザーがそのスレッドをクリックする
+- **THEN** 既定のブラウザで `https://github.com/octo/app/actions` が開く
 
 ### Requirement: 未読バッジ
 
