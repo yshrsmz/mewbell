@@ -111,6 +111,14 @@ struct ThreadNotificationContentTests {
         let content = ThreadNotificationContent(thread: release, account: alice)
         #expect(content.userInfo["url"] == "https://github.com/octo/app/releases/tag/rust-v1.0.0")
     }
+
+    /// run を見つけた新着の承認リクエストの通知は、その run を開く。
+    @Test func opensTheWorkflowRun() throws {
+        var approval = try thread("8", kind: .workflowRun, subjectURL: nil)
+        approval.details = ThreadDetails(state: nil, event: nil, workflowRunID: "38692691414")
+        let content = ThreadNotificationContent(thread: approval, account: alice)
+        #expect(content.userInfo["url"] == "https://github.com/octo/app/actions/runs/38692691414")
+    }
 }
 
 struct ThreadOpenRequestTests {

@@ -42,6 +42,8 @@ enum SubjectKind: Hashable, Sendable {
     case release
     case discussion
     case checkSuite
+    /// GitHub Actions の environment のデプロイの承認リクエスト
+    case workflowRun
     case other(String)
 
     init(apiValue: String) {
@@ -53,17 +55,23 @@ enum SubjectKind: Hashable, Sendable {
             case "Release": .release
             case "Discussion": .discussion
             case "CheckSuite": .checkSuite
+            case "WorkflowRun": .workflowRun
             default: .other(apiValue)
             }
     }
 }
 
-/// スレッドの件名の詳細を取りに行く先。番号とリリースの ID は排他（Release は番号の代わりにタグを取る）。
+/// スレッドの件名の詳細を取りに行く先。番号・リリースの ID・run の探し方は排他（Release は番号の代わりにタグを、
+/// WorkflowRun と CheckSuite は run の ID を取る）。
 enum DetailsSubject: Hashable, Sendable {
     /// Issue・Pull request の番号（一覧に `#<番号>` を出し、状態とイベントを取る）
     case number(String)
     /// Release のリリースの ID（タグを取る）
     case release(id: String)
+    /// WorkflowRun: 承認を待っている run を探す
+    case waitingWorkflowRun
+    /// CheckSuite: 件名から読んだワークフロー名とブランチで run を探す
+    case checkSuite(CheckSuiteTitle)
 }
 
 /// 未読の通知スレッド。API のレスポンスから、検証を通ったものだけを作る。
@@ -141,6 +149,7 @@ private struct ThreadDTO: Decodable {
             id: id, reason: reason ?? "", updatedAt: updatedAt, title: subject.title, kind: kind,
             subjectURL: subjectURL, repository: repository,
             detailsSubject: ThreadWebURL.detailsSubject(
-                kind: kind, subjectURL: subjectURL, repository: repository, endpoints: endpoints))
+                kind: kind, title: subject.title, subjectURL: subjectURL, repository: repository,
+                endpoints: endpoints))
     }
 }

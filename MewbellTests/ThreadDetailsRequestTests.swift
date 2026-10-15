@@ -15,11 +15,13 @@ struct ThreadDetailsRequestTests {
     }
 
     func thread(
-        host: String = "github.com", repository: String = "octo/app", subjectURL: String?, type: String = "Issue"
+        host: String = "github.com", repository: String = "octo/app", subjectURL: String?, type: String = "Issue",
+        title: String? = nil
     ) throws -> (NotificationThread, APIEndpoints) {
         let endpoints = try #require(APIEndpoints(host: host))
         let json = FakeHTTPTransport.threadJSON(
-            id: "1", repository: repository, updatedAt: "2026-10-08T12:00:00Z", subjectURL: subjectURL, type: type)
+            id: "1", repository: repository, updatedAt: "2026-10-08T12:00:00Z", subjectURL: subjectURL, type: type,
+            title: title)
         let thread = try #require(
             NotificationThread.decodeList(from: Data("[\(json)]".utf8), endpoints: endpoints)?.first)
         return (thread, endpoints)

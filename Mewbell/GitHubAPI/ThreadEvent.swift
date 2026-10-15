@@ -43,7 +43,8 @@ enum SubjectState: Hashable, Sendable {
     case closedNotPlanned
 }
 
-/// スレッドの件名の状態とイベント（Release ではリリースのタグ）。取得できたスレッドにだけ付く。
+/// スレッドの件名の状態とイベント（Release ではリリースのタグ、WorkflowRun と CheckSuite では run の ID）。
+/// 取得できたスレッドにだけ付く。
 struct ThreadDetails: Hashable, Sendable {
     /// 分からなければ nil
     let state: SubjectState?
@@ -51,10 +52,13 @@ struct ThreadDetails: Hashable, Sendable {
     let event: ThreadEvent?
     /// Release のリリースのタグ（`ThreadWebURL.releaseTagComponents` の検証を通ったもの）。ほかの種類では nil
     let releaseTag: String?
+    /// WorkflowRun と CheckSuite の run の ID（1〜20 桁の数字）。ほかの種類と、決まらなかったときは nil
+    let workflowRunID: String?
 
-    init(state: SubjectState?, event: ThreadEvent?, releaseTag: String? = nil) {
+    init(state: SubjectState?, event: ThreadEvent?, releaseTag: String? = nil, workflowRunID: String? = nil) {
         self.state = state
         self.event = event
         self.releaseTag = releaseTag
+        self.workflowRunID = workflowRunID
     }
 }

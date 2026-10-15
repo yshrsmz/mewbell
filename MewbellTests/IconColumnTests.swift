@@ -6,13 +6,13 @@ import Testing
 
 /// 確かめる種類。`SubjectKind` に case を足すと `listsEvery(_:)` でコンパイルが止まるので、ここにも足す
 private let kinds: [SubjectKind] = [
-    .pullRequest, .issue, .commit, .release, .discussion, .checkSuite, .other("CheckRun"),
+    .pullRequest, .issue, .commit, .release, .discussion, .checkSuite, .workflowRun, .other("CheckRun"),
 ]
 
 private func listsEvery(_ kind: SubjectKind) {
     // default を置かない（case を足したら一覧に足すまでコンパイルを止める）
     switch kind {
-    case .pullRequest, .issue, .commit, .release, .discussion, .checkSuite, .other: break
+    case .pullRequest, .issue, .commit, .release, .discussion, .checkSuite, .workflowRun, .other: break
     }
 }
 

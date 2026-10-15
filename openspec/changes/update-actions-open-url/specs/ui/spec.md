@@ -11,7 +11,7 @@
 - 種類が Discussion で、上に当たらないとき: `<Web ベース>/<owner>/<name>/discussions`
 - 種類が Release で、そのスレッドのリリースのタグを覚えているとき: `<Web ベース>/<owner>/<name>/releases/tag/<タグ>`
 - 種類が Release で、タグを覚えていないとき（取る前、取れなかった、タグが検証を通らなかったなど）: `<Web ベース>/<owner>/<name>/releases`
-- 種類が `WorkflowRun` か `CheckSuite` で、そのスレッドの run の ID を覚えているとき: `<Web ベース>/<owner>/<name>/actions/runs/<run の ID>`
+- 種類が `WorkflowRun` か `CheckSuite` で（`subject.url` が上の Pull request・Issue・Commit に当たらないとき。以下の 2 つも同じ）、そのスレッドの run の ID を覚えているとき: `<Web ベース>/<owner>/<name>/actions/runs/<run の ID>`
 - 種類が `WorkflowRun` で、run の ID を覚えていないとき（取る前、取れなかった、決まらなかったなど）: `<Web ベース>/<owner>/<name>/actions?query=is:waiting`
 - 種類が `CheckSuite` で、run の ID を覚えていないとき: `<Web ベース>/<owner>/<name>/actions` に、件名（github-api「ワークフローの実行の検索のリクエスト」の形）から作った絞り込みを `query` に付けたもの。絞り込みは、ワークフロー名が `"` を含まなければ `workflow:"<ワークフロー名>"`、結果が `failed` か `failed at startup` なら `is:failure`、`cancelled` なら `is:cancelled`、`skipped` なら `is:skipped`、`succeeded` なら `is:success`、`branch:<ブランチ>` を、この順に空白でつなげたもの。件名が読めなければ `query` を付けない
 - それ以外（`subject.url` が無い、形が合わない、`subject.url` の `<owner>/<name>` がスレッドのリポジトリと一致しない、などを含む）: `<Web ベース>/<owner>/<name>`

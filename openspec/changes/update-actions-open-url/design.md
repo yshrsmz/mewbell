@@ -31,7 +31,7 @@
 
 `SubjectKind` に `.workflowRun`（API の値 `WorkflowRun`）を足す。`DetailsSubject` に `.waitingWorkflowRun`（承認を待っている run を探す）と `.checkSuite(CheckSuiteTitle)`（件名から探す）を足す。`ThreadDetails` に `workflowRunID: String?`（1〜20 桁の数字）を足す。
 
-`ThreadWebURL.detailsSubject` に `title` の引数を足す。種類が `.workflowRun` なら `.waitingWorkflowRun`、`.checkSuite` で件名を読めれば `.checkSuite(...)` にする。どちらも `subject.url` を見ない（proposal の前提）。リポジトリのページを開けない（`url(...)` が nil）ときは、今までどおり nil にする。
+`ThreadWebURL.detailsSubject` に `title` の引数を足す。種類が `.workflowRun` なら `.waitingWorkflowRun`、`.checkSuite` で件名を読めれば `.checkSuite(...)` にする。run を探すのに `subject.url` は使わない（proposal の前提）。ただし `subject.url` が Pull request・Issue・Commit を指すときは、今までどおりそのページと番号にする（ui「アカウント一覧の表示」の、番号は種類ではなく `subject.url` で決める決まりを変えないため。実物の `subject.url` は null と見込んでいるので、ふつうは Actions の扱いになる）。リポジトリのページを開けない（`url(...)` が nil）ときは、今までどおり nil にする。
 
 `ThreadIcon` は網羅の `switch` なので、`.workflowRun` の記号は `.other` と同じ `bell`、名前は「Workflow run」にする。
 

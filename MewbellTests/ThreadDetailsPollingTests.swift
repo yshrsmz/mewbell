@@ -21,10 +21,10 @@ struct ThreadDetailsPollingTests {
         list(ids.map { ($0, 0) })
     }
 
-    /// 件名の状態とイベントの取得か、Release のタグの取得か。
+    /// 件名の状態とイベントの取得か、Release のタグの取得か、run の検索か。
     static func isDetails(_ request: URLRequest) -> Bool {
         let path = request.url?.path() ?? ""
-        return path.contains("/issues/") || path.contains("/releases/")
+        return path.contains("/issues/") || path.contains("/releases/") || path.contains("/actions/runs")
     }
 
     /// Issue は 10:00 に作られ、12:00 に `bob` がコメントした。

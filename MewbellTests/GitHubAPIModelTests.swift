@@ -50,14 +50,15 @@ struct APIEndpointsTests {
 struct NotificationThreadTests {
     private static func thread(
         id: String = "1", fullName: String? = "octo/app", updatedAt: String = "2026-10-08T12:00:00Z",
-        subjectURL: String? = "https://api.github.com/repos/octo/app/pulls/42"
+        subjectURL: String? = "https://api.github.com/repos/octo/app/pulls/42", title: String = "Fix it",
+        type: String = "PullRequest"
     ) -> String {
         let repository = fullName.map { #""repository": {"full_name": "\#($0)"},"# } ?? ""
         let url = subjectURL.map { "\"\($0)\"" } ?? "null"
         return """
             {"id": "\(id)", "unread": true, "reason": "review_requested", "updated_at": "\(updatedAt)",
              \(repository)
-             "subject": {"title": "Fix it", "url": \(url), "latest_comment_url": null, "type": "PullRequest"}}
+             "subject": {"title": "\(title)", "url": \(url), "latest_comment_url": null, "type": "\(type)"}}
             """
     }
 
@@ -79,6 +80,14 @@ struct NotificationThreadTests {
         #expect(thread.updatedAt == Date(timeIntervalSince1970: 1_791_460_800))
         // 番号は読み取るときに求める
         #expect(thread.detailsSubject == .number("42"))
+    }
+
+    @Test(arguments: [
+        ("WorkflowRun", SubjectKind.workflowRun), ("CheckSuite", .checkSuite), ("CheckRun", .other("CheckRun")),
+    ])
+    func readsTheKind(_ type: String, _ kind: SubjectKind) throws {
+        let threads = try #require(try decode([Self.thread(subjectURL: nil, type: type)]))
+        #expect(threads.first?.kind == kind)
     }
 
     @Test func acceptsANullSubjectURL() throws {

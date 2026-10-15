@@ -19,7 +19,7 @@ GitHub Actions の通知は、種類が 2 つある。どちらも件名に run 
   - macOS の通知のクリックも同じ URL を開く。
 - 一覧の行のアイコンは今と同じもの（種類によらない記号）のままにし、VoiceOver で読ませる `WorkflowRun` の種類の名前を「Workflow run」にする（`CheckSuite` は今の「Check suite」のまま）。
 
-前提: `WorkflowRun` と `CheckSuite` の通知の `subject.url` は使わない（Gitify も使っていない。手元に実物が無く、null かどうかを確かめられなかった）。値が入っていても、種類・件名・検証済みのリポジトリだけで決める。
+前提: `WorkflowRun` と `CheckSuite` の通知の run を探すのに `subject.url` は使わない（Gitify も使っていない。手元に実物が無く、null かどうかを確かめられなかった）。種類・件名・検証済みのリポジトリだけで決める。`subject.url` が Pull request・Issue・Commit を指すときだけは、今までどおりそのページを開く（番号は種類ではなく `subject.url` で決める今の決まりを保つ）。
 
 ## Capabilities
 

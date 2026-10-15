@@ -73,7 +73,7 @@ struct ThreadIconTests {
         #expect(ThreadIcon(kind: .issue, state: .closedNotPlanned).label == "Issue, closed as not planned")
     }
 
-    @Test(arguments: [(SubjectKind.pullRequest, "Pull request"), (.issue, "Issue")])
+    @Test(arguments: [(SubjectKind.pullRequest, "Pull request"), (.issue, "Issue"), (.workflowRun, "Workflow run")])
     func showsOnlyTheKindWithoutAState(_ kind: SubjectKind, _ name: String) {
         let unknown = ThreadIcon(kind: kind, state: nil)
         #expect(unknown.color == nil)
@@ -270,11 +270,11 @@ struct ThreadDetailsSubjectTests {
 
     /// スレッドの部品から詳細を取りに行く先を求める（スレッドを作る前に呼ぶ形）。
     private func subject(
-        repository: String = "octo/app", kind: SubjectKind = .pullRequest, subjectURL: String?,
-        endpoints: APIEndpoints
+        repository: String = "octo/app", kind: SubjectKind = .pullRequest, title: String = "Fix it",
+        subjectURL: String?, endpoints: APIEndpoints
     ) throws -> DetailsSubject? {
         ThreadWebURL.detailsSubject(
-            kind: kind, subjectURL: subjectURL.flatMap(URL.init(string:)),
+            kind: kind, title: title, subjectURL: subjectURL.flatMap(URL.init(string:)),
             repository: try #require(RepositoryName(fullName: repository)), endpoints: endpoints)
     }
 
@@ -314,6 +314,20 @@ struct ThreadDetailsSubjectTests {
     ])
     func readsNoNumberForReleasesAndDiscussions(_ kind: SubjectKind, _ subjectURL: String) throws {
         #expect(try subject(kind: kind, subjectURL: subjectURL, endpoints: github) == nil)
+    }
+
+    /// WorkflowRun と CheckSuite（件名を読めるもの）は、`subject.url` が無いか別のリポジトリを指していても run を探す。
+    @Test(arguments: [nil, "https://api.github.com/repos/other/repo/actions/runs/1"])
+    func searchesTheRunOfActionsThreads(_ subjectURL: String?) throws {
+        #expect(try subject(kind: .workflowRun, subjectURL: subjectURL, endpoints: github) == .waitingWorkflowRun)
+        let title = "CI workflow run failed for main branch"
+        #expect(
+            try subject(kind: .checkSuite, title: title, subjectURL: subjectURL, endpoints: github)
+                == .checkSuite(try #require(CheckSuiteTitle(title))))
+    }
+
+    @Test func doesNotSearchTheRunOfAnUnreadableCheckSuite() throws {
+        #expect(try subject(kind: .checkSuite, title: "Something happened", subjectURL: nil, endpoints: github) == nil)
     }
 
     @Test func readsTheReleaseID() throws {
