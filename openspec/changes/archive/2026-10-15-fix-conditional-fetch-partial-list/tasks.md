@@ -21,11 +21,11 @@
 
 ## 3. 確認
 
-- [ ] 3.1 ビルドとテストが通ることを確かめる。
+- [x] 3.1 ビルドとテストが通ることを確かめる。
   - `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` で全テストを通す。
   - `MEWBELL_WARNINGS_AS_ERRORS=YES` で、Debug と Release のビルドを通す。
   - `bash scripts/lint.sh` と `pnpm exec openspec validate --all --strict` を通す。
-- [ ] 3.2 `bash scripts/run.sh` で起動し、手元のアカウントで確かめる: 条件なしの取得の後に新しい通知が届いたとき（条件付きの `200`）、それより古い一覧のスレッドが消えず、新しいスレッドが足されること。ログ（`Polling` のカテゴリ）で、`If-Modified-Since` を付けた取得の後も一覧の件数が減らないことを見る。
+- [x] 3.2 `bash scripts/run.sh` で起動し、手元のアカウントで確かめる: 条件なしの取得の後に新しい通知が届いたとき（条件付きの `200`）、それより古い一覧のスレッドが消えず、新しいスレッドが足されること。ログ（`Polling` のカテゴリ）で、`If-Modified-Since` を付けた取得の後も一覧の件数が減らないことを見る。（起動後のログで取得がエラーなく動くことを確かめた。条件付きの 200 で古いスレッドが消えないことは、ユーザーの判断で確認済みとして扱った）
 
 ## 4. レビュー
 
