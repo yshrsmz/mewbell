@@ -43,7 +43,7 @@ Mewbell は API のエラーレスポンスのボディを UI に出してはな
 
 #### Scenario: 待ち時間のヘッダーが無い 429
 
-- **GIVEN** API が `429` を返し、`Retry-After` も `X-RateLimit-Reset` も無い
+- **GIVEN** API が `429` を返し、`Retry-After` も `X-RateLimit-Remaining: 0` も無い
 - **WHEN** Mewbell がレスポンスを受け取る
 - **THEN** その結果は、待ち時間が分からない「レート制限」になる
 
