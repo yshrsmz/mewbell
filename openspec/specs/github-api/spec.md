@@ -110,10 +110,12 @@ Mewbell は `GET /notifications` のレスポンスを次のように扱わな�
 - `200`: スレッドを読み、`Last-Modified` と `X-Poll-Interval` の値を返す
 - `304`: 変化なしとして扱う（1 ページ目に `If-Modified-Since` を付けたときだけ起こる）
 - `401`: 認証の失敗（トークンが無効）として扱う
-- `403`: `X-RateLimit-Remaining: 0` または `Retry-After` があればレート制限として扱い、`Retry-After` の秒数か `X-RateLimit-Reset` の時刻を返す。それ以外は拒否として扱う
-- `429`: レート制限（二次レート制限）として扱い、`Retry-After` があればその秒数を返す
+- `403`: `X-RateLimit-Remaining: 0` または `Retry-After` があればレート制限として扱い、`Retry-After` の秒数か `X-RateLimit-Reset` の時刻を返す。待ち時間のヘッダーが無くても、本文の `message` が二次レート制限（`secondary rate limit`。大文字と小文字は区別しない）を示すときは、待ち時間が分からないレート制限として扱う。それ以外は拒否として扱う
+- `429`: レート制限（二次レート制限）として扱い、`Retry-After` があればその秒数を返す。待ち時間のヘッダーが無ければ、待ち時間が分からないレート制限として扱う
 - `422`: リクエストの誤りとして扱う
 - それ以外の状態コード、通信の失敗、タイムアウト（30 秒）: 一時的な失敗として扱う
+
+本文で二次レート制限を見分ける判定は、操作（「スレッドの既読化のリクエスト」「スレッドを Done にするリクエスト」「すべて既読のリクエスト」）とスレッドのイベントの取得（「スレッドのイベントの取得のリクエスト」）と同じにしなければならない（MUST）。見分けるために読んだ本文は、保持・ログ出力してはならない（MUST NOT）。
 
 Mewbell は API のエラーレスポンスのボディを UI に出してはならない（MUST NOT）。
 
@@ -134,6 +136,25 @@ Mewbell は API のエラーレスポンスのボディを UI に出してはな
 - **GIVEN** API が `429` と `Retry-After: 600` を返す
 - **WHEN** Mewbell がレスポンスを受け取る
 - **THEN** その結果は「レート制限」になり、600 秒後の時刻が得られる
+
+#### Scenario: 待ち時間のヘッダーが無い二次レート制限の 403
+
+- **GIVEN** API が `403` を返し、`X-RateLimit-Remaining: 0` も `Retry-After` も無く、本文の `message` が `You have exceeded a secondary rate limit. Please wait a few minutes before you try again.` で、`X-OAuth-Scopes: repo, read:org` がある
+- **WHEN** Mewbell がレスポンスを受け取る
+- **THEN** その結果は「拒否」ではなく、待ち時間が分からない「レート制限」になる
+- **AND** 本文はログにも結果にも残らない
+
+#### Scenario: 待ち時間のヘッダーが無い 429
+
+- **GIVEN** API が `429` を返し、`Retry-After` も `X-RateLimit-Remaining: 0` も無い
+- **WHEN** Mewbell がレスポンスを受け取る
+- **THEN** その結果は、待ち時間が分からない「レート制限」になる
+
+#### Scenario: 二次レート制限でない 403
+
+- **GIVEN** API が `403` を返し、待ち時間のヘッダーが無く、本文の `message` が `Resource not accessible by integration` である
+- **WHEN** Mewbell がレスポンスを受け取る
+- **THEN** その結果は「拒否」になる
 
 #### Scenario: 422
 
@@ -187,7 +208,8 @@ Mewbell は、スレッドを既読にするとき、`PATCH <API ベース URL>/
 - `304`: すでに既読だったとして、既読にできたものと同じに扱う
 - `404`: スレッドがもう無い（Done にした、など）として、既読にできたものと同じに扱う
 - `401`: 認証の失敗
-- `403`: レート制限（`X-RateLimit-Remaining: 0` か `Retry-After` があるとき）か拒否
+- `403`: レート制限（`X-RateLimit-Remaining: 0` か `Retry-After` があるとき、またはそれらが無くても本文の `message` が二次レート制限を示すとき。「ステータスコードの扱い」と同じ判定）か拒否
+- `429`: レート制限
 - `422`、それ以外の状態コード、リダイレクト、通信の失敗、タイムアウト: 失敗
 
 既読化のリクエストが失敗しても、トークンを取り直してはならず（MUST NOT）、そのアカウントのポーリングを止めてはならない（MUST NOT）。
@@ -223,6 +245,12 @@ Mewbell は、スレッドを既読にするとき、`PATCH <API ベース URL>/
 - **WHEN** Mewbell がスレッド `123` を既読にし、API が `404` を返す
 - **THEN** 既読にできたものとして扱う
 
+#### Scenario: 既読化が二次レート制限になる
+
+- **GIVEN** `PATCH /notifications/threads/123` に API が `403` を返し、待ち時間のヘッダーが無く、本文の `message` が二次レート制限を示す
+- **WHEN** Mewbell がそのレスポンスを受け取る
+- **THEN** 結果は状態コードの失敗ではなく「レート制限」になり、トークンは取り直さず、ポーリングも止めない
+
 ### Requirement: スレッドを Done にするリクエスト
 
 Mewbell は、スレッドを Done にするとき、`DELETE <API ベース URL>/notifications/threads/<threadId>` をそのスレッドのアカウントのトークンを付けて送らなければならない（SHALL）。リクエストのヘッダーとオリジン検査は `GET /notifications` と同じにしなければならない（MUST。「トークンをリクエストごとに付ける」「トークンを送る相手の制限」「リダイレクトとキャッシュ」）。`threadId` は 1〜20 桁の数字でなければならず、それ以外のときはリクエストを送らずに失敗として扱わなければならない（MUST）。レスポンスは次のように扱わなければならない（MUST）。
@@ -230,7 +258,7 @@ Mewbell は、スレッドを Done にするとき、`DELETE <API ベース URL>
 - `204`: Done にできた
 - `404`: スレッドがもう無い（すでに Done にした、など）として、Done にできたものと同じに扱う
 - `401`: 認証の失敗
-- `403`: レート制限（`X-RateLimit-Remaining: 0` か `Retry-After` があるとき）か拒否
+- `403`: レート制限（`X-RateLimit-Remaining: 0` か `Retry-After` があるとき、またはそれらが無くても本文の `message` が二次レート制限を示すとき。「ステータスコードの扱い」と同じ判定）か拒否
 - `429`: レート制限
 - それ以外の状態コード、リダイレクト、通信の失敗、タイムアウト: 失敗
 
@@ -275,7 +303,7 @@ Mewbell は、アカウントの通知をすべて既読にするとき、`PUT <
 - `202`: 受け付けられた（GitHub が後から非同期に既読にする）。既読にできたものと同じに扱う
 - `304`: 既読にするものが無かったとして、既読にできたものと同じに扱う
 - `401`: 認証の失敗
-- `403`: レート制限（`X-RateLimit-Remaining: 0` か `Retry-After` があるとき）か拒否
+- `403`: レート制限（`X-RateLimit-Remaining: 0` か `Retry-After` があるとき、またはそれらが無くても本文の `message` が二次レート制限を示すとき。「ステータスコードの扱い」と同じ判定）か拒否
 - `429`: レート制限
 - それ以外の状態コード（`422` を含む）、リダイレクト、通信の失敗、タイムアウト: 失敗
 
@@ -310,6 +338,12 @@ Mewbell は、アカウントの通知をすべて既読にするとき、`PUT <
 #### Scenario: すべて既読のレート制限
 
 - **GIVEN** `PUT /notifications` に API が `403` と `X-RateLimit-Remaining: 0` を返す
+- **WHEN** Mewbell がそのレスポンスを受け取る
+- **THEN** 結果は「レート制限」になり、ポーリングの待ち時間は変わらない
+
+#### Scenario: すべて既読が二次レート制限になる
+
+- **GIVEN** `PUT /notifications` に API が `403` を返し、待ち時間のヘッダーが無く、本文の `message` が二次レート制限を示す
 - **WHEN** Mewbell がそのレスポンスを受け取る
 - **THEN** 結果は「レート制限」になり、ポーリングの待ち時間は変わらない
 
