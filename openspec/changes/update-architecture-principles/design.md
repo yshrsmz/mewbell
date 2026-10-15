@@ -5,7 +5,7 @@
 - 中間の層どうしの、型の参照の向き（コメントの中の型名を除く）は次のとおり。輪になっているのは Accounts↔Polling と Accounts↔Settings の 2 つ。
   - Accounts → Polling: `AccountDiscovery` が `TokenProviding`（`Mewbell/Polling/TokenProviding.swift`）に準拠する
   - Accounts → Settings: `AccountStore` が `AppSettings?` を持ち、読み直しのたびに `ghOverrides` と `disabledAccounts` を読んで `DiscoveryOptions` を作る。読み直しの結果を反映するときにも、`disabledAccounts` で `.disabled` に置き換える（`applyingSettings(to:)`）
-  - Polling → Accounts（`Account`・`AccountID`・`CredentialStore`・`DiscoveryState`）、Polling → Notifications、Polling → Settings、Notifications → Accounts、Settings → Accounts（`AccountID`）、Diagnostics → Accounts・Polling・Settings
+  - Polling → Accounts（`Account`・`AccountID`・`DiscoveryState`）、Polling → Notifications、Polling → Settings、Notifications → Accounts、Settings → Accounts（`AccountID`）、Diagnostics → Accounts・Polling・Settings
   - Notifications → Polling は、`SystemNotifier.swift` のコメントに `NotificationStore` と `NotificationTracker` の名前が出てくるだけで、型を使ってはいない
 - `TokenProviding` は Polling（`AccountPoller`・`NotificationStore.live`）と Accounts（`AccountDiscovery`）の 2 つの層が使う。今の A1 の「複数の層が使う型は共通の依存先に置く」に照らすと、Polling が Accounts に依存しているので、置き場所は Accounts になる。今の置き場所は、この規則にも合っていない。
 - `AccountStore` は `@MainActor` の `@Observable` で、`AppSettings` も `@MainActor` の `@Observable`。どちらも `AppDelegate` が作る。`AppSettings` から `AccountStore` へ変化を伝える経路（`setEnabled`、設定ディレクトリの変更）は、すでに `AppDelegate` のコールバックでつながっている（A14）。
@@ -41,7 +41,7 @@
 
 ### D2. `TokenProviding` を `Accounts/` に移す（A1）
 
-`Mewbell/Polling/TokenProviding.swift` を `Mewbell/Accounts/TokenProviding.swift` に移す。中身とドキュメントコメントは変えない。Polling はすでに Accounts の `AccountID` と `CredentialStore` を使っているので、新しい向きの依存は増えない。
+`Mewbell/Polling/TokenProviding.swift` を `Mewbell/Accounts/TokenProviding.swift` に移す。中身とドキュメントコメントは変えない。Polling はすでに Accounts の `Account`・`AccountID`・`DiscoveryState` を使っているので、新しい向きの依存は増えない。
 
 採らなかった案:
 
@@ -50,11 +50,11 @@
 
 ### D3. `AccountStore` は読み直しの設定をクロージャで受け取る（A1、A5、A14）
 
-`AccountStore` の `settings: AppSettings?` を、`options: @escaping () -> DiscoveryOptions` に置き換える。既定値は `{ DiscoveryOptions() }` で、今の `settings` が nil のときと同じ振る舞いになる。読み直しでは、待った後に `options()` を呼んで使う（今の「設定は待った後に読む」の位置を変えない）。`applyingSettings(to:)` は `options().disabled` で `.disabled` に置き換える。
+`AccountStore` の `settings: AppSettings?` を、`options: @escaping @MainActor () -> DiscoveryOptions` に置き換える。既定値は `{ DiscoveryOptions() }` で、今の `settings` が nil のときと同じ振る舞いになる。読み直しでは、待った後に `options()` を呼んで使う（今の「設定は待った後に読む」の位置を変えない）。`applyingSettings(to:)` は `options().disabled` で `.disabled` に置き換える。
 
 `AppSettings` には、gh の上書き（`ghExecutableOverride`・`ghConfigDirectoryOverride`）と `disabledAccounts` から作る `discoveryOptions: DiscoveryOptions` を足す。`AppDelegate` は `AccountStore(discovery:options:)` に `{ settings.discoveryOptions }` を渡す。こうすると Settings → Accounts の向きだけが残る（`AppSettings` は、もともと `AccountID` を使っている）。
 
-`AccountStore` と `AppSettings` は、どちらも `@MainActor` の型。クロージャは `AccountStore` の `@MainActor` の文脈で呼ぶので、`@Sendable` は要らない。actor の `AccountDiscovery` には、今までどおり呼んだ時点の `DiscoveryOptions` の値を渡す（A2）。`disabledAccounts` は `SettingsTests` が確かめている公開の経路なので、残す。`ghOverrides` は `discoveryOptions` のほかに使う箇所が無くなるので、`discoveryOptions` の中に畳んで消す（A9）。
+`AccountStore` と `AppSettings` は、どちらも `@MainActor` の型。クロージャは `@MainActor` にして、`@MainActor` の `AppSettings` を読むことを型で示す（`SystemNotifier` の `notifies`・`playsSound` と同じ）。`@Sendable` は要らない。actor の `AccountDiscovery` には、今までどおり呼んだ時点の `DiscoveryOptions` の値を渡す（A2）。`disabledAccounts` は `SettingsTests` が確かめている公開の経路なので、残す。`ghOverrides` は `discoveryOptions` のほかに使う箇所が無くなるので、`discoveryOptions` の中に畳んで消す（A9）。
 
 `DiscoveryOptions` のドキュメントコメント「`AppSettings` から作る」は、`AppSettings.discoveryOptions` の側に書くことにし、`DiscoveryOptions` からは消す。Accounts の型が Settings の型の名前を書かないようにするため。
 
@@ -64,6 +64,12 @@
 - `AppDelegate` が読み直しのたびに `DiscoveryOptions` を引数で渡す: `reload` を呼ぶ場所が `AppDelegate` の外（ポップオーバーの `onAppear`、再読み込みのボタン）にもあり、どの場所でも設定を渡す必要が出る。
 
 この「ほかの部品の状態はクロージャで受け取る」というつなぎ方は、型の置き場所ではなく部品のつなぎ方の約束なので、A1 ではなく A14 に書く。A14 を「変化はコールバックで伝え、状態はクロージャで読む」に広げ、A1 には輪を断つ手段として A14 を引く 1 文だけを置く（simplify の指摘を受けて決めた）。
+
+同じ約束に合わせて、`NotificationStore.live` も `AppSettings` を受け取るのをやめ、`preferences` のクロージャを `AppDelegate` から受け取る（code-review の指摘）。Polling → Settings は輪ではないが、改めた A14 に合わせ、同じ用途に 2 つの形を並べないため。
+
+### D7. 依存を輪にしない規則は、すべてのディレクトリに当てはめる（A1）
+
+D1 の理由（輪になったディレクトリは片方だけでは読めず、テストもできない）は中間の層に限らないので、下の層どうし（`GhCLI/`・`GitHubAPI/`）にも当てはめる。今のコードは `GitHubAPI/` → `GhCLI/` の一方向だけで、輪は無い（code-review の指摘を受けて決めた）。
 
 ### D4. 書体の約束を新しい原則 A17 に分ける（A4 を改める）
 

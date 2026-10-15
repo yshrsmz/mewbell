@@ -75,7 +75,8 @@ final class NotificationStore {
     // init（規則の対象外）の引数を中継するだけの組み立て関数なので、引数の数の上限を外す
     // swiftlint:disable:next function_parameter_count
     static func live(
-        tokens: any TokenProviding, notifier: any ThreadNotifying, settings: AppSettings,
+        tokens: any TokenProviding, notifier: any ThreadNotifying,
+        preferences: @escaping @MainActor (AccountID) -> AccountPreferences,
         openURL: @escaping @MainActor (URL) -> Void,
         onNewThreads: @escaping @MainActor (AccountID, [NotificationThread]) -> Void,
         onAccountsRetained: @escaping @MainActor (Set<AccountID>) -> Void
@@ -88,7 +89,7 @@ final class NotificationStore {
                     participating: participating, initialPhase: initialPhase, carriedWait: carriedWait,
                     onUpdate: onUpdate)
             }, notifier: notifier, openURL: openURL,
-            preferences: { settings.preferences(for: $0) }, onNewThreads: onNewThreads,
+            preferences: preferences, onNewThreads: onNewThreads,
             onAccountsRetained: onAccountsRetained)
     }
 

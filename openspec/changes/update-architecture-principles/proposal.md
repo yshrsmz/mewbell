@@ -10,7 +10,7 @@ add-architecture-principles で書いた `docs/architecture.md` の原則は、�
 
 ## What Changes
 
-- A1 に「中間の層どうしは互いの型を使ってよいが、ディレクトリの間で依存を輪にしない」を足す。同じ高さの 2 つの層の両方が使う型は、もう一方に依存している側の層ではなく、依存されている側の層に置く。中間の層に順序を決める案は、引き続き採らない。
+- A1 に「同じ高さの層どうし（中間の層どうし、下の層どうし）は互いの型を使ってよいが、ディレクトリの間で依存を輪にしない」を足す。同じ高さの 2 つの層の両方が使う型は、もう一方に依存している側の層ではなく、依存されている側の層に置く。中間の層に順序を決める案は、引き続き採らない。
 - 同じ change で、今ある 2 つの輪を解く。
   - Accounts↔Polling: `TokenProviding` を `Polling/` から `Accounts/` に移す。`Accounts/` の `AccountDiscovery` がこれに準拠していて、`Polling/` はもともと `Accounts/` の `Account`・`AccountID`・`DiscoveryState` を使っているため。
   - Accounts↔Settings: `AccountStore` が `AppSettings` を持つのをやめ、読み直しの設定（`DiscoveryOptions`）を返すクロージャを受け取る。`AppDelegate` が `AppSettings` から作った値を渡すクロージャをつなぐ。

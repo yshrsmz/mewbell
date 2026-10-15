@@ -12,7 +12,7 @@
 
 ## 3. 設計方針の文書
 
-- [x] 3.1 スキル `update-architecture-doc` の「原則を改める」の手順で A1 を改める（design.md D1・D2・D5）。中間の層どうしの依存を輪にしないことと、両方が使う型は依存されている側の層に置くことを足し、例に `TokenProviding` は `Accounts/` を加える。輪を許す形を採らなかった案に足し、根拠に `update-architecture-principles D1・D2・D3・D5` を足す。`grep -rnw 'A1' CLAUDE.md .claude openspec .swiftlint.yml docs` で引いている箇所が新しい形と食い違わないことを確かめる。
+- [x] 3.1 スキル `update-architecture-doc` の「原則を改める」の手順で A1 を改める（design.md D1・D2・D5）。中間の層どうしの依存を輪にしないことと、両方が使う型は依存されている側の層に置くことを足し、例に `TokenProviding` は `Accounts/` を加える。輪を許す形を採らなかった案に足し、根拠に `update-architecture-principles D1・D2・D5・D7` を足す（D3 は、クロージャでつなぐ約束を移した A14 の根拠に足す）。`grep -rnw 'A1' CLAUDE.md .claude openspec .swiftlint.yml docs` で引いている箇所が新しい形と食い違わないことを確かめる。
 - [x] 3.2 同じ手順で A4 から書体の約束を抜き出し、新しい原則 A17 にする（design.md D4）。`.swiftlint.yml` の `fixed_font_size` の `message` を A17 に引き直す。A4 と A17 の根拠を design.md D4 のとおりに分ける。
 - [x] 3.3 同じ手順で A6 を改める（design.md D6）。「行数の上限はそのファイルだけ緩める」を「関所を小さな型に切り出し、その型だけのファイルに置く」に書き換え、前の形と fix-api-client-send-privacy で採らなかった案との違いを採らなかった案に書く。「既知の逸脱」に `A6 | GitHubAPIClient.swift（swiftlint:disable file_length） | fix-api-client-gateway` の行を足す。A10 の「関所の内側は A6 に従い、外さない」が新しい A6 と食い違わないことを確かめる。
 - [x] 3.4 `bash scripts/check-architecture.sh` と `bash scripts/tests/check-architecture-test.sh` が通ることを確かめる。
@@ -28,5 +28,5 @@
 ## 5. レビュー
 
 - [x] 5.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。（直したもの 1 件: `AppSettings.ghOverrides` を `discoveryOptions` にまとめた。原則への異議 1 件: クロージャでつなぐ約束を A1 から A14 に移した。design.md D3）
-- [ ] 5.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。
-- [ ] 5.3 ロジックの変更を含む修正が多ければ、5.2 を新しいサブエージェントでもう一度実行する。
+- [x] 5.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。（指摘 8 件: 直した 6 件、直さない 2 件。PR 本文に記録）
+- [x] 5.3 ロジックの変更を含む修正が多ければ、5.2 を新しいサブエージェントでもう一度実行する。（直したのは配線の引数、`@MainActor` の付与、文書だけで、分岐や判断のロジックの変更が無いので再実行しない）

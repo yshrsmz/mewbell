@@ -13,7 +13,7 @@ final class AccountStore {
     @ObservationIgnored private static let logger = Logger(category: "Accounts")
     @ObservationIgnored private let discovery: (any AccountDiscovering)?
     /// 読み直しに渡す設定（無効なアカウントと gh の上書き）。読み直しの開始（待った後）と結果の反映のたびに呼ぶ
-    @ObservationIgnored private let options: () -> DiscoveryOptions
+    @ObservationIgnored private let options: @MainActor () -> DiscoveryOptions
     /// 設定ディレクトリを変えるたびに進める。前の設定ディレクトリで始めた読み直しの結果は捨てる
     @ObservationIgnored private var configGeneration = 0
     /// 次の読み直しの前に、すべてのトークンを捨てる（設定ディレクトリを変えたとき）
@@ -35,7 +35,8 @@ final class AccountStore {
 
     /// `discovery` が nil のときは読み込みを行わない（テストのホストや SwiftUI プレビュー用）。
     init(
-        discovery: (any AccountDiscovering)?, options: @escaping () -> DiscoveryOptions = { DiscoveryOptions() },
+        discovery: (any AccountDiscovering)?,
+        options: @escaping @MainActor () -> DiscoveryOptions = { DiscoveryOptions() },
         state: DiscoveryState = .checking
     ) {
         self.discovery = discovery

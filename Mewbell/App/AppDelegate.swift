@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 center: center, notifies: { settings.preferences(for: $0).notifies },
                 playsSound: { settings.notificationSound })
             let notificationStore = NotificationStore.live(
-                tokens: discovery, notifier: notifier, settings: settings,
+                tokens: discovery, notifier: notifier, preferences: { settings.preferences(for: $0) },
                 openURL: { NSWorkspace.shared.open($0) },
                 onNewThreads: { [listExpansion] in listExpansion.expand(account: $0, newThreads: $1) },
                 onAccountsRetained: { [listExpansion] in listExpansion.retain($0) })

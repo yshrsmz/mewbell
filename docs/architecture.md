@@ -34,17 +34,17 @@
 
 ### A1. 依存は下の層へ向け、型は使う層のうち最も下に置く
 
-- **原則**: 層は 3 段に分け、その下にどの層からも使ってよい最下段 `Shared/` を置く。下の層は `GhCLI/` と `GitHubAPI/`、中間の層は `Accounts/`・`Polling/`・`Notifications/`・`Settings/`・`Diagnostics/`、上の層は `UI/` と `App/` である。下の層は中間と上の層の型を使わない。中間の層は同じ高さとして互いの型を使ってよいが、ディレクトリの間の依存を輪にせず、上の層の型は使わない。`Shared/` はほかのどのディレクトリの型も使わない。`Shared/` に置いてよいのは、アプリの領域の型（アカウント・スレッド・ホストなど）を知らず、下の層を含む 2 つ以上の層が使う小さな道具（`Logger(category:)`）だけにする。store と actor を持つのは中間の層で、`UI/` は表示と、表示だけに使う状態（折りたたみの `ListExpansion`、アニメーションの `DisclosureAnimations`）を受け持つ。SwiftUI と AppKit を import するのは `UI/` と `App/` だけにする。本物の部品は `AppDelegate` で組み立て、長いものは `.live(...)` にまとめて `AppDelegate` から呼ぶ。型や値は、それを使う層のうち最も下の層に置く。1 つの層だけが使うならその層に、複数の層が使うなら共通の依存先に置く。同じ高さの 2 つの層が使うなら、もう一方に依存している側ではなく、依存されている側に置く（`RepositoryGroup` は `Polling/`、`hostLabel` は `UI/`、ポップオーバーと通知の両方が使う `AccountID.displayName` と、`UI/` と `Diagnostics/` が使う `HostKind.displayName` は `Accounts/`、`Accounts/` の `AccountDiscovery` が準拠して `Polling/` が使う `TokenProviding` は `Accounts/`、一覧と通知の両方が使う `ThreadReason`・`ThreadEventText` は `Notifications/`）。依存されている側の部品が依存している側の状態を要るときは、A14 のつなぎ方で輪を断つ。
+- **原則**: 層は 3 段に分け、その下にどの層からも使ってよい最下段 `Shared/` を置く。下の層は `GhCLI/` と `GitHubAPI/`、中間の層は `Accounts/`・`Polling/`・`Notifications/`・`Settings/`・`Diagnostics/`、上の層は `UI/` と `App/` である。下の層は中間と上の層の型を使わない。中間の層は上の層の型を使わない。同じ高さの層（下の層どうし、中間の層どうし）は互いの型を使ってよいが、どのディレクトリの間でも依存を輪にしない。`Shared/` はほかのどのディレクトリの型も使わない。`Shared/` に置いてよいのは、アプリの領域の型（アカウント・スレッド・ホストなど）を知らず、下の層を含む 2 つ以上の層が使う小さな道具（`Logger(category:)`）だけにする。store と actor を持つのは中間の層で、`UI/` は表示と、表示だけに使う状態（折りたたみの `ListExpansion`、アニメーションの `DisclosureAnimations`）を受け持つ。SwiftUI と AppKit を import するのは `UI/` と `App/` だけにする。本物の部品は `AppDelegate` で組み立て、長いものは `.live(...)` にまとめて `AppDelegate` から呼ぶ。型や値は、それを使う層のうち最も下の層に置く。1 つの層だけが使うならその層に、複数の層が使うなら共通の依存先に置く。同じ高さの 2 つの層が使うなら、もう一方に依存している側ではなく、依存されている側に置く（`RepositoryGroup` は `Polling/`、`hostLabel` は `UI/`、ポップオーバーと通知の両方が使う `AccountID.displayName` と、`UI/` と `Diagnostics/` が使う `HostKind.displayName` は `Accounts/`、`Accounts/` の `AccountDiscovery` が準拠して `Polling/` が使う `TokenProviding` は `Accounts/`、一覧と通知の両方が使う `ThreadReason`・`ThreadEventText` は `Notifications/`）。依存されている側の部品が依存している側の状態を要るときは、A14 のつなぎ方で輪を断つ。
 - **理由**: 下の層を UI 抜きで単体テストでき、トークンを扱う層が表示の都合で変わらない。置き場所を決める軸を 1 つにすると、移す・移さないの判断がレビューの周ごとに揺れない。輪になった 2 つのディレクトリは、片方だけを読んでも理解できず、片方だけを組んでもテストできない。輪が無ければ、順序を前もって決めなくても、その時点の依存から読む順序が 1 つに決まる。
 - **採らなかった案**:
   - 値を作る層に置く: 表示のためだけに作る値（`hostLabel` など）の置き場所を別に決める必要がある
-  - 中間の層どうしの輪を許す: 同じ高さだからとどちらに置いてもよくなり、置き場所の判断がレビューのたびに揺れる
+  - 同じ高さの層どうしの輪を許す: 同じ高さだからとどちらに置いてもよくなり、置き場所の判断がレビューのたびに揺れる
   - 輪を型の宣言と参照の突き合わせで機械的に検査する: grep ではコメントの中の型名で誤検知し、コメントを除く処理が要る。輪がまた入ることが続くまでは、レビューで守る
   - 中間の層にも順序を決めて上への参照を禁じる: 設定・アカウント・ポーリング・通知は互いの変化に応じて動き、順序を決めても参照を間接にする部品が増えるだけになる
   - SwiftPM のモジュールに分けて依存の向きをコンパイラで守る: プロジェクトの構成を変える大きさに見合わない。import だけを lint で守る
   - どの層からも使う道具も、使う層のうち最も下の層（`GhCLI/`）に置く: ロガーの拡張が gh の部品に住み、次に似た道具が出たときの置き場所としても読めてしまう
 - **適用外**: なし
-- **根拠**: add-gh-account-discovery D1、add-notification-fetch D1、add-system-notifications D1、add-settings D1、add-diagnostics D1、update-notification-list D1・D6、update-list-readability D8、add-architecture-principles D6・D7、fix-lower-layer-dependencies D1〜D6、fix-shared-thread-text-placement D1、update-architecture-principles D1・D2・D5。import は lint の `ui_frameworks_outside_ui` で守る
+- **根拠**: add-gh-account-discovery D1、add-notification-fetch D1、add-system-notifications D1、add-settings D1、add-diagnostics D1、update-notification-list D1・D6、update-list-readability D8、add-architecture-principles D6・D7、fix-lower-layer-dependencies D1〜D6、fix-shared-thread-text-placement D1、update-architecture-principles D1・D2・D5・D7。import は lint の `ui_frameworks_outside_ui` で守る
 
 ### A2. View と store は @MainActor、外部とのやり取りは actor に閉じ込める
 
