@@ -18,7 +18,7 @@
   - `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` で全テストを通す。
   - `MEWBELL_WARNINGS_AS_ERRORS=YES` で、Debug と Release のビルドを通す。
   - `bash scripts/lint.sh` と `pnpm exec openspec validate --all --strict` を通す。
-- [ ] 3.2 `bash scripts/run.sh` で起動し、手元で確かめる。通知の一覧が取れること、件名の状態とイベントが表示されること、既読にできることが今までどおりであること。
+- [x] 3.2 `bash scripts/run.sh` で起動し、手元で確かめる。通知の一覧が取れること、件名の状態とイベントが表示されること、既読にできることが今までどおりであること。
 
 ## 4. レビュー
 
