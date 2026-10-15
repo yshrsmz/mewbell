@@ -82,7 +82,7 @@ extension ThreadDetailsPollingTests {
         await fixture.sleeper.waitForSleeps(1)
         // 既読にするリクエストの途中の取得では 1 を隠し、既読にできずに 1 が一覧に戻る
         fixture.transport.pausedMethod.value = "PATCH"
-        let read = Task { await fixture.poller.perform(.read(threadID: "1")) }
+        let read = Task { await fixture.poller.perform([.read(threadID: "1")]) }
         await waitUntil { !fixture.requests("PATCH").isEmpty }
         fixture.advance(by: 60)
         await fixture.sleeper.waitForSleeps(2)

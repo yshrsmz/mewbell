@@ -11,6 +11,10 @@ struct DisclosureButton<Label: View>: View {
     var isCollapsible = true
     /// 見出しの件数。畳んでいて 1 件以上のときだけ出す
     var count = 0
+    /// 見出しの上に別のボタンを重ねるとき、重ねたボタンを含めたホバーの状態（ボタンに載せている間も見出しを塗るため）
+    var isHovering: Bool?
+    /// 重ねたボタンの分、中身の右に空ける幅（中身はその手前で省略し、塗りと押せる範囲は見出しの幅いっぱいのまま）
+    var trailingInset: CGFloat = 0
     let toggle: () -> Void
     @ViewBuilder let label: Label
 
@@ -35,11 +39,12 @@ struct DisclosureButton<Label: View>: View {
                         .help(hint)
                     labelWithCount
                 }
+                .padding(.trailing, trailingInset)
                 // 見出しの行の空いている幅まで押せるようにする（アカウントの見出しは右のボタンの手前まで）。
                 // 高さは見出しの高さまで上下に広げ、中身は縦の中央に置く
                 .frame(maxWidth: .infinity, minHeight: ListLayout.headingHeight, alignment: .leading)
             }
-            .buttonStyle(HoverHighlightButtonStyle())
+            .buttonStyle(HoverHighlightButtonStyle(isHovering: isHovering))
             .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
             .accessibilityHint(hint)
         } else {

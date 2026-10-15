@@ -49,7 +49,7 @@ struct ThreadRow: View {
                 Rectangle()
                     .overlay(alignment: .topTrailing) {
                         if isHovering {
-                            ThreadActionButtons.titleFade
+                            HoverActionButtons.titleFade
                         }
                     }
                     .compositingGroup()
@@ -61,7 +61,13 @@ struct ThreadRow: View {
         // 上端に揃えて件名の 1 行目の高さに置く（件名が 2 行の行でも位置が変わらず、Done で繰り上がった行でもカーソルの下に来るように）
         .overlay(alignment: .topTrailing) {
             if isHovering {
-                ThreadActionButtons(markRead: markRead, markDone: markDone)
+                HoverActionButtons(readLabel: "Mark as read", markRead: markRead) {
+                    Button(action: markDone) {
+                        HoverActionButtons.icon("checkmark")
+                    }
+                    .help("Mark as done")
+                    .accessibilityLabel("Mark as done")
+                }
             }
         }
         .onHover { isHovering = $0 }
@@ -93,49 +99,6 @@ struct ThreadRow: View {
     }
 }
 
-/// 行に重ねる「既読にする」「Done にする」のボタン。件名の上に重なるので、行は `titleFade` でボタンの下の文字を消す。
-/// （背景で隠すと、ポップオーバーの半透明の背景では下の文字が透けて見える）
-private struct ThreadActionButtons: View {
-    let markRead: () -> Void
-    let markDone: () -> Void
-
-    /// ボタンの大きさ（22 × 2、間隔 2、左右の余白 2 × 2）
-    private static let size = CGSize(width: 22 * 2 + 2 + 2 * 2, height: 22)
-    /// ボタンの手前で件名を薄くしていく幅
-    private static let fadeWidth: CGFloat = 16
-
-    /// 行のマスクから抜く形。ボタンの範囲を消し、その手前をだんだん薄くする
-    static var titleFade: some View {
-        HStack(spacing: 0) {
-            LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                .frame(width: fadeWidth)
-            Color.black
-                .frame(width: size.width)
-        }
-        .frame(height: size.height)
-        .blendMode(.destinationOut)
-    }
-
-    var body: some View {
-        HStack(spacing: 2) {
-            Button(action: markRead) {
-                Image(systemName: "envelope.open")
-                    .frame(width: 22, height: 22)
-            }
-            .help("Mark as read")
-            .accessibilityLabel("Mark as read")
-            Button(action: markDone) {
-                Image(systemName: "checkmark")
-                    .frame(width: 22, height: 22)
-            }
-            .help("Mark as done")
-            .accessibilityLabel("Mark as done")
-        }
-        .buttonStyle(HoverHighlightButtonStyle())
-        .padding(.horizontal, 2)
-    }
-}
-
 /// アカウントの通知をすべて既読にするボタン。1 回目で確認の表示に変わり、5 秒以内にもう一度押したときだけ実行する。
 struct MarkAllReadButton: View {
     let count: Int
@@ -163,42 +126,17 @@ struct MarkAllReadButton: View {
     }
 
     var body: some View {
-        Button {
-            if confirming {
-                confirming = false
-                action()
-            } else {
-                confirming = true
-            }
-        } label: {
-            if confirming {
-                Text(labels.confirmation)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.tint)
-                    .fixedSize()
-            } else {
-                Image(systemName: "checkmark.circle")
-            }
-        }
-        .buttonStyle(HoverHighlightButtonStyle(outset: 3))
-        .disabled(!isEnabled)
-        .help(labels.help(confirming: confirming))
-        .accessibilityLabel(labels.accessibilityLabel(confirming: confirming))
-        // 確認の表示は 5 秒で戻す（`confirming` が変わると前の待ちは取り消される）
-        .task(id: confirming) {
-            guard confirming else { return }
-            guard (try? await Task.sleep(for: .seconds(5))) != nil else { return }
-            confirming = false
-        }
-        .onChange(of: isEnabled) { _, enabled in
-            if !enabled {
-                confirming = false
-            }
-        }
-        // 確認の途中で一覧が変わったら（件数か最新のスレッド）、見ていないスレッドまで既読にしないように確認からやり直す
-        .onChange(of: count) { confirming = false }
-        .onChange(of: newest) { confirming = false }
-        .onDisappear { confirming = false }
+        ConfirmingButton(
+            confirming: $confirming, icon: Image(systemName: "checkmark.circle"), confirmation: labels.confirmation,
+            help: labels.help(confirming: confirming),
+            accessibilityLabel: labels.accessibilityLabel(confirming: confirming), isEnabled: isEnabled,
+            target: Target(count: count, newest: newest), outset: 3, action: action)
+    }
+
+    /// 確認の途中で変わったら確認からやり直す値。すべて既読は時刻で区切るので、件数と最新のスレッドで足りる
+    private struct Target: Equatable {
+        let count: Int
+        let newest: Date?
     }
 }
 

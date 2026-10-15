@@ -29,6 +29,8 @@ actor AccountPoller {
     /// 走っているループ。actor に入らずに起動・停止できるように、ロックで持つ
     /// `discarded` は `stop()` で立て、その後は起動も再開もしない（取り除いたアカウントのトークンで取得し続けないため）
     private nonisolated let loop = Mutex<(task: Task<Void, Never>?, discarded: Bool)>((nil, false))
+    /// `stop()` の後か（スレッドの操作の途中で止めたら、残りを送らないため）
+    nonisolated var isDiscarded: Bool { loop.withLock { $0.discarded } }
 
     var state = FeedState.loading
     /// 最後にすべてのページを取り終えた 200 の `Last-Modified`

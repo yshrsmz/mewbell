@@ -180,7 +180,7 @@ struct ThreadDetailsPollingTests {
         fixture.poller.start()
         await waitUntil { fixture.updates.value.contains { $0.threads.count == 2 } }
         await waitUntil { detailsRequests(fixture).count >= 2 }
-        await fixture.poller.perform(.read(threadID: "1"))
+        await fixture.poller.perform([.read(threadID: "1")])
         #expect(fixture.lastIDs == ["2"])
         fixture.transport.pausedWhere.value = nil
         await fixture.sleeper.waitForSleeps(1)
@@ -199,7 +199,7 @@ struct ThreadDetailsPollingTests {
         fixture.transport.pausedWhere.value = { Self.isDetails($0) }
         fixture.advance(by: 60)
         await waitUntil { detailsRequests(fixture).count >= 3 }
-        await fixture.poller.perform(.done(threadID: "1"))
+        await fixture.poller.perform([.done(threadID: "1")])
         fixture.transport.pausedWhere.value = nil
         await fixture.sleeper.waitForSleeps(2)
         #expect(fixture.lastIDs == ["2"])

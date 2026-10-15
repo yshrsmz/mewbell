@@ -19,7 +19,7 @@ struct DonePollingTests {
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         fixture.transport.pausedMethod.value = "DELETE"
-        let done = Task { await fixture.poller.perform(.done(threadID: "2")) }
+        let done = Task { await fixture.poller.perform([.done(threadID: "2")]) }
         await waitUntil { self.requests("DELETE").count == 1 }
         #expect(lastIDs == ["1", "3"])
         // Done の応答を待っている間に終わった取得が 2 を返しても戻さない
@@ -40,9 +40,9 @@ struct DonePollingTests {
         fixture.poller.start()
         await fixture.sleeper.waitForSleeps(1)
         fixture.transport.pausedMethod.value = "PATCH"
-        let read = Task { await fixture.poller.perform(.read(threadID: "2")) }
+        let read = Task { await fixture.poller.perform([.read(threadID: "2")]) }
         await waitUntil { self.requests("PATCH").count == 1 }
-        await fixture.poller.perform(.done(threadID: "2"))
+        await fixture.poller.perform([.done(threadID: "2")])
         // Done は終わったが既読化が終わっていないので、Done の後に始めた取得でも戻さない
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)

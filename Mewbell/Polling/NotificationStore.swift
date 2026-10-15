@@ -161,7 +161,7 @@ final class NotificationStore {
         feeds[id] = carriedWait?.initialPhase.map { FeedState(phase: $0, threads: []) } ?? .loading
         Self.logger.info("Started polling \(id)")
         for threadID in pendingReads.removeValue(forKey: id) ?? [] {
-            Task { await poller.perform(.read(threadID: threadID)) }
+            Task { await poller.perform([.read(threadID: threadID)]) }
         }
         poller.start()
     }
@@ -203,7 +203,7 @@ final class NotificationStore {
             let url = ThreadWebURL.make(for: thread, endpoints: endpoints)
         else { return }
         openURL(url)
-        perform(.read(threadID: thread.id), in: account)
+        perform([.read(threadID: thread.id)], in: account)
     }
 
     /// アカウントのホストの Web の通知一覧をブラウザで開く。既読にはしない。URL を組み立てられなければ開かない。
@@ -217,17 +217,27 @@ final class NotificationStore {
     /// macOS の通知のクリックから、検証済みの URL を開いて既読にする。
     func openFromNotification(_ request: ThreadOpenRequest) {
         openURL(request.url)
-        perform(.read(threadID: request.threadID), in: request.account)
+        perform([.read(threadID: request.threadID)], in: request.account)
     }
 
     /// 一覧のスレッドを、開かずに既読にする。
     func markRead(_ thread: NotificationThread, in account: AccountID) {
-        perform(.read(threadID: thread.id), in: account)
+        perform([.read(threadID: thread.id)], in: account)
     }
 
     /// 一覧のスレッドを Done にする。
     func markDone(_ thread: NotificationThread, in account: AccountID) {
-        perform(.done(threadID: thread.id), in: account)
+        perform([.done(threadID: thread.id)], in: account)
+    }
+
+    /// 押したときに表示していたリポジトリのグループのスレッドを、開かずに既読にする。
+    func markRead(_ group: RepositoryGroup, in account: AccountID) {
+        perform(group.threads.map { .read(threadID: $0.id) }, in: account)
+    }
+
+    /// 押したときに表示していたリポジトリのグループのスレッドを Done にする。
+    func markDone(_ group: RepositoryGroup, in account: AccountID) {
+        perform(group.threads.map { .done(threadID: $0.id) }, in: account)
     }
 
     /// アカウントの一覧を、表示している一覧の最新のスレッドまですべて既読にする。一覧から外すのはポーラーで、
@@ -239,18 +249,21 @@ final class NotificationStore {
         Task { await poller.markAllRead(through: newest) }
     }
 
-    /// 一覧からすぐに外し、ポーラーに操作を頼む。既読はポーラーがまだ無ければ、作るときまで取っておく
+    /// 一覧からすぐに外し、ポーラーに操作をまとめて頼む。既読はポーラーがまだ無ければ、作るときまで取っておく
     /// （起動の直後に通知をクリックされたとき）。Done はポーラーが無ければ何もしない（一覧の行はポーラーがあるときだけ出る）。
-    private func perform(_ action: ThreadAction, in account: AccountID) {
+    private func perform(_ actions: [ThreadAction], in account: AccountID) {
         let poller = pollers[account]?.poller
-        if poller == nil, case .done = action { return }
-        let threadID = action.threadID
-        feeds[account]?.threads.removeAll { $0.id == threadID }
-        threadChanges.threadRemoved(threadID, for: account)
+        let actions = poller == nil ? actions.filter { ThreadActionKind($0) == .read } : actions
+        guard !actions.isEmpty else { return }
+        let threadIDs = Set(actions.map(\.threadID))
+        feeds[account]?.threads.removeAll { threadIDs.contains($0.id) }
+        for threadID in threadIDs {
+            threadChanges.threadRemoved(threadID, for: account)
+        }
         if let poller {
-            Task { await poller.perform(action) }
+            Task { await poller.perform(actions) }
         } else {
-            pendingReads[account, default: []].insert(threadID)
+            pendingReads[account, default: []].formUnion(threadIDs)
         }
     }
 
