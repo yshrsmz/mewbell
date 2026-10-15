@@ -7,7 +7,7 @@
 
 ## 2. ポーラー
 
-- [x] 2.1 `Mewbell/Polling/AccountPoller.swift` の `fetch(with:)` で、`ifModifiedSince != nil` の `200` のとき、状態とイベントを取った後、2 回目の `HiddenThreads.revealOrHide` の前に `ThreadListMerge.merge(threads, into: state.threads)` で重ねる。`details.listed` には `ThreadListMerge.merge(fetched, into: state.threads)` を渡す（条件なしのときは今までどおり `fetched`）。`.updated` の `truncated` を「受け取った打ち切り または `state.isTruncated`」にする（D2・D3・D5）。
+- [x] 2.1 `Mewbell/Polling/AccountPoller.swift` の `fetch(with:)` で、`ifModifiedSince != nil` の `200` のとき、状態とイベントを取った後、2 回目の `HiddenThreads.revealOrHide` の前に `ThreadListMerge.merge(fetched, into: state.threads)` で重ね、2 回目の `revealOrHide` と `details.listed` の両方に渡す（条件なしのときは今までどおり `fetched`）。`.updated` の `truncated` を「受け取った打ち切り または `state.isTruncated`」にする（D2・D3・D5）。
 - [x] 2.2 `lastFullFetch` を `lastUnconditionalFetch` に改め、条件なしの取得の `200` のときだけ更新する。`PollSchedule.unconditionalFetchIsDue` の引数名と、両方の doc コメント、`unconditionalFetchInterval` の doc コメントを、条件付きの `200` は差分であることに合わせて直す（D4）。
 - [x] 2.3 ポーラーのテストを足し、直す（`PollerFixture` を使う）。
   - 条件なしの `200` で 3 件、条件付きの `200` で 1 件（うち 1 件は既存の ID で `updated_at` が進んだもの、または新しい ID）を返すと、一覧が重なった件数になり、差し替えたスレッドの `updated_at` が新しくなること。
@@ -29,6 +29,6 @@
 
 ## 4. レビュー
 
-- [ ] 4.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。
+- [x] 4.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。（1 件を取り込んだ: 条件付きの 200 で 2 回呼んでいた `ThreadListMerge.merge` を 1 回にし、同じ一覧を 2 回目の `revealOrHide` と `details.listed` に渡す）
 - [ ] 4.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。
 - [ ] 4.3 ロジックの変更を含む修正が多ければ、4.2 を新しいサブエージェントでもう一度実行する。

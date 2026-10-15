@@ -38,7 +38,7 @@ GitHub の振る舞い（手元で確かめた）: `If-Modified-Since` を付け
 
 ### D2. 重ねる時点と、隠すスレッドの扱い（A3・A7）
 
-`fetch(with:)` の今の順序（隠す → 状態とイベントを取る → もう一度隠す → 記録の整理）は保つ。条件付きの取得のときは、状態とイベントを取った後、2 回目の `revealOrHide` の前に `ThreadListMerge.merge(threads, into: state.threads)` で重ねる。状態とイベントを取っている間（actor の再入がある）に既読・Done・すべて既読で `state.threads` から外したスレッドは、重ねる元に入らない。受け取ったスレッドに入っていても、2 回目の `revealOrHide` で取り除かれる。
+`fetch(with:)` の今の順序（隠す → 状態とイベントを取る → もう一度隠す → 記録の整理）は保つ。条件付きの取得のときは、状態とイベントを取った後、2 回目の `revealOrHide` の前に `ThreadListMerge.merge(fetched, into: state.threads)`（隠す前の受け取ったスレッドを今の一覧に重ねたもの）で重ね、それを 2 回目の `revealOrHide` と `details.listed` の両方に渡す（条件なしの取得では両方に `fetched` を渡す）。隠すスレッドと既読の範囲は同じ取得の中では増える一方なので、隠す前のスレッドを重ねても、1 回目に除いたスレッドは 2 回目でも除かれる。状態とイベントを取っている間（actor の再入がある）に既読・Done・すべて既読で `state.threads` から外したスレッドは、重ねる元に入らない。受け取ったスレッドに入っていても、2 回目の `revealOrHide` で取り除かれる。
 
 `prefetchNewDetails` に渡すのは、重ねる前の受け取ったスレッドのままにする。新着の判定（`ThreadDetailsCache.pending(newOnly: true)`）は前に知らせた一覧と比べるので、重ねた一覧を渡しても結果は変わらない。受け取ったスレッドだけを見るほうが軽い。
 

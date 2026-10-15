@@ -229,15 +229,14 @@ actor AccountPoller {
             await prefetchNewDetails(in: threads, token: token, fetchNumber: number)
             guard !Task.isCancelled else { return (result, number) }
             // 条件付きの 200 は `If-Modified-Since` より後に更新されたスレッドだけなので、今の一覧に重ねる。
-            // 状態とイベントを取っている間に一覧から外したスレッドは、重ねる元に入らない
+            // 状態とイベントを取っている間に一覧から外したスレッドは、重ねる元に入らない。隠すスレッドは増える一方なので、
+            // 隠す前の受け取ったスレッドを重ねてから除いても、1 回目に除いたスレッドは戻らない
             let isConditional = ifModifiedSince != nil
-            if isConditional {
-                threads = ThreadListMerge.merge(threads, into: state.threads)
-            }
+            let listed = isConditional ? ThreadListMerge.merge(fetched, into: state.threads) : fetched
             threads = HiddenThreads.revealOrHide(
-                threads, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt)
+                listed, hidden: &hidden, readThroughs: &readThroughs, fetchNumber: number, startedAt: startedAt)
             // 隠したスレッドの記録も残す（既読にできずに一覧に戻ったときに、新着として取り直さないため）
-            details.listed(isConditional ? ThreadListMerge.merge(fetched, into: state.threads) : fetched)
+            details.listed(listed)
             result = .updated(
                 threads: threads, lastModified: lastModified, pollInterval: pollInterval, scopes: scopes,
                 // 条件付きの 200 の一覧の残りは前の取得のものなので、前の打ち切りを保つ
