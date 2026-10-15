@@ -400,23 +400,20 @@ extension GitHubAPIClient {
     }
 
     /// 承認を待っている run を、`pending_deployments` で確かめる上限（これより多ければ決めない）
-    static let waitingRunLimit = 5
+    private static let waitingRunLimit = 5
 
     /// 承認を待っている run を探す（github-api「ワークフローの実行の検索のリクエスト」）。1 件ならその run、2〜5 件なら
     /// ユーザーが承認できる待ちを持つ run が 1 件だけのときその run。決まらなければ「無い」。
     private func fetchWaitingWorkflowRun(
         of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
-        let runsPath = "repos/\(repository.owner)/\(repository.name)/actions/runs"
-        let url = endpoints.apiURL(path: runsPath).appending(queryValue: "waiting", for: "status")
-            .appending(queryValue: "20", for: "per_page")
+        let runsPath = Self.runsPath(of: repository)
         let page: WorkflowRunsPage
-        switch await get(url, endpoints: endpoints, token: token) {
-        case .success(let response):
-            guard let decoded = WorkflowRunsPage.decode(from: response.body) else { return .failed(.malformedBody) }
-            page = decoded
-        case .failure(let stop):
-            return stop.result
+        switch await fetchRuns(
+            of: repository, query: [("status", "waiting"), ("per_page", "20")], endpoints: endpoints, token: token)
+        {
+        case .success(let value): page = value
+        case .failure(let stop): return stop.result
         }
         let ids = page.workflowRuns.compactMap(\.validatedID)
         guard max(page.totalCount, page.workflowRuns.count) <= Self.waitingRunLimit,
@@ -462,11 +459,10 @@ extension GitHubAPIClient {
         _ title: CheckSuiteTitle, updatedAt: Date, of repository: RepositoryName, endpoints: APIEndpoints,
         token: AccessToken
     ) async -> ThreadDetailsFetchResult {
-        let url = endpoints.apiURL(path: "repos/\(repository.owner)/\(repository.name)/actions/runs")
-            .appending(queryValue: title.branch, for: "branch").appending(queryValue: "30", for: "per_page")
-        switch await get(url, endpoints: endpoints, token: token) {
-        case .success(let response):
-            guard let page = WorkflowRunsPage.decode(from: response.body) else { return .failed(.malformedBody) }
+        switch await fetchRuns(
+            of: repository, query: [("branch", title.branch), ("per_page", "30")], endpoints: endpoints, token: token)
+        {
+        case .success(let page):
             guard
                 let id = WorkflowRunSummary.closestRun(
                     named: title.workflowName, updatedNear: updatedAt, in: page.workflowRuns)
@@ -474,6 +470,30 @@ extension GitHubAPIClient {
             return .found(ThreadDetails(state: nil, event: nil, workflowRunID: id))
         case .failure(let stop):
             return stop.result
+        }
+    }
+
+    /// `repos/<owner>/<name>/actions/runs`
+    private static func runsPath(of repository: RepositoryName) -> String {
+        "repos/\(repository.owner)/\(repository.name)/actions/runs"
+    }
+
+    /// run の一覧を `query` で絞って取る。
+    private func fetchRuns(
+        of repository: RepositoryName, query: [(name: String, value: String)], endpoints: APIEndpoints,
+        token: AccessToken
+    ) async -> Result<WorkflowRunsPage, DetailsStop> {
+        let url = query.reduce(endpoints.apiURL(path: Self.runsPath(of: repository))) {
+            $0.appending(queryValue: $1.value, for: $1.name)
+        }
+        switch await get(url, endpoints: endpoints, token: token) {
+        case .success(let response):
+            guard let page = WorkflowRunsPage.decode(from: response.body) else {
+                return .failure(DetailsStop(.failed(.malformedBody)))
+            }
+            return .success(page)
+        case .failure(let stop):
+            return .failure(stop)
         }
     }
 

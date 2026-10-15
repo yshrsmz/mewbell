@@ -26,11 +26,8 @@ enum ThreadWebURL {
             guard let subject, subject.collection == "releases", ThreadID.isValid(subject.id) else { return nil }
             return .release(id: subject.id)
         case .actions:
-            switch kind {
-            case .workflowRun: return .waitingWorkflowRun
-            case .checkSuite: return CheckSuiteTitle(title).map(DetailsSubject.checkSuite)
-            default: return nil
-            }
+            // `actionsTarget` が `.actions` を返すのは WorkflowRun と CheckSuite だけ
+            return kind == .workflowRun ? .waitingWorkflowRun : CheckSuiteTitle(title).map(DetailsSubject.checkSuite)
         case .commit, .discussion, .discussions, .releaseTag, .workflowRun, nil:
             return nil
         }

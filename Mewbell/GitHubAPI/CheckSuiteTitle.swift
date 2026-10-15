@@ -4,7 +4,7 @@ import Foundation
 /// 試行の回数は読むが持たない（run を選ぶのにも開く URL にも使わない）。
 struct CheckSuiteTitle: Hashable, Sendable {
     /// ワークフローの実行の結果
-    enum Result: String, Hashable, Sendable {
+    enum Result: String, Sendable {
         case failed
         case failedAtStartup = "failed at startup"
         case cancelled

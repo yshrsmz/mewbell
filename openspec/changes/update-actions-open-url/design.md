@@ -55,7 +55,7 @@
 
 `GitHubAPIClient.fetchDetails` の `switch` に 2 つの場合を足し、`fetchReleaseTag` と同じ並びに `private func fetchWaitingWorkflowRun` と `private func fetchCheckSuiteRun` を置く。状態コードの扱いは今の `get(_:endpoints:token:)` をそのまま使う（`404` / `410` / `422` と、レート制限でない `403` は「無い」）。`pending_deployments` は候補ごとに順に送り、どれかが一時的な失敗・認証の失敗・レート制限になったら、その結果で終える。`404` などで「無い」なら、その run は承認できないものとして数える。
 
-レスポンスは `Decodable` の `private struct` で、使うフィールドだけを持つ（`WorkflowRunsPage { totalCount: Int; workflowRuns: [WorkflowRunSummary] }`、`WorkflowRunSummary { id: Int64; name: String?; updatedAt: Date }`、`PendingDeployment { currentUserCanApprove: Bool }`）。`id` は文字列にして `ThreadID.isValid` を通す。
+レスポンスは `Mewbell/GitHubAPI/WorkflowRunSummary.swift` の `Decodable` の struct で、使うフィールドだけを持つ（`WorkflowRunsPage { totalCount: Int; workflowRuns: [WorkflowRunSummary] }`、`WorkflowRunSummary { id: Int64; name: String?; updatedAt: String }`、`PendingDeployment { currentUserCanApprove: Bool }`）。`ReleaseSummary` と同じく、テストと選ぶ関数から使うので private にしない。`updatedAt` は `ThreadDTO` と同じく文字列で読み、比べるときに `Date(_:strategy: .iso8601)` で読む（`APIJSON.decoder()` は日付の読み方を決めていない）。`id` は文字列にして `ThreadID.isValid` を通す（負の値は「無い」、`Int64` に入らない値は形の崩れたボディになる）。run の一覧の取得は `fetchRuns(of:query:endpoints:token:)` の 1 か所にまとめる。
 
 `CheckSuite` の run の選び方（名前が一致し、`updated_at` の差が 10 分以内で最も近いもの。同じ差が 2 件なら決めない）は、`WorkflowRunSummary` の配列とスレッドの `updated_at` を受け取る `static` の純粋な関数にし、単体でテストする（A7）。
 

@@ -26,7 +26,7 @@ struct WorkflowRunSummary: Decodable, Sendable {
     }
 
     /// run を選ぶとき、`updated_at` の差として許す幅
-    static let matchWindow: TimeInterval = 600
+    private static let matchWindow: TimeInterval = 600
 
     /// `runs` のうち、`name` が `workflowName` と一致し、`updated_at` と `updatedAt` の差が `matchWindow` 以内で最も
     /// 小さいものの ID。当たらないとき、差が最も小さいものが 2 件以上あるときは nil。
