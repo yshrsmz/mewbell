@@ -62,6 +62,9 @@ struct ActionsThreadWebURLTests {
         // 名前に `"` を含むワークフローは名前で絞らない。`&` や `#` はクエリの値の中に閉じる
         (#"Say "hi" workflow run failed for main branch"#, "query=is:failure%20branch:main"),
         ("CI workflow run failed for a&b#c branch", "query=workflow:%22CI%22%20is:failure%20branch:a%26b%23c"),
+        // `"` や空白を含むブランチでは絞らない
+        (#"CI workflow run failed for fix/"q" branch"#, "query=workflow:%22CI%22%20is:failure"),
+        ("CI workflow run failed for a b branch", "query=workflow:%22CI%22%20is:failure"),
     ])
     func opensTheFilteredRunsWithoutARun(_ title: String, _ query: String) throws {
         let opened = try #require(

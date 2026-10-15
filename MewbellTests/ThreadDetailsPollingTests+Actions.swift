@@ -16,8 +16,11 @@ extension ThreadDetailsPollingTests {
         return PollerFixture.ok(body: Data("[\(json.joined(separator: ","))]".utf8))
     }
 
-    /// 承認を待っている run の一覧には、run `38692691414` だけを返す。
+    /// 承認を待っている run の一覧には run `38692691414` だけを返し、その `pending_deployments` には承認できる待ちを返す。
     static func waitingRuns(_ request: URLRequest) -> HTTPResponse {
+        if request.url?.lastPathComponent == "pending_deployments" {
+            return HTTPResponse(statusCode: 200, body: Data(#"[{"current_user_can_approve": true}]"#.utf8))
+        }
         let body =
             #"{"total_count": 1, "workflow_runs": [{"id": 38692691414, "name": "Deploy", "updated_at": "2026-10-08T12:00:00Z"}]}"#
         return HTTPResponse(statusCode: 200, body: Data(body.utf8))
@@ -34,12 +37,16 @@ extension ThreadDetailsPollingTests {
         #expect(first.threads.first { $0.id == "2" }?.details == Self.waitingRun)
         let urls = detailsRequests(fixture).compactMap { $0.url?.absoluteString }
         #expect(
-            urls.allSatisfy { $0 == "https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=20" })
-        // 1 は最初の一覧の後に、2 は知らせる前に 1 回ずつ取り、同じ `updated_at` の間は取り直さない
-        #expect(urls.count == 2)
+            Set(urls) == [
+                "https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=20",
+                "https://api.github.com/repos/octo/app/actions/runs/38692691414/pending_deployments",
+            ])
+        // 1 は最初の一覧の後に、2 は知らせる前に 1 回ずつ探し（一覧と `pending_deployments` の 2 回ずつ）、
+        // 同じ `updated_at` の間は探し直さない
+        #expect(urls.count == 4)
         fixture.advance(by: 300)
         await fixture.sleeper.waitForSleeps(3)
-        #expect(detailsRequests(fixture).count == 2)
+        #expect(detailsRequests(fixture).count == 4)
         fixture.poller.stop()
     }
 }

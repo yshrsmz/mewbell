@@ -11,7 +11,7 @@ GitHub Actions の通知は、種類が 2 つある。どちらも件名に run 
 
 - 通知の種類 `WorkflowRun` を、ほかの種類（`other`）から分けて扱う。`CheckSuite` は今も種類として持っているが、開く URL では扱っていないので、扱うようにする。
 - Release のタグと同じく「スレッドのイベントの取得」の仕組みで、スレッドの run を API で探し、その ID を覚える。
-  - `WorkflowRun`: `GET /repos/{owner}/{name}/actions/runs?status=waiting` で承認を待っている run を取る。1 件ならその run にする。2〜5 件なら、それぞれの `GET /repos/{owner}/{name}/actions/runs/{run_id}/pending_deployments` を取り、ユーザーが承認できる（`current_user_can_approve`）run が 1 件だけならその run にする。それ以外は「決まらない」にする。
+  - `WorkflowRun`: `GET /repos/{owner}/{name}/actions/runs?status=waiting` で承認を待っている run を取る。1〜5 件なら、それぞれの `GET /repos/{owner}/{name}/actions/runs/{run_id}/pending_deployments` を取り、ユーザーが承認できる（`current_user_can_approve`）run が 1 件だけならその run にする。それ以外は「決まらない」にする。
   - `CheckSuite`: 件名からワークフロー名・結果・ブランチ・試行の回数を読み、`GET /repos/{owner}/{name}/actions/runs?branch=<ブランチ>` で取った run から、ワークフロー名と結果（と試行の回数）が合い、更新日時がスレッドの `updated_at` に最も近い（前後 10 分以内）ものにする。当たらなければ「決まらない」にする。
 - 開く URL:
   - run が決まっていれば、どちらも `<Web ベース>/<owner>/<name>/actions/runs/<run の ID>`。

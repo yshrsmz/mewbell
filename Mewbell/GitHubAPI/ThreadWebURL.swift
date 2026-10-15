@@ -162,7 +162,7 @@ enum ThreadWebURL {
     }
 
     /// 種類が CheckSuite の run が決まらないときの、Actions の一覧の絞り込み（ワークフロー名・結果・ブランチの順）。
-    /// ワークフロー名が `"` を含むときは、絞り込みの意味が変わらないように名前では絞らない。
+    /// ワークフロー名が `"` を含むときと、ブランチが `"` か空白を含むときは、絞り込みの意味が変わらないようにそれでは絞らない。
     private static func actionsFilter(_ title: CheckSuiteTitle) -> String {
         let status =
             switch title.result {
@@ -172,7 +172,9 @@ enum ThreadWebURL {
             case .succeeded: "success"
             }
         let workflow = title.workflowName.contains("\"") ? nil : "workflow:\"\(title.workflowName)\""
-        return [workflow, "is:\(status)", "branch:\(title.branch)"].compactMap { $0 }.joined(separator: " ")
+        let quotesOrSpaces = CharacterSet(charactersIn: "\"").union(.whitespaces)
+        let branch = title.branch.rangeOfCharacter(from: quotesOrSpaces) == nil ? "branch:\(title.branch)" : nil
+        return [workflow, "is:\(status)", branch].compactMap { $0 }.joined(separator: " ")
     }
 
     /// `subject.url` のうち、API ベース URL の下の `repos/<owner>/<name>/<collection>/<id>` で、`<owner>/<name>` が

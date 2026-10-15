@@ -70,20 +70,21 @@ extension ThreadDetailsRequestTests {
 
     // MARK: WorkflowRun
 
-    @Test func takesTheOnlyWaitingRun() async throws {
+    @Test func takesTheOnlyWaitingRunTheUserCanApprove() async throws {
         let (thread, endpoints) = try approvalThread()
-        let transport = transport(list: Self.waiting(["38692691414"]))
+        let transport = transport(list: Self.waiting(["38692691414"])) { _ in Self.pending(canApprove: true) }
         #expect(await fetch(thread, endpoints, transport) == Self.found("38692691414"))
         #expect(
             transport.requests.map { $0.url?.absoluteString } == [
-                "https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=20"
+                "https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=20",
+                "https://api.github.com/repos/octo/app/actions/runs/38692691414/pending_deployments",
             ])
         #expect(transport.requests.first?.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
     }
 
     @Test func buildsTheWaitingRunsURLOnGHES() async throws {
         let (thread, endpoints) = try approvalThread(host: "ghe.example.com", repository: "team/svc")
-        let transport = transport(list: Self.waiting(["1"]))
+        let transport = transport(list: Self.waiting(["1"])) { _ in Self.pending(canApprove: true) }
         _ = await fetch(thread, endpoints, transport)
         #expect(
             transport.requests.first?.url?.absoluteString
@@ -111,6 +112,7 @@ extension ThreadDetailsRequestTests {
 
     @Test(arguments: [
         ([String](), Int?.none, [Bool]()),
+        (["103"], nil, [false]),
         (["101", "102"], nil, [true, true]),
         (["101", "102"], nil, [false, false]),
         (["101", "102", "103", "104", "105", "106"], nil, []),

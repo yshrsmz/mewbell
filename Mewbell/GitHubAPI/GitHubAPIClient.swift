@@ -402,8 +402,9 @@ extension GitHubAPIClient {
     /// 承認を待っている run を、`pending_deployments` で確かめる上限（これより多ければ決めない）
     private static let waitingRunLimit = 5
 
-    /// 承認を待っている run を探す（github-api「ワークフローの実行の検索のリクエスト」）。1 件ならその run、2〜5 件なら
-    /// ユーザーが承認できる待ちを持つ run が 1 件だけのときその run。決まらなければ「無い」。
+    /// 承認を待っている run を探す（github-api「ワークフローの実行の検索のリクエスト」）。1〜5 件なら、ユーザーが承認できる
+    /// 待ちを持つ run が 1 件だけのときその run（1 件でも確かめる。通知の run が承認された後に、別の人の承認を待つ run を
+    /// 開かないように）。決まらなければ「無い」。
     private func fetchWaitingWorkflowRun(
         of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
@@ -419,7 +420,6 @@ extension GitHubAPIClient {
         guard max(page.totalCount, page.workflowRuns.count) <= Self.waitingRunLimit,
             ids.count == page.workflowRuns.count, !ids.isEmpty
         else { return .unavailable }
-        guard ids.count > 1 else { return .found(ThreadDetails(state: nil, event: nil, workflowRunID: ids[0])) }
         switch await approvableRuns(ids, runsPath: runsPath, endpoints: endpoints, token: token) {
         case .success(let approvable) where approvable.count == 1:
             return .found(ThreadDetails(state: nil, event: nil, workflowRunID: approvable[0]))

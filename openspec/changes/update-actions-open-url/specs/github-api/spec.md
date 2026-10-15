@@ -8,9 +8,10 @@ Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling
 
 1. `GET <API ベース URL>/repos/{owner}/{name}/actions/runs?status=waiting&per_page=20` で、承認を待っている run を取る
 2. 1 件も無ければ、run は「無い」
-3. 1 件なら、その run にする
-4. 2〜5 件なら、それぞれの `GET <API ベース URL>/repos/{owner}/{name}/actions/runs/{run の ID}/pending_deployments` を取り、`current_user_can_approve` が true の待ちを 1 つでも持つ run が 1 件だけなら、その run にする。そうでなければ run は「無い」
-5. 6 件以上（`total_count` が 6 以上のときを含む）なら、run は「無い」
+3. 1〜5 件なら、それぞれの `GET <API ベース URL>/repos/{owner}/{name}/actions/runs/{run の ID}/pending_deployments` を取り、`current_user_can_approve` が true の待ちを 1 つでも持つ run が 1 件だけなら、その run にする。そうでなければ run は「無い」
+4. 6 件以上（`total_count` が 6 以上のときを含む）なら、run は「無い」
+
+1 件のときも `pending_deployments` で確かめなければならない（MUST）。通知の run がほかの人に承認された後に、ユーザーが承認できない別の run だけが待っていることがあるため。
 
 種類が `CheckSuite` のスレッド（ワークフローの実行の結果）は、件名を `<ワークフロー名> workflow run[, Attempt #<数字>] <結果> for <ブランチ> branch` の形として読まなければならない（MUST）。`<結果>` は `failed`、`failed at startup`、`cancelled`、`skipped`、`succeeded` のいずれかでなければならず、ワークフロー名とブランチは空でなく、UTF-8 で 255 バイト以下で、制御文字を含まないものでなければならない（MUST）。読めなければ、リクエストを送らずに run は「無い」としなければならない（MUST）。読めたら、`GET <API ベース URL>/repos/{owner}/{name}/actions/runs?branch=<ブランチ>&per_page=30` を 1 回だけ送り、`name` がワークフロー名と一致し、`updated_at` とスレッドの `updated_at` の差が 10 分以内の run のうち、差が最も小さいものにしなければならない（MUST）。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」としなければならない（MUST）。
 
@@ -29,8 +30,15 @@ Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling
 
 - **GIVEN** `github.com/alice` の種類が `WorkflowRun` のスレッドのリポジトリが `octo/app`
 - **WHEN** Mewbell がそのスレッドの run を探し、API が `200` と、`id: 38692691414` の run 1 件を返す
+- **AND** `GET /repos/octo/app/actions/runs/38692691414/pending_deployments` が `current_user_can_approve: true` の待ちを返す
 - **THEN** リクエストは `https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=20` に `alice` のトークンを付けて送られる
-- **AND** `pending_deployments` のリクエストは送られず、そのスレッドの run は `38692691414` になる
+- **AND** そのスレッドの run は `38692691414` になる
+
+#### Scenario: 承認を待っている 1 件の run を承認できない
+
+- **GIVEN** 承認を待っている run が `103` の 1 件だけで、その `pending_deployments` が `current_user_can_approve: false` の待ちだけを返す
+- **WHEN** Mewbell がレスポンスを受け取る
+- **THEN** そのスレッドの run は「無い」になる
 
 #### Scenario: 承認を待っている run が複数
 
