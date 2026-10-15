@@ -104,6 +104,8 @@ struct NotificationStoreActionTests {
         #expect(store.feeds[bob]?.threads.count == 3)
         #expect(store.unreadCount == 3)
         #expect(store.feeds[alice]?.canMarkAllRead != true)
+        // 一覧から外した後に PUT を送るので、届くまで待つ
+        await waitUntil { self.urls("PUT").count == 1 }
         #expect(urls("PUT") == ["https://api.github.com/notifications"])
         // alice の通知だけが取り下がる
         await notifier.waitForPendingWork()
