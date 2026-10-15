@@ -19,6 +19,10 @@ struct WorkflowRunSummary: Decodable, Sendable {
     let name: String?
     /// 結果（`failure`・`success` など）。終わっていなければ nil
     let conclusion: String?
+    /// 状態（`completed`・`in_progress`・`waiting` など）
+    let status: String?
+    /// 始まった時刻（`run_started_at`）
+    let runStartedAt: String?
     let updatedAt: String
 
     /// 検証した run の ID（1〜20 桁の数字）。通らなければ nil。
@@ -43,6 +47,29 @@ struct WorkflowRunSummary: Decodable, Sendable {
         guard let closest = candidates.map(\.distance).min() else { return nil }
         let closestRuns = candidates.filter { $0.distance == closest }
         return closestRuns.count == 1 ? closestRuns[0].id : nil
+    }
+
+    /// `runs` に、`updated_at` と `updatedAt` の差が `matchWindow` 以内の run があるか。日時を読めない run は数えない。
+    static func hasRun(updatedNear updatedAt: Date, in runs: [WorkflowRunSummary]) -> Bool {
+        runs.contains { run in
+            (try? Date(run.updatedAt, strategy: .iso8601)).map { abs($0.timeIntervalSince(updatedAt)) <= matchWindow }
+                ?? false
+        }
+    }
+
+    /// `runs` のうち、`run_started_at` が `date` 以前で、終わった run（`status` が `completed`）なら `updated_at` が `date`
+    /// 以降のもの（`date` に動いていた run）が 1 件だけなら、その ID。終わっていない run は今も動いているものとして数える
+    /// （Mac の時計を終わりにすると、時計のずれで外れるため）。日時を読めない run は数えない。
+    static func runSpanning(_ date: Date, in runs: [WorkflowRunSummary]) -> String? {
+        let spanning = runs.compactMap { run -> String? in
+            guard let id = run.validatedID,
+                let startedAt = run.runStartedAt.flatMap({ try? Date($0, strategy: .iso8601) }),
+                let updatedAt = try? Date(run.updatedAt, strategy: .iso8601)
+            else { return nil }
+            let isRunning = run.status != "completed"
+            return startedAt <= date && (isRunning || date <= updatedAt) ? id : nil
+        }
+        return spanning.count == 1 ? spanning[0] : nil
     }
 }
 
