@@ -151,12 +151,14 @@ struct GitHubAPIClient: Sendable {
             method: "DELETE", endpoints: endpoints, token: token, threadID: threadID, success: [204, 404])
     }
 
+    /// API に送る日時の書き方（UTC、秒まで、末尾が `Z`）
+    private static let apiDateFormat = Date.ISO8601FormatStyle(includingFractionalSeconds: false, timeZone: .gmt)
+
     /// アカウントの通知のうち、`lastReadAt` 以前に更新されたものをすべて既読にする（`PUT /notifications`）。
     /// `202` は GitHub が後から非同期に既読にするという意味で、成功として扱う。
     func markAllRead(endpoints: APIEndpoints, token: AccessToken, lastReadAt: Date) async -> ThreadActionResult {
         // 秒まで・UTC（呼び出し元は隠す範囲も秒に揃えている）
-        let format = Date.ISO8601FormatStyle(includingFractionalSeconds: false, timeZone: .gmt)
-        let body = MarkAllReadBody(lastReadAt: lastReadAt.formatted(format), read: true)
+        let body = MarkAllReadBody(lastReadAt: lastReadAt.formatted(Self.apiDateFormat), read: true)
         guard let data = try? JSONEncoder().encode(body) else { return .failed(.malformedBody) }
         return await sendAction(
             endpoints.apiURL(path: "notifications"), method: "PUT", endpoints: endpoints, token: token,
@@ -408,27 +410,31 @@ extension GitHubAPIClient {
     private func fetchApprovalRequestRun(
         updatedAt: Date, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
-        let waiting = await fetchApprovableWaitingRun(
-            updatedAt: updatedAt, of: repository, endpoints: endpoints, token: token)
-        // 承認を待っている run から決まらなければ、通知の run がもう承認されたものとして、通知の時刻に動いていた run を探す
-        guard waiting == .unavailable else { return waiting }
-        return await fetchRunSpanning(updatedAt, of: repository, endpoints: endpoints, token: token)
-    }
-
-    /// 承認を待っている run（1〜5 件）のうち、ユーザーが承認できる待ちを持ち、承認待ちになった時刻（`updated_at`）が
-    /// `updatedAt`（通知の時刻）に最も近いもの（1 件でも確かめる。通知の run が承認された後に、別の人の承認を待つ run や
-    /// 後から待ち始めた run を開かないように）。決まらなければ「無い」。
-    private func fetchApprovableWaitingRun(
-        updatedAt: Date, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
-    ) async -> ThreadDetailsFetchResult {
-        let runsPath = Self.runsPath(of: repository)
-        let page: WorkflowRunsPage
         switch await fetchRuns(
             of: repository, query: [("status", "waiting"), ("per_page", "6")], endpoints: endpoints, token: token)
         {
-        case .success(let value): page = value
-        case .failure(let stop): return stop.result
+        // 承認を待っている run が無いか、一覧が「無い」なら、通知の run はもう承認されたものとして、通知の時刻に動いていた
+        // run を探す（承認を待っている run があるのに決まらないときは、通知の run がまだ待っているかもしれないので探さない）
+        case .success(let page) where page.totalCount == 0 && page.workflowRuns.isEmpty:
+            return await fetchRunSpanning(updatedAt, of: repository, endpoints: endpoints, token: token)
+        case .failure(let stop) where stop.result == .unavailable:
+            return await fetchRunSpanning(updatedAt, of: repository, endpoints: endpoints, token: token)
+        case .success(let page):
+            return await approvableWaitingRun(
+                in: page, updatedAt: updatedAt, of: repository, endpoints: endpoints, token: token)
+        case .failure(let stop):
+            return stop.result
         }
+    }
+
+    /// 承認を待っている run の一覧 `page`（1〜5 件）のうち、ユーザーが承認できる待ちを持ち、承認待ちになった時刻（`updated_at`）が
+    /// `updatedAt`（通知の時刻）に最も近いもの（1 件でも確かめる。通知の run が承認された後に、別の人の承認を待つ run や
+    /// 後から待ち始めた run を開かないように）。決まらなければ「無い」。
+    private func approvableWaitingRun(
+        in page: WorkflowRunsPage, updatedAt: Date, of repository: RepositoryName, endpoints: APIEndpoints,
+        token: AccessToken
+    ) async -> ThreadDetailsFetchResult {
+        let runsPath = Self.runsPath(of: repository)
         let runs = page.workflowRuns
         guard max(page.totalCount, runs.count) <= Self.waitingRunLimit, !runs.isEmpty,
             runs.allSatisfy({ $0.validatedID != nil })
@@ -471,8 +477,7 @@ extension GitHubAPIClient {
     private func fetchRunSpanning(
         _ date: Date, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
-        let format = Date.ISO8601FormatStyle(includingFractionalSeconds: false, timeZone: .gmt)
-        let createdBefore = "<=" + date.formatted(format)
+        let createdBefore = "<=" + date.formatted(Self.apiDateFormat)
         switch await fetchRuns(
             of: repository, query: [("created", createdBefore), ("per_page", "30")], endpoints: endpoints,
             token: token)
@@ -480,7 +485,7 @@ extension GitHubAPIClient {
         case .success(let page):
             // 承認を待っている run は、承認できるかと時刻をもう調べて外したものなので数えない
             let runs = page.workflowRuns.filter { $0.status != "waiting" }
-            return Self.workflowRunResult(WorkflowRunSummary.runSpanning(date, in: runs, now: now()))
+            return Self.workflowRunResult(WorkflowRunSummary.runSpanning(date, in: runs))
         case .failure(let stop):
             return stop.result
         }

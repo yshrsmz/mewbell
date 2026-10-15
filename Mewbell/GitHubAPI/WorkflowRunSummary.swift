@@ -49,16 +49,17 @@ struct WorkflowRunSummary: Decodable, Sendable {
         return closestRuns.count == 1 ? closestRuns[0].id : nil
     }
 
-    /// `runs` のうち、`run_started_at` が `date` 以前で、終わった時刻（`status` が `completed` なら `updated_at`、
-    /// そうでなければ `now`）が `date` 以降のもの（`date` に動いていた run）が 1 件だけなら、その ID。日時を読めない run は数えない。
-    static func runSpanning(_ date: Date, in runs: [WorkflowRunSummary], now: Date) -> String? {
+    /// `runs` のうち、`run_started_at` が `date` 以前で、終わった run（`status` が `completed`）なら `updated_at` が `date`
+    /// 以降のもの（`date` に動いていた run）が 1 件だけなら、その ID。終わっていない run は今も動いているものとして数える
+    /// （Mac の時計を終わりにすると、時計のずれで外れるため）。日時を読めない run は数えない。
+    static func runSpanning(_ date: Date, in runs: [WorkflowRunSummary]) -> String? {
         let spanning = runs.compactMap { run -> String? in
             guard let id = run.validatedID,
                 let startedAt = run.runStartedAt.flatMap({ try? Date($0, strategy: .iso8601) }),
                 let updatedAt = try? Date(run.updatedAt, strategy: .iso8601)
             else { return nil }
-            let endedAt = run.status == "completed" ? updatedAt : now
-            return startedAt <= date && date <= endedAt ? id : nil
+            let isRunning = run.status != "completed"
+            return startedAt <= date && (isRunning || date <= updatedAt) ? id : nil
         }
         return spanning.count == 1 ? spanning[0] : nil
     }
