@@ -4,13 +4,13 @@
 
 Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling「スレッドのイベントの取得」の条件を満たすもの）についてだけ、そのスレッドのワークフローの実行（run）を探すために、次のリクエストを送らなければならない（SHALL）。リクエストの URL は、`subject.url` を使わず、検証済みのリポジトリの `owner/name`、検証済みの run の ID（1〜20 桁の数字）、件名から読んだ値から組み立てなければならない（MUST）。件名から読んだ値はクエリの値としてエスケープし、`+` も `%2B` にエスケープしなければならない（MUST。`&` や `=` でクエリの意味が変わらないように、`+` が空白として読まれないように）。組み立てた URL にも「トークンを送る相手の制限」の確認をしなければならず（MUST）、「トークンをリクエストごとに付ける」「リダイレクトとキャッシュ」「通信の内容をログに出さない」を同じく適用しなければならない（MUST）。
 
-種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。1 つのスレッドについて送るリクエストは最大 7 回にしなければならない（MUST）。
+種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。1 つのスレッドについて送るリクエストは最大 6 回にしなければならない（MUST。5 は 3 の `pending_deployments` と同じ回には送らない）。
 
 1. `GET <API ベース URL>/repos/{owner}/{name}/actions/runs?status=waiting&per_page=6` で、承認を待っている run を取る
 2. 1 件も無ければ、run は「無い」
 3. 1〜5 件なら、それぞれの `GET <API ベース URL>/repos/{owner}/{name}/actions/runs/{run の ID}/pending_deployments` を取り、`current_user_can_approve` が true の待ちを 1 つでも持つ run のうち、`updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内で、差が最も小さいものにする。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」
 4. 6 件以上（`total_count` が 6 以上のときを含む）なら、run は「無い」
-5. 2 で run が「無い」になったとき（承認を待っている run が 0 件のとき）と、1 の一覧が「無い」（`404` など）になったときは、`GET <API ベース URL>/repos/{owner}/{name}/actions/runs?created=<=<スレッドの updated_at>&per_page=30` で、通知より前に作られた run を取る。`<スレッドの updated_at>` は UTC の `YYYY-MM-DDTHH:MM:SSZ` の形で書き、`<=` とあわせてクエリの値としてエスケープする。取った run のうち、`status` が `waiting` でなく（1 の後に承認を待ち始めた run は数えない）、`run_started_at` がスレッドの `updated_at` 以前で、終わっていない（`status` が `completed` でない）か、`updated_at` がスレッドの `updated_at` 以降のもの（通知の時刻を挟む run）が 1 件だけなら、その run にする。0 件か 2 件以上なら、run は「無い」。3 と 4 で run が「無い」になったとき（承認を待っている run があるのに決まらないとき）は、通知の run がまだ待っているかもしれないので、5 のリクエストを送ってはならない（MUST NOT）
+5. 1 の一覧の run をすべて見られて（`total_count` が一覧の件数以下）、そのどれも `updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内でないとき（0 件を含む。通知の run はもう承認を待っていない）と、1 の一覧が「無い」（`404` など）になったときは、3 と 4 の代わりに、`GET <API ベース URL>/repos/{owner}/{name}/actions/runs?created=<=<スレッドの updated_at>&per_page=30` で、通知より前に作られた run を取る。`<スレッドの updated_at>` は UTC の `YYYY-MM-DDTHH:MM:SSZ` の形で書き、`<=` とあわせてクエリの値としてエスケープする。取った run のうち、`status` が `waiting` でなく（1 の後に承認を待ち始めた run は数えない）、`run_started_at` がスレッドの `updated_at` 以前で、終わっていない（`status` が `completed` でない）か、`updated_at` がスレッドの `updated_at` 以降のもの（通知の時刻を挟む run）が 1 件だけなら、その run にする。0 件か 2 件以上なら、run は「無い」。通知の前後 10 分以内に承認を待ち始めた run があるとき（3 と 4 で決める）と、1 の一覧の run をすべては見られないときは、通知の run がまだ待っているかもしれないので、5 のリクエストを送ってはならない（MUST NOT）
 
 1 件のときも `pending_deployments` で確かめ、時刻も照らさなければならない（MUST）。通知の run がほかの人に承認された後に、ユーザーが承認できない別の run や、後から待ち始めた別の run だけが待っていることがあるため。5. は、Mewbell がスレッドを初めて見たときに通知の run がもう承認されていた（Mewbell が起動していなかった間に届いた、一覧に出る前に Web で承認されたなど）ときのためにある。1〜4 が一時的な失敗・認証の失敗・レート制限になったときは、5. のリクエストを送ってはならない（MUST NOT）。
 
@@ -116,9 +116,15 @@ Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling
 
 #### Scenario: 承認を待っている run があるのに決まらない
 
-- **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run は `103`（`run_started_at` 11:55）の 1 件だけで、その `pending_deployments` が `current_user_can_approve: false` の待ちだけを返す
+- **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run は 11:59 に待ち始めた `103` の 1 件だけで、その `pending_deployments` が `current_user_can_approve: false` の待ちだけを返す
 - **WHEN** Mewbell がレスポンスを受け取る
 - **THEN** 通知より前に作られた run の一覧のリクエストは送られず、そのスレッドの run は「無い」になる
+
+#### Scenario: 通知から離れた時刻に待ち始めた run だけが承認を待っている
+
+- **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run は 15:00 に待ち始めた `201` の 1 件だけ
+- **WHEN** 通知より前に作られた run の一覧が、`run_started_at` 11:59:55・`status: completed`・`updated_at` 12:05:16 の run `14190806` を返す
+- **THEN** `201` の `pending_deployments` のリクエストは送られず、そのスレッドの run は `14190806` になる
 
 #### Scenario: 一覧を取るまでに承認を待ち始めた run は数えない
 

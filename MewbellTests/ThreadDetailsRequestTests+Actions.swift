@@ -155,9 +155,10 @@ extension ThreadDetailsRequestTests {
             Self.pending(canApprove: approvable[ids.firstIndex(of: id) ?? 0])
         }
         #expect(await fetch(thread, endpoints, transport) == .unavailable)
-        // 通知の前に作られた run の一覧は、承認を待っている run が 0 件のときだけ取る（承認を待っている run があるのに
-        // 決まらないときは、通知の run がまだ待っているかもしれないので探さない）
-        let searchesSpanning = ids.isEmpty && totalCount == nil
+        // 通知の前に作られた run の一覧は、通知の前後に待ち始めた run が無いときだけ取る（このテストの承認を待っている
+        // run は、どれも通知の 1 分前に待ち始めたもの。そういう run があるのに決まらないときは、通知の run がまだ
+        // 待っているかもしれないので探さない）
+        let searchesSpanning = ids.isEmpty
         #expect(transport.requests.count == 1 + approvable.count + (searchesSpanning ? 1 : 0))
         #expect((transport.requests.last?.url?.query()?.contains("created=") ?? false) == searchesSpanning)
     }
@@ -198,6 +199,21 @@ extension ThreadDetailsRequestTests {
         let transport = transport(list: Self.waiting([]), created: list)
         #expect(await fetch(thread, endpoints, transport) == .unavailable)
         #expect(transport.requests.count == 2)
+    }
+
+    /// 承認を待っている run が通知から離れた時刻に待ち始めたものだけなら、通知の run はもう承認されたものとして探す。
+    /// 承認を待っている run を全部は見られない（`total_count` が一覧より多い）ときは探さない。
+    @Test func searchesTheSpanningRunPastUnrelatedWaitingRuns() async throws {
+        let (thread, endpoints) = try approvalThread()
+        let created = Self.created([("14190806", ("2026-10-08T11:59:55Z", "2026-10-08T12:05:16Z"))])
+        let later = Self.runs([Run("201", "Deploy", "2026-10-08T15:00:00Z")])
+        let searched = transport(list: later, created: created) { _ in Self.pending(canApprove: true) }
+        #expect(await fetch(thread, endpoints, searched) == Self.found("14190806"))
+        #expect(searched.requests.count == 2)
+        let partial = Self.runs([Run("201", "Deploy", "2026-10-08T15:00:00Z")], totalCount: 7)
+        let unseen = transport(list: partial, created: created)
+        #expect(await fetch(thread, endpoints, unseen) == .unavailable)
+        #expect(unseen.requests.count == 1)
     }
 
     /// 承認を待っている run の一覧が「無い」（Actions を読めないなど）でも探す。
@@ -318,82 +334,5 @@ extension ThreadDetailsRequestTests {
     @Test func findsNoRunWhenTheBranchRunsCannotBeRead() async throws {
         let (thread, endpoints) = try checkSuiteThread()
         #expect(await fetch(thread, endpoints, transport(list: HTTPResponse(statusCode: 404))) == .unavailable)
-    }
-}
-
-/// run の一覧から、種類が CheckSuite のスレッドの run を選ぶ。
-struct WorkflowRunSelectionTests {
-    private let updatedAt = Date(timeIntervalSince1970: 1_791_460_800)  // 2026-10-08T12:00:00Z
-
-    private func run(_ id: Int64, _ updatedAt: String) -> WorkflowRunSummary {
-        WorkflowRunSummary(
-            id: id, name: "CI", conclusion: "failure", status: "completed", runStartedAt: nil, updatedAt: updatedAt)
-    }
-
-    @Test func takesTheClosestRun() {
-        let runs = [run(1, "2026-10-08T11:55:00Z"), run(2, "2026-10-08T12:02:00Z")]
-        #expect(WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: runs) == "2")
-    }
-
-    @Test func skipsRunsOutsideTheWindowOrWithoutADate() {
-        let runs = [
-            run(1, "2026-10-08T11:49:59Z"), run(2, "2026-10-08T12:10:01Z"), run(5, "not a date"),
-            run(-1, "2026-10-08T12:00:00Z"),
-        ]
-        #expect(WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: runs) == nil)
-        #expect(WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: [run(6, "2026-10-08T12:10:00Z")]) == "6")
-    }
-
-    @Test func decidesNothingOnATie() {
-        let runs = [run(1, "2026-10-08T11:58:00Z"), run(2, "2026-10-08T12:02:00Z")]
-        #expect(WorkflowRunSummary.closestRun(updatedNear: updatedAt, in: runs) == nil)
-    }
-
-    /// `runStartedAt`〜`updatedAt` の run。`status` が nil なら終わっていない run。
-    private func span(_ id: Int64, _ startedAt: String?, _ updatedAt: String, status: String? = "completed")
-        -> WorkflowRunSummary
-    {
-        WorkflowRunSummary(
-            id: id, name: "cloudformation-apply", conclusion: nil, status: status, runStartedAt: startedAt,
-            updatedAt: updatedAt)
-    }
-
-    /// 通知（12:00）の時刻に動いていた run が 1 件だけならその run。前に終わった run と後に始まった run は数えない。
-    @Test func takesTheOnlyRunSpanningTheNotification() {
-        let runs = [
-            span(1, "2026-10-08T11:58:53Z", "2026-10-08T11:59:27Z"),
-            span(2, "2026-10-08T11:59:55Z", "2026-10-08T12:05:14Z"),
-            span(3, "2026-10-08T12:00:30Z", "2026-10-08T12:01:00Z"),
-        ]
-        #expect(WorkflowRunSummary.runSpanning(updatedAt, in: runs) == "2")
-    }
-
-    /// 終わっていない run は今も動いているものとする（`updated_at` が通知の前でも、終わりを決めない）。
-    @Test func countsARunningRunAsSpanningUntilNow() {
-        let running = span(4, "2026-10-08T11:59:55Z", "2026-10-08T11:59:56Z", status: "in_progress")
-        #expect(WorkflowRunSummary.runSpanning(updatedAt, in: [running]) == "4")
-        let finished = span(5, "2026-10-08T11:59:55Z", "2026-10-08T11:59:56Z")
-        #expect(WorkflowRunSummary.runSpanning(updatedAt, in: [finished]) == nil)
-    }
-
-    @Test func decidesNothingForTwoOrNoSpanningRuns() {
-        let two = [
-            span(1, "2026-10-08T11:50:00Z", "2026-10-08T12:10:00Z"),
-            span(2, "2026-10-08T11:55:00Z", "2026-10-08T11:56:00Z", status: nil),
-        ]
-        #expect(WorkflowRunSummary.runSpanning(updatedAt, in: two) == nil)
-        #expect(WorkflowRunSummary.runSpanning(updatedAt, in: []) == nil)
-        let unreadable = [span(3, nil, "2026-10-08T12:10:00Z"), span(4, "yesterday", "2026-10-08T12:10:00Z")]
-        #expect(WorkflowRunSummary.runSpanning(updatedAt, in: unreadable) == nil)
-    }
-
-    /// 始まった時刻・終わった時刻と通知の時刻が同じ run は挟む run に入る。
-    @Test func includesTheBoundaries() {
-        #expect(
-            WorkflowRunSummary.runSpanning(
-                updatedAt, in: [span(1, "2026-10-08T12:00:00Z", "2026-10-08T12:05:00Z")]) == "1")
-        #expect(
-            WorkflowRunSummary.runSpanning(
-                updatedAt, in: [span(2, "2026-10-08T11:55:00Z", "2026-10-08T12:00:00Z")]) == "2")
     }
 }

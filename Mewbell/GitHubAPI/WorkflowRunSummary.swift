@@ -49,6 +49,14 @@ struct WorkflowRunSummary: Decodable, Sendable {
         return closestRuns.count == 1 ? closestRuns[0].id : nil
     }
 
+    /// `runs` に、`updated_at` と `updatedAt` の差が `matchWindow` 以内の run があるか。日時を読めない run は数えない。
+    static func hasRun(updatedNear updatedAt: Date, in runs: [WorkflowRunSummary]) -> Bool {
+        runs.contains { run in
+            (try? Date(run.updatedAt, strategy: .iso8601)).map { abs($0.timeIntervalSince(updatedAt)) <= matchWindow }
+                ?? false
+        }
+    }
+
     /// `runs` のうち、`run_started_at` が `date` 以前で、終わった run（`status` が `completed`）なら `updated_at` が `date`
     /// 以降のもの（`date` に動いていた run）が 1 件だけなら、その ID。終わっていない run は今も動いているものとして数える
     /// （Mac の時計を終わりにすると、時計のずれで外れるため）。日時を読めない run は数えない。

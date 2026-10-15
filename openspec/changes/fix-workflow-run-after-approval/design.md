@@ -26,9 +26,9 @@ GitHub の振る舞い（確かめたこと）:
 
 ### D1. 承認を待っている run から決まらないときだけ、通知の時刻を挟む run を探す（A7）
 
-`fetchApprovalRequestRun` で、承認を待っている run が 0 件だったときに（2 回目の code-review の指摘で、決まらなかったとき全般から絞った。承認を待っている run があるのに決まらないときは、通知の run がまだ待っているかもしれず、通知の時刻に動いていた別の run を開いてしまうため）、`fetchRuns(of:query:)` で `created=<=<T>&per_page=30` を取る（`T` はスレッドの `updated_at`）。一時的な失敗・認証の失敗・レート制限のときは、今までどおりその結果で終え、このリクエストは送らない。承認を待っている run の一覧が「無い」（`404` など）だったときは送る（どちらも Actions を読めなければ、同じく「無い」になる）。
+`fetchApprovalRequestRun` で、承認を待っている run をすべて見られて（`totalCount <= workflowRuns.count`）、そのどれも通知の前後 10 分以内に待ち始めていない（`WorkflowRunSummary.hasRun(updatedNear:in:)` が false。0 件を含む）ときに、`pending_deployments` を確かめる代わりに（2 回目と 3 回目の code-review の指摘で決めた。通知の前後に待ち始めた run があるのに決まらないときは、通知の run がまだ待っているかもしれず、通知の時刻に動いていた別の run を開いてしまう。一方で 0 件のときだけにすると、関係の無い run が後から承認を待ち始めただけで探せなくなる）、`fetchRuns(of:query:)` で `created=<=<T>&per_page=30` を取る（`T` はスレッドの `updated_at`）。一時的な失敗・認証の失敗・レート制限のときは、今までどおりその結果で終え、このリクエストは送らない。承認を待っている run の一覧が「無い」（`404` など）だったときは送る（どちらも Actions を読めなければ、同じく「無い」になる）。
 
-承認を待っている run（`status == "waiting"`）は、`runSpanning` に渡す前に除く（承認を待っている run が 0 件だった後に待ち始めた run で、通知の run ではない）。選び方は `WorkflowRunSummary` の `static func runSpanning(_ date: Date, in runs: [WorkflowRunSummary], now: Date) -> String?` にする（A7。純粋な関数として単体でテストする）。`run_started_at` が `date` 以前で、終わっていない（`status != "completed"`）か、`updated_at` が `date` 以降の run が 1 件だけならその ID、そうでなければ nil。日時を読めない run は数えない。終わっていない run の終わりを Mac の時計（`now`）にすると、時計が GitHub より遅れているときに通知の run が外れるので、終わりを決めない（2 回目の code-review の指摘で改めた）。
+承認を待っている run（`status == "waiting"`）は、`runSpanning` に渡す前に除く（承認を待っている run が 0 件だった後に待ち始めた run で、通知の run ではない）。選び方は `WorkflowRunSummary` の `static func runSpanning(_ date: Date, in runs: [WorkflowRunSummary]) -> String?` にする（A7。純粋な関数として単体でテストする）。`run_started_at` が `date` 以前で、終わっていない（`status != "completed"`）か、`updated_at` が `date` 以降の run が 1 件だけならその ID、そうでなければ nil。日時を読めない run は数えない。終わっていない run の終わりを Mac の時計（`now`）にすると、時計が GitHub より遅れているときに通知の run が外れるので、終わりを決めない（2 回目の code-review の指摘で改めた）。
 
 採らなかった案:
 

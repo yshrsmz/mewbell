@@ -405,17 +405,20 @@ extension GitHubAPIClient {
     /// 承認を待っている run を、`pending_deployments` で確かめる上限（これより多ければ決めない）
     private static let waitingRunLimit = 5
 
-    /// 種類が WorkflowRun のスレッドの run を探す（github-api「ワークフローの実行の検索のリクエスト」）。承認を待っている
-    /// run から決まらなければ、通知の時刻に動いていた run を探す。どちらでも決まらなければ「無い」。
+    /// 種類が WorkflowRun のスレッドの run を探す（github-api「ワークフローの実行の検索のリクエスト」）。通知の前後に承認を
+    /// 待ち始めた run があれば、その中から決める（通知の run がまだ待っているかもしれないので、決まらなくても別の探し方は
+    /// しない）。無ければ、通知の時刻に動いていた run を探す。どちらでも決まらなければ「無い」。
     private func fetchApprovalRequestRun(
         updatedAt: Date, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
         switch await fetchRuns(
             of: repository, query: [("status", "waiting"), ("per_page", "6")], endpoints: endpoints, token: token)
         {
-        // 承認を待っている run が無いか、一覧が「無い」なら、通知の run はもう承認されたものとして、通知の時刻に動いていた
-        // run を探す（承認を待っている run があるのに決まらないときは、通知の run がまだ待っているかもしれないので探さない）
-        case .success(let page) where page.totalCount == 0 && page.workflowRuns.isEmpty:
+        // 承認を待っている run をすべて見られて、そのどれも通知の前後に待ち始めていなければ（0 件を含む）、通知の run は
+        // もう承認されたものとして、通知の時刻に動いていた run を探す。一覧が「無い」ときも同じ
+        case .success(let page)
+        where page.totalCount <= page.workflowRuns.count
+            && !WorkflowRunSummary.hasRun(updatedNear: updatedAt, in: page.workflowRuns):
             return await fetchRunSpanning(updatedAt, of: repository, endpoints: endpoints, token: token)
         case .failure(let stop) where stop.result == .unavailable:
             return await fetchRunSpanning(updatedAt, of: repository, endpoints: endpoints, token: token)

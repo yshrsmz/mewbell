@@ -14,10 +14,10 @@
 
 ## What Changes
 
-- 種類が `WorkflowRun` のスレッドで、承認を待っている run が 0 件のとき（と、その一覧が「無い」のとき）は、`GET /repos/{owner}/{name}/actions/runs?created=<=<スレッドの updated_at>&per_page=30` で、通知より前に作られた run を取る。
+- 種類が `WorkflowRun` のスレッドで、承認を待っている run のどれも通知の前後 10 分以内に待ち始めていないとき（0 件を含む。通知の run はもう承認を待っていない）と、その一覧が「無い」ときは、`GET /repos/{owner}/{name}/actions/runs?created=<=<スレッドの updated_at>&per_page=30` で、通知より前に作られた run を取る。
 - そのうち、承認を待っていない（`status` が `waiting` でない）run で、`run_started_at` がスレッドの `updated_at` 以前で、終わっていないか、`updated_at` がスレッドの `updated_at` 以降の run（通知の時刻を挟む run）が 1 件だけなら、その run にする。0 件か 2 件以上なら、今までどおり「無い」（承認待ちの一覧を開く）。
-- 承認を待っている run があるとき（決まったときも、決まらなかったときも）と、一時的な失敗・認証の失敗・レート制限のときは、このリクエストを送らない。承認を待っている run があるのに決まらないときは、通知の run がまだ待っているかもしれないため。
-- 1 つのスレッドについて送るリクエストは、最大 6 回から最大 7 回になる。
+- 通知の前後 10 分以内に承認を待ち始めた run があるとき（決まったときも、決まらなかったときも）、承認を待っている run をすべては見られないとき（6 件以上）、一時的な失敗・認証の失敗・レート制限のときは、このリクエストを送らない。通知の run がまだ待っているかもしれないため。
+- 1 つのスレッドについて送るリクエストの最大は 6 回のまま（このリクエストは `pending_deployments` と同じ回には送らない）。
 
 ## Capabilities
 
@@ -35,5 +35,5 @@ ui「通知のスレッドを開く」は、run の ID を覚えていれば run
 
 - マイルストーン: M4（設定と操作）以降の保守の change。update-actions-open-url の続き。
 - 変更するもの: `Mewbell/GitHubAPI/GitHubAPIClient.swift`（承認を待っている run から決まらないときのリクエスト）、`Mewbell/GitHubAPI/WorkflowRunSummary.swift`（`run_started_at` と `status` を読む、通知の時刻を挟む run を選ぶ関数）、そのテスト。
-- API の呼び出し: 種類が `WorkflowRun` のスレッドで run が承認を待っていないとき、`updated_at` が変わるまでに 1 回増える。
+- API の呼び出し: 種類が `WorkflowRun` のスレッドで通知の run が承認を待っていないとき、`updated_at` が変わるまでに 1 回増える。そのときは `pending_deployments` を送らないので、最大は 6 回のまま。
 - トークン・gh サブプロセス・ネットワーク・URL を開く処理: ネットワーク（新しい API のリクエスト）に触れるので、`.claude/rules/security.md` が適用される。リクエストの URL は検証済みのリポジトリ名と、スレッドの `updated_at`（API が返した日時を読み直して書いた値）から組み立て、送る前のオリジン検査を通す。レスポンスからは run の ID・`run_started_at`・`status`・`updated_at` だけを読み、`html_url` などの URL は使わない。開く URL の組み立ては変えない。トークンは今までどおりメモリにだけ持ち、永続化しない。gh サブプロセスには触れない。

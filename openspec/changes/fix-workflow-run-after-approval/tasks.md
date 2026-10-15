@@ -2,11 +2,11 @@
 
 ## 1. 通知の時刻を挟む run を選ぶ
 
-- [x] 1.1 `Mewbell/GitHubAPI/WorkflowRunSummary.swift` の `WorkflowRunSummary` に `status` と `runStartedAt` を足し、`static func runSpanning(_ date: Date, in runs: [WorkflowRunSummary], now: Date) -> String?` を置く（design.md D1・D2）。`MewbellTests` の run の選び方のテストに、挟む 1 件（終わった run、動いている run）、挟む 2 件、0 件（通知の前に終わった run、通知の後に始まった run）、日時を読めない run、境界（`run_started_at` と通知が同じ時刻、終わった時刻と通知が同じ時刻）を足す。
+- [x] 1.1 `Mewbell/GitHubAPI/WorkflowRunSummary.swift` の `WorkflowRunSummary` に `status` と `runStartedAt` を足し、`static func runSpanning(_ date: Date, in runs: [WorkflowRunSummary]) -> String?` を置く（code-review の後に `now` の引数を外した）（design.md D1・D2）。`MewbellTests` の run の選び方のテストに、挟む 1 件（終わった run、動いている run）、挟む 2 件、0 件（通知の前に終わった run、通知の後に始まった run）、日時を読めない run、境界（`run_started_at` と通知が同じ時刻、終わった時刻と通知が同じ時刻）を足す。
 
 ## 2. リクエスト
 
-- [x] 2.1 `GitHubAPIClient.fetchApprovalRequestRun` で、承認を待っている run から決まらないときに `fetchRuns(of:query:)` で `created=<=<スレッドの updated_at>&per_page=30` を取り、`runSpanning` で選ぶ（D1・D3）。失敗・認証の失敗・レート制限のときは送らない。
+- [x] 2.1 `GitHubAPIClient.fetchApprovalRequestRun` で、通知の前後に承認を待ち始めた run が無いときに（code-review の後に「決まらないとき」から改めた） `fetchRuns(of:query:)` で `created=<=<スレッドの updated_at>&per_page=30` を取り、`runSpanning` で選ぶ（D1・D3）。失敗・認証の失敗・レート制限のときは送らない。
 - [x] 2.2 リクエストのテスト（`ThreadDetailsRequestTests+Actions.swift`）: 承認を待っている run が 0 件のとき、`https://api.github.com/repos/octo/app/actions/runs?created=%3C%3D2026-10-08T12:00:00Z&per_page=30` を送り、挟む run を選ぶこと（delta spec の「承認された後の通知」の形）。挟む run が 2 件なら「無い」。承認を待っている run から決まったとき、承認を待っている run の一覧が `502`・`401`・レート制限のときは送らないこと。承認を待っている run の一覧が `404` のときは送ること。`xcodebuild ... test -only-testing:` で該当のスイートを通し、スイート数を確かめる。
 
 ## 3. 確認
@@ -22,4 +22,4 @@
 
 - [x] 4.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。（2 件を取り込んだ: run の ID から結果を作る 3 か所を `workflowRunResult` にまとめた、`runStartedAt` に doc コメントを付けた。あわせて、承認待ちの run の後に通知の時刻に動いていた run も探すようになった `fetchWaitingWorkflowRun` を `fetchApprovalRequestRun` に改めた）
 - [x] 4.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。（6 件。承認を待っている run を代わりの探し方で拾い直す不具合を直し、実際の形のデータのテストを足した。日時の書き方を明示した。2 件を design の Risks に書いた。1 件は直し方で解消した。理由は PR 本文）
-- [x] 4.3 ロジックの変更を含む修正が多ければ、4.2 を新しいサブエージェントでもう一度実行する。（2 回目は 7 件。代わりの探し方を承認を待っている run が 0 件のときだけにした、終わっていない run の終わりを決めないようにした、日時の書き方を共有した。1 件を design の Risks に足した。3 件は Risks で受け入れ済み。2 回目の修正はロジックを含むので、3 回目を回した）
+- [x] 4.3 ロジックの変更を含む修正が多ければ、4.2 を新しいサブエージェントでもう一度実行する。（2 回目は 7 件。代わりの探し方を承認を待っている run が 0 件のときだけにした、終わっていない run の終わりを決めないようにした、日時の書き方を共有した。1 件を design の Risks に足した。3 件は Risks で受け入れ済み。2 回目の修正はロジックを含むので、3 回目を回した。3 回目は 9 件。ユーザーの判断で、代わりの探し方を「承認を待っている run が 0 件のとき」から「通知の前後 10 分以内に待ち始めた run が無いとき」に改めた。文書と実装の食い違い 3 件とテストの条件を直した。1 件は D1 の決めたとおり、3 件は Risks で受け入れ済み。3 回目の修正は、決めた条件を足すだけなので 4 回目は回さない）
