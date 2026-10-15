@@ -18,7 +18,7 @@
 
 ## 4. 仕上げ
 
-- [ ] 4.1 `bash scripts/lint.sh` が通ることを確かめる
+- [x] 4.1 `bash scripts/lint.sh` が通ることを確かめる
 - [ ] 4.2 `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug MEWBELL_WARNINGS_AS_ERRORS=YES build` と同じ Release のビルドが通り、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が通り、手元で起動して 3 の確認を終えたことを確かめる
 
 ## 5. レビュー（.claude/rules/review-process.md）
