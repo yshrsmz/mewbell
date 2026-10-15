@@ -37,6 +37,27 @@ struct ThreadDetailsCacheTests {
         #expect(cache.pending(in: threads, newOnly: false, limit: 10, now: now).map(\.id) == ["1"])
     }
 
+    /// リリースの ID を持つ Release は選び、番号もリリースの ID も持たないスレッド（ID の無い Release・Discussion・
+    /// Commit）は選ばない。番号とリリースの ID の求め方は `ThreadWebURL` のテストで確かめる
+    @Test func picksReleasesWithAnID() throws {
+        var cache = ThreadDetailsCache()
+        let repository = try #require(RepositoryName(fullName: "octo/app"))
+        func other(_ id: String, _ kind: SubjectKind, releaseID: String? = nil) -> NotificationThread {
+            NotificationThread(
+                id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: 10), title: "Thread \(id)",
+                kind: kind, subjectURL: nil, repository: repository, subjectNumber: nil, releaseID: releaseID)
+        }
+        let release = other("1", .release, releaseID: "12")
+        let threads = [release, other("2", .release), other("3", .discussion), other("4", .commit)]
+        #expect(cache.pending(in: threads, newOnly: false, limit: 10, now: now).map(\.id) == ["1"])
+        // 同じ updated_at でタグが「無い」だった Release は取り直さない
+        cache.record(.unavailable, for: release)
+        #expect(cache.pending(in: threads, newOnly: false, limit: 10, now: now).isEmpty)
+        let tagged = ThreadDetails(state: nil, event: nil, releaseTag: "v1.0.0")
+        cache.record(.found(tagged), for: release)
+        #expect(cache.attach(to: [release]).first?.details == tagged)
+    }
+
     @Test func givesUpAfterRepeatedFailures() throws {
         var cache = ThreadDetailsCache()
         let one = try thread("1", updatedAt: 10)

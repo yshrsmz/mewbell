@@ -70,8 +70,26 @@ struct NotificationThread: Hashable, Sendable, Identifiable {
     let repository: RepositoryName
     /// Issue・Pull request の番号。読み取るときに `ThreadWebURL.subjectNumber` で求める（開く URL と同じ検証を通らなければ nil）
     let subjectNumber: String?
-    /// 件名の状態とイベント。API のデコードでは nil で、ポーラーが取得した後に付ける
+    /// Release のリリースの ID。読み取るときに `ThreadWebURL.releaseID` で求める（検証を通らなければ nil）
+    let releaseID: String?
+    /// 件名の状態とイベント（Release ではタグ）。API のデコードでは nil で、ポーラーが取得した後に付ける
     var details: ThreadDetails?
+
+    init(
+        id: String, reason: String, updatedAt: Date, title: String, kind: SubjectKind, subjectURL: URL?,
+        repository: RepositoryName, subjectNumber: String?, releaseID: String? = nil, details: ThreadDetails? = nil
+    ) {
+        self.id = id
+        self.reason = reason
+        self.updatedAt = updatedAt
+        self.title = title
+        self.kind = kind
+        self.subjectURL = subjectURL
+        self.repository = repository
+        self.subjectNumber = subjectNumber
+        self.releaseID = releaseID
+        self.details = details
+    }
 }
 
 extension NotificationThread {
@@ -133,6 +151,8 @@ private struct ThreadDTO: Decodable {
             id: id, reason: reason ?? "", updatedAt: updatedAt, title: subject.title, kind: kind,
             subjectURL: subjectURL, repository: repository,
             subjectNumber: ThreadWebURL.subjectNumber(
+                kind: kind, subjectURL: subjectURL, repository: repository, endpoints: endpoints),
+            releaseID: ThreadWebURL.releaseID(
                 kind: kind, subjectURL: subjectURL, repository: repository, endpoints: endpoints))
     }
 }

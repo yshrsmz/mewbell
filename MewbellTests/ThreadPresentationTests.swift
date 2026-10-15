@@ -6,12 +6,13 @@ import Testing
 
 private func thread(
     id: String = "1", repository: String = "octo/app", kind: SubjectKind = .pullRequest, subjectURL: String? = nil,
-    updatedAt: TimeInterval = 0
+    updatedAt: TimeInterval = 0, releaseTag: String? = nil
 ) throws -> NotificationThread {
     NotificationThread(
         id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: updatedAt), title: "Thread \(id)",
         kind: kind, subjectURL: subjectURL.flatMap(URL.init(string:)),
-        repository: try #require(RepositoryName(fullName: repository)), subjectNumber: nil
+        repository: try #require(RepositoryName(fullName: repository)), subjectNumber: nil,
+        details: releaseTag.map { ThreadDetails(state: nil, event: nil, releaseTag: $0) }
     )
 }
 
@@ -161,11 +162,71 @@ struct ThreadWebURLTests {
                 == "https://github.com/octo/app/commit/0123abcdef")
     }
 
-    @Test func opensReleasesAndDiscussionsPages() throws {
+    @Test func opensTheReleasesPageWithoutATag() throws {
         #expect(
             url(try thread(kind: .release, subjectURL: "https://api.github.com/repos/octo/app/releases/123"), github)
                 == "https://github.com/octo/app/releases")
-        #expect(url(try thread(kind: .discussion), github) == "https://github.com/octo/app/discussions")
+    }
+
+    @Test func opensTheReleaseOfTheTag() throws {
+        let subject = "https://api.github.com/repos/openai/codex/releases/413167889"
+        #expect(
+            url(
+                try thread(
+                    repository: "openai/codex", kind: .release, subjectURL: subject,
+                    releaseTag: "rust-v0.163.0-alpha.10.1"), github)
+                == "https://github.com/openai/codex/releases/tag/rust-v0.163.0-alpha.10.1")
+        #expect(
+            url(try thread(kind: .release, releaseTag: "cli/v1.2.0"), ghes)
+                == "https://ghe.example.com/octo/app/releases/tag/cli/v1.2.0")
+    }
+
+    /// `?`・`#`・`%` はパスの要素としてエスケープし、クエリやフラグメントにしない。
+    @Test func escapesTheTagAsPathComponents() throws {
+        let opened = try #require(
+            ThreadWebURL.make(for: try thread(kind: .release, releaseTag: "v1?a#b%c"), endpoints: github))
+        #expect(opened.absoluteString == "https://github.com/octo/app/releases/tag/v1%3Fa%23b%25c")
+        #expect(opened.query() == nil)
+        #expect(opened.fragment() == nil)
+        #expect(opened.host() == "github.com")
+    }
+
+    @Test(arguments: ["", "../../settings", "v1 0", "a//b"])
+    func opensTheReleasesPageForAnInvalidTag(_ tag: String) throws {
+        #expect(url(try thread(kind: .release, releaseTag: tag), github) == "https://github.com/octo/app/releases")
+    }
+
+    @Test func opensTheDiscussionOfTheNumber() throws {
+        #expect(
+            url(
+                try thread(kind: .discussion, subjectURL: "https://api.github.com/repos/octo/app/discussions/2045"),
+                github)
+                == "https://github.com/octo/app/discussions/2045")
+        #expect(
+            url(
+                try thread(kind: .discussion, subjectURL: "https://api.acme.ghe.com/repos/octo/app/discussions/9"),
+                gheCloud)
+                == "https://acme.ghe.com/octo/app/discussions/9")
+        #expect(
+            url(
+                try thread(
+                    repository: "team/svc", kind: .discussion,
+                    subjectURL: "https://ghe.example.com/api/v3/repos/team/svc/discussions/3"), ghes)
+                == "https://ghe.example.com/team/svc/discussions/3")
+    }
+
+    @Test(arguments: [
+        nil,
+        "https://evil.example.com/repos/octo/app/discussions/9",
+        "https://api.github.com/repos/other/repo/discussions/9",
+        "https://api.github.com/repos/octo/app/discussions/abc",
+        "https://api.github.com/repos/octo/app/discussions/123456789012345678901",
+        "https://api.github.com/repos/octo/app/pulls/42",
+    ])
+    func opensTheDiscussionsPage(_ subjectURL: String?) throws {
+        #expect(
+            url(try thread(kind: .discussion, subjectURL: subjectURL), github)
+                == "https://github.com/octo/app/discussions")
     }
 
     @Test(arguments: [
@@ -248,5 +309,78 @@ struct ThreadSubjectNumberTests {
     func readsNoNumberForOtherKinds(_ kind: SubjectKind) throws {
         let subject = "https://api.github.com/repos/octo/app/pulls/42"
         #expect(try number(kind: kind, subjectURL: subject, endpoints: github) == nil)
+    }
+
+    @Test func readsNoNumberForADiscussion() throws {
+        let subject = "https://api.github.com/repos/octo/app/discussions/2045"
+        #expect(try number(kind: .discussion, subjectURL: subject, endpoints: github) == nil)
+    }
+}
+
+struct ThreadReleaseIDTests {
+    private let github: APIEndpoints
+    private let ghes: APIEndpoints
+
+    init() throws {
+        github = try #require(APIEndpoints(host: "github.com"))
+        ghes = try #require(APIEndpoints(host: "ghe.example.com"))
+    }
+
+    private func releaseID(
+        repository: String = "octo/app", kind: SubjectKind = .release, subjectURL: String?, endpoints: APIEndpoints
+    ) throws -> String? {
+        ThreadWebURL.releaseID(
+            kind: kind, subjectURL: subjectURL.flatMap(URL.init(string:)),
+            repository: try #require(RepositoryName(fullName: repository)), endpoints: endpoints)
+    }
+
+    @Test func readsTheReleaseID() throws {
+        #expect(
+            try releaseID(subjectURL: "https://api.github.com/repos/octo/app/releases/413167889", endpoints: github)
+                == "413167889")
+        #expect(
+            try releaseID(
+                repository: "team/svc", subjectURL: "https://ghe.example.com/api/v3/repos/team/svc/releases/12",
+                endpoints: ghes) == "12")
+    }
+
+    @Test(arguments: [
+        nil,
+        "https://evil.example.com/repos/octo/app/releases/1",
+        "https://api.github.com/repos/other/repo/releases/1",
+        "https://api.github.com/repos/octo/app/releases/v1.0.0",
+        "https://api.github.com/repos/octo/app/releases/123456789012345678901",
+        "https://api.github.com/repos/octo/app/pulls/1",
+    ])
+    func readsNoIDFromOtherSubjects(_ subjectURL: String?) throws {
+        #expect(try releaseID(subjectURL: subjectURL, endpoints: github) == nil)
+    }
+
+    @Test(arguments: [SubjectKind.pullRequest, .discussion, .commit])
+    func readsNoIDForOtherKinds(_ kind: SubjectKind) throws {
+        let subject = "https://api.github.com/repos/octo/app/releases/1"
+        #expect(try releaseID(kind: kind, subjectURL: subject, endpoints: github) == nil)
+    }
+}
+
+struct ReleaseTagTests {
+    @Test(arguments: [
+        ("v1.0.0", ["v1.0.0"]), ("rust-v0.163.0-alpha.10.1", ["rust-v0.163.0-alpha.10.1"]),
+        ("cli/v1.2.0", ["cli", "v1.2.0"]), ("@scope/pkg@1.14.2", ["@scope", "pkg@1.14.2"]),
+    ])
+    func acceptsTags(_ tag: String, _ components: [String]) {
+        #expect(ThreadWebURL.releaseTagComponents(tag) == components)
+    }
+
+    @Test(arguments: [
+        "", String(repeating: "a", count: 256), "v1 0", "v1\t0", "v1\u{7}", "..", ".", "a/../b", "a/./b", "a//b",
+        "/v1", "v1/",
+    ])
+    func rejectsTags(_ tag: String) {
+        #expect(ThreadWebURL.releaseTagComponents(tag) == nil)
+    }
+
+    @Test func accepts255Characters() {
+        #expect(ThreadWebURL.releaseTagComponents(String(repeating: "a", count: 255)) != nil)
     }
 }

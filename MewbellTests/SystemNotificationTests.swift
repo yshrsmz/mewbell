@@ -103,6 +103,14 @@ struct ThreadNotificationContentTests {
         }
         #expect(content.userInfo["url"] == "https://ghe.example.com/octo/app/issues/7")
     }
+
+    /// タグを付けた新着の Release の通知は、個別のリリースを開く。
+    @Test func opensTheReleaseOfTheTag() throws {
+        var release = try thread("7", kind: .release, subjectURL: "https://api.github.com/repos/octo/app/releases/12")
+        release.details = ThreadDetails(state: nil, event: nil, releaseTag: "rust-v1.0.0")
+        let content = ThreadNotificationContent(thread: release, account: alice)
+        #expect(content.userInfo["url"] == "https://github.com/octo/app/releases/tag/rust-v1.0.0")
+    }
 }
 
 struct ThreadOpenRequestTests {
