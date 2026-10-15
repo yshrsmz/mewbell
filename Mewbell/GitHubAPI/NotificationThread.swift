@@ -86,7 +86,7 @@ struct NotificationThread: Hashable, Sendable, Identifiable {
     let repository: RepositoryName
     /// 件名の詳細を取りに行く先。読み取るときに `ThreadWebURL.detailsSubject` で求める（検証を通らなければ nil）
     let detailsSubject: DetailsSubject?
-    /// 件名の状態とイベント（Release ではタグ）。API のデコードでは nil で、ポーラーが取得した後に付ける
+    /// 件名の状態とイベント（Release ではタグ、WorkflowRun と CheckSuite では run の ID）。API のデコードでは nil で、ポーラーが取得した後に付ける
     var details: ThreadDetails?
 }
 

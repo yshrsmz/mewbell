@@ -21,7 +21,7 @@ struct ActionsThreadWebURLTests {
             id: "1", reason: "subscribed", updatedAt: Date(timeIntervalSince1970: 0), title: title, kind: kind,
             subjectURL: subjectURL.flatMap(URL.init(string:)),
             repository: try #require(RepositoryName(fullName: repository)), detailsSubject: nil,
-            details: workflowRunID.map { ThreadDetails(state: nil, event: nil, workflowRunID: $0) })
+            details: workflowRunID.map { ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: $0)) })
     }
 
     private func url(_ thread: NotificationThread, _ endpoints: APIEndpoints) -> String? {

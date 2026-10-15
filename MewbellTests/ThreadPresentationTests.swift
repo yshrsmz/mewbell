@@ -12,7 +12,7 @@ private func thread(
         id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: updatedAt), title: "Thread \(id)",
         kind: kind, subjectURL: subjectURL.flatMap(URL.init(string:)),
         repository: try #require(RepositoryName(fullName: repository)), detailsSubject: nil,
-        details: releaseTag.map { ThreadDetails(state: nil, event: nil, releaseTag: $0) }
+        details: releaseTag.map { ThreadDetails(state: nil, event: nil, resource: .release(tag: $0)) }
     )
 }
 

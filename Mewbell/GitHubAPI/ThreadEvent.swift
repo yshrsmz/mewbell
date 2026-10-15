@@ -43,22 +43,28 @@ enum SubjectState: Hashable, Sendable {
     case closedNotPlanned
 }
 
-/// スレッドの件名の状態とイベント（Release ではリリースのタグ、WorkflowRun と CheckSuite では run の ID）。
+/// スレッドの件名の状態とイベント（Issue・Pull request）か、開くページを決める取得した値（Release・WorkflowRun・CheckSuite）。
 /// 取得できたスレッドにだけ付く。
 struct ThreadDetails: Hashable, Sendable {
-    /// 分からなければ nil
-    let state: SubjectState?
-    /// 決められなければ nil
-    let event: ThreadEvent?
-    /// Release のリリースのタグ（`ThreadWebURL.releaseTagComponents` の検証を通ったもの）。ほかの種類では nil
-    let releaseTag: String?
-    /// WorkflowRun と CheckSuite の run の ID（1〜20 桁の数字）。ほかの種類と、決まらなかったときは nil
-    let workflowRunID: String?
+    /// 件名の種類ごとに取った、開くページを決める値。検証済みの文字列で持ち、`ThreadWebURL` が URL を組み立てるときに
+    /// もう一度検証する。
+    enum Resource: Hashable, Sendable {
+        /// Release のリリースのタグ（`ThreadWebURL.releaseTagComponents` の検証を通ったもの）
+        case release(tag: String)
+        /// WorkflowRun と CheckSuite の run の ID（1〜20 桁の数字）
+        case workflowRun(id: String)
+    }
 
-    init(state: SubjectState?, event: ThreadEvent?, releaseTag: String? = nil, workflowRunID: String? = nil) {
+    /// 分からなければ nil（Release・WorkflowRun・CheckSuite では nil）
+    let state: SubjectState?
+    /// 決められなければ nil（Release・WorkflowRun・CheckSuite では nil）
+    let event: ThreadEvent?
+    /// Issue・Pull request と、決まらなかったときは nil
+    let resource: Resource?
+
+    init(state: SubjectState?, event: ThreadEvent?, resource: Resource? = nil) {
         self.state = state
         self.event = event
-        self.releaseTag = releaseTag
-        self.workflowRunID = workflowRunID
+        self.resource = resource
     }
 }

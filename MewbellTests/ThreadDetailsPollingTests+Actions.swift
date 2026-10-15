@@ -5,7 +5,7 @@ import Testing
 
 // WorkflowRun（デプロイの承認リクエスト）のスレッドの run の検索
 extension ThreadDetailsPollingTests {
-    static let waitingRun = ThreadDetails(state: nil, event: nil, workflowRunID: "38692691414")
+    static let waitingRun = ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: "38692691414"))
 
     /// 種類が WorkflowRun のスレッドの一覧。
     static func approvals(_ ids: [Int]) -> HTTPResponse {

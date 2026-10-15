@@ -65,7 +65,7 @@ extension ThreadDetailsRequestTests {
     }
 
     private static func found(_ id: String) -> ThreadDetailsFetchResult {
-        .found(ThreadDetails(state: nil, event: nil, workflowRunID: id))
+        .found(ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: id)))
     }
 
     // MARK: WorkflowRun

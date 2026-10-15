@@ -127,7 +127,10 @@ enum ThreadWebURL {
         kind: SubjectKind, title: String, subject: (collection: String, id: String)?, details: ThreadDetails?
     ) -> Target? {
         if case .release = kind {
-            return details?.releaseTag.flatMap(releaseTagComponents).map(Target.releaseTag) ?? .releases
+            guard case .release(let tag)? = details?.resource, let components = releaseTagComponents(tag) else {
+                return .releases
+            }
+            return .releaseTag(components)
         }
         if case .discussion = kind {
             guard let subject, subject.collection == "discussions", ThreadID.isValid(subject.id) else {
@@ -150,7 +153,8 @@ enum ThreadWebURL {
 
     /// WorkflowRun と CheckSuite の、覚えた run のページか Actions の一覧。ほかの種類は nil。
     private static func actionsTarget(kind: SubjectKind, title: String, details: ThreadDetails?) -> Target? {
-        let runID = details?.workflowRunID.flatMap { ThreadID.isValid($0) ? $0 : nil }
+        var runID: String?
+        if case .workflowRun(let id)? = details?.resource, ThreadID.isValid(id) { runID = id }
         switch kind {
         case .workflowRun:
             return runID.map(Target.workflowRun) ?? .actions(query: "is:waiting")

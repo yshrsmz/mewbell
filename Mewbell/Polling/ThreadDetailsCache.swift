@@ -1,6 +1,6 @@
 import Foundation
 
-/// 1 アカウントの、スレッドの件名の状態とイベント（Release ではリリースのタグ）の記録（polling「スレッドのイベントの取得」）。メモリにだけ持つ。
+/// 1 アカウントの、スレッドの件名の状態とイベント（Release ではリリースのタグ、WorkflowRun と CheckSuite では run の ID）の記録（polling「スレッドのイベントの取得」）。メモリにだけ持つ。
 /// `AccountPoller` の中で使う。
 struct ThreadDetailsCache {
     private struct Entry {

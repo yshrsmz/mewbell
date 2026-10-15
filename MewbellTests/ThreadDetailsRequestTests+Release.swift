@@ -28,7 +28,7 @@ extension ThreadDetailsRequestTests {
     }
 
     private static func found(_ tag: String) -> ThreadDetailsFetchResult {
-        .found(ThreadDetails(state: nil, event: nil, releaseTag: tag))
+        .found(ThreadDetails(state: nil, event: nil, resource: .release(tag: tag)))
     }
 
     @Test func fetchesTheTag() async throws {
@@ -68,7 +68,7 @@ extension ThreadDetailsRequestTests {
         let (result, _) = await fetch(thread, endpoints, response)
         #expect(result == Self.found("v1.0.0"))
         var tagged = thread
-        tagged.details = ThreadDetails(state: nil, event: nil, releaseTag: "v1.0.0")
+        tagged.details = ThreadDetails(state: nil, event: nil, resource: .release(tag: "v1.0.0"))
         let opened = try #require(ThreadWebURL.make(for: tagged, endpoints: endpoints))
         #expect(opened.absoluteString == "https://github.com/octo/app/releases/tag/v1.0.0")
     }

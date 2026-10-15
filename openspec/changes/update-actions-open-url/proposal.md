@@ -38,7 +38,7 @@ notifications の「通知のクリック」は ui の URL の決まりで開く
 ## Impact
 
 - マイルストーン: M4（設定と操作）以降の保守の change。update-thread-open-url（Discussion と Release の個別のページ）の続き。
-- 変更するもの: `Mewbell/GitHubAPI/NotificationThread.swift`（`SubjectKind` と `DetailsSubject`）、件名を読む処理、`Mewbell/GitHubAPI/ThreadEvent.swift`（`ThreadDetails` に run の ID）、`Mewbell/GitHubAPI/GitHubAPIClient.swift`（run を探すリクエスト）、`Mewbell/GitHubAPI/ThreadWebURL.swift`（開く URL）、`Mewbell/UI/ThreadIcon.swift`（種類の名前）、そのテスト。
+- 変更するもの: `Mewbell/GitHubAPI/NotificationThread.swift`（`SubjectKind` と `DetailsSubject`）、件名を読む処理、`Mewbell/GitHubAPI/ThreadEvent.swift`（`ThreadDetails` の Release のタグと run の ID を 1 つの enum にまとめる）、`Mewbell/GitHubAPI/GitHubAPIClient.swift`（run を探すリクエスト）、`Mewbell/GitHubAPI/ThreadWebURL.swift`（開く URL）、`Mewbell/UI/ThreadIcon.swift`（種類の名前）、そのテスト。
 - API の呼び出し: `updated_at` が変わるまでに、`WorkflowRun` のスレッド 1 件で最大 6 回（一覧 1 回と承認できるかの確認 5 回）、`CheckSuite` のスレッド 1 件で 1 回。ほかの種類の呼び出しは変えない。
 - トークン・gh サブプロセス・ネットワーク・URL を開く処理: ネットワーク（新しい API のリクエスト）と URL を開く処理に触れるので、`.claude/rules/security.md` が適用される。リクエストの URL は検証済みのリポジトリ名・検証済みの run の ID・クエリの値としてエスケープした件名の値から組み立て、送る前のオリジン検査を通す。レスポンスからは run の ID・ワークフロー名・結果・試行の回数・更新日時と、承認できるかだけを読み、`html_url` などの URL は使わない。トークンは今までどおりメモリにだけ持ち、永続化しない。gh サブプロセスには触れない。
 - 手元に Actions の通知が無いので、実物の確認はユーザーが行う（environment の承認を 1 回起こす、ワークフローを 1 回失敗させる）。

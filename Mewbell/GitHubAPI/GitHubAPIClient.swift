@@ -304,7 +304,7 @@ struct GitHubAPIClient: Sendable {
 /// スレッドの件名の状態とイベントの取得の結果。
 enum ThreadDetailsFetchResult: Sendable, Equatable {
     case found(ThreadDetails)
-    /// 番号もリリースの ID も持たない、`404` / `410` / レート制限でない `403` / `422`、検証を通らないタグ
+    /// 番号もリリースの ID も run の探し方も持たない、`404` / `410` / レート制限でない `403` / `422`、検証を通らないタグ、決まらない run
     /// （その `updated_at` の間は取り直さない）
     case unavailable
     /// 401
@@ -332,7 +332,7 @@ extension GitHubAPIClient {
     /// スレッドの件名の状態とイベントを取る（`GET /repos/{owner}/{repo}/issues/{number}` と、その `timeline` の
     /// 1 ページ目、最後のページ、その前のページ）。リリースの ID を持つ Release のスレッドは、代わりにタグを取る
     /// （`GET /repos/{owner}/{repo}/releases/{id}`）。URL は `subject.url` ではなく検証済みのリポジトリ名と番号・ID から
-    /// 組み立てる。番号もリリースの ID も持たないスレッドには何も送らない。
+    /// 組み立てる。番号もリリースの ID も run の探し方も持たないスレッドには何も送らない。
     func fetchDetails(
         for thread: NotificationThread, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
@@ -393,7 +393,7 @@ extension GitHubAPIClient {
         case .success(let response):
             guard let release = ReleaseSummary.decode(from: response.body) else { return .failed(.malformedBody) }
             guard ThreadWebURL.releaseTagComponents(release.tagName) != nil else { return .unavailable }
-            return .found(ThreadDetails(state: nil, event: nil, releaseTag: release.tagName))
+            return .found(ThreadDetails(state: nil, event: nil, resource: .release(tag: release.tagName)))
         case .failure(let stop):
             return stop.result
         }
@@ -422,7 +422,7 @@ extension GitHubAPIClient {
         else { return .unavailable }
         switch await approvableRuns(ids, runsPath: runsPath, endpoints: endpoints, token: token) {
         case .success(let approvable) where approvable.count == 1:
-            return .found(ThreadDetails(state: nil, event: nil, workflowRunID: approvable[0]))
+            return .found(ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: approvable[0])))
         case .success:
             return .unavailable
         case .failure(let stop):
@@ -467,7 +467,7 @@ extension GitHubAPIClient {
                 let id = WorkflowRunSummary.closestRun(
                     named: title.workflowName, updatedNear: updatedAt, in: page.workflowRuns)
             else { return .unavailable }
-            return .found(ThreadDetails(state: nil, event: nil, workflowRunID: id))
+            return .found(ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: id)))
         case .failure(let stop):
             return stop.result
         }

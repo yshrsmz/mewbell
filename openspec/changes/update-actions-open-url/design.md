@@ -2,7 +2,7 @@
 
 ## Context
 
-スレッドを開く URL は `ThreadWebURL.make(for:endpoints:)` が決め、一覧のクリック（`NotificationStore.open`）と macOS の通知（`ThreadNotificationContent`）の両方が使う。Release は、`ThreadWebURL.detailsSubject` が `DetailsSubject.release(id:)` を決め、`ThreadDetailsFetcher` → `GitHubAPIClient.fetchDetails` → `fetchReleaseTag` で取ったタグを `ThreadDetails.releaseTag` に入れ、`ThreadDetailsCache` がスレッドの ID と `updated_at` の組ごとに覚え、`ThreadWebURL.target` がタグを見て個別のページにする。新着は一覧を知らせる前に取る（`prefetchNewDetails`）ので、macOS の通知の URL にも間に合うことが多い。
+スレッドを開く URL は `ThreadWebURL.make(for:endpoints:)` が決め、一覧のクリック（`NotificationStore.open`）と macOS の通知（`ThreadNotificationContent`）の両方が使う。Release は、`ThreadWebURL.detailsSubject` が `DetailsSubject.release(id:)` を決め、`ThreadDetailsFetcher` → `GitHubAPIClient.fetchDetails` → `fetchReleaseTag` で取ったタグを `ThreadDetails` に入れ、`ThreadDetailsCache` がスレッドの ID と `updated_at` の組ごとに覚え、`ThreadWebURL.target` がタグを見て個別のページにする。新着は一覧を知らせる前に取る（`prefetchNewDetails`）ので、macOS の通知の URL にも間に合うことが多い。
 
 `SubjectKind` は `CheckSuite` を持つが、`WorkflowRun` は `.other("WorkflowRun")` になる。どちらも `ThreadWebURL.target` が nil を返すので、リポジトリのページが開く。
 
@@ -29,9 +29,11 @@
 
 ### D1. 種類と詳細の行き先（A1・A9）
 
-`SubjectKind` に `.workflowRun`（API の値 `WorkflowRun`）を足す。`DetailsSubject` に `.waitingWorkflowRun`（承認を待っている run を探す）と `.checkSuite(CheckSuiteTitle)`（件名から探す）を足す。`ThreadDetails` に `workflowRunID: String?`（1〜20 桁の数字）を足す。
+`SubjectKind` に `.workflowRun`（API の値 `WorkflowRun`）を足す。`DetailsSubject` に `.waitingWorkflowRun`（承認を待っている run を探す）と `.checkSuite(CheckSuiteTitle)`（件名から探す）を足す。`ThreadDetails` の「開くページを決める取得した値」は、下の「今の形」の `resource` に持つ。
 
 `ThreadWebURL.detailsSubject` に `title` の引数を足す。種類が `.workflowRun` なら `.waitingWorkflowRun`、`.checkSuite` で件名を読めれば `.checkSuite(...)` にする。run を探すのに `subject.url` は使わない（proposal の前提）。ただし `subject.url` が Pull request・Issue・Commit を指すときは、今までどおりそのページと番号にする（ui「アカウント一覧の表示」の、番号は種類ではなく `subject.url` で決める決まりを変えないため。実物の `subject.url` は null と見込んでいるので、ふつうは Actions の扱いになる）。リポジトリのページを開けない（`url(...)` が nil）ときは、今までどおり nil にする。
+
+今の形（code-review と simplify の後に、経緯を渡さないサブエージェントの評価を経て、ユーザーと決めた）: `ThreadDetails` は `state`・`event`（Issue・Pull request）と、`resource: Resource?` を持つ。`Resource` は `ThreadDetails` の中の enum で、`.release(tag: String)`（Release のタグ）と `.workflowRun(id: String)`（WorkflowRun と CheckSuite の run の ID、1〜20 桁の数字）の 2 つの case を持つ。タグと run の ID は同時には取らないので、別々の Optional にせず、同時にある状態を型で表せなくする（A9。今あった `releaseTag: String?` もここに移した）。`state`・`event` と `resource` が同時にある状態は、どの要件も困らない（種類に合わない値は使わない）ので、`ThreadDetails` そのものを enum にはしない（作る箇所と UI の読み取りの約 20 か所を変えることになり、それを求める要件もテストも無い）。関連値は検証済みの文字列のままにし、`ThreadWebURL` が URL を組み立てるときにもう一度検証する。
 
 `ThreadIcon` は網羅の `switch` なので、`.workflowRun` の記号は `.other` と同じ `bell`、名前は「Workflow run」にする。
 
@@ -65,7 +67,7 @@
 
 `ThreadWebURL.Target` に `.workflowRun(String)`（`["actions", "runs", id]`）と `.actions(query: String?)`（`["actions"]` と、あれば `query`）を足す。`url(repository:target:endpoints:)` は、パスを足した後に `query` があれば D3 の関数で付ける。`isOpenable` の検査は今と同じ。
 
-`target` は、種類が `.workflowRun` なら `details?.workflowRunID` があれば `.workflowRun`、無ければ `.actions(query: "is:waiting")`。`.checkSuite` なら `workflowRunID` があれば `.workflowRun`、無ければ `CheckSuiteTitle` から作った絞り込み（ui の delta spec の順）で `.actions(query:)`、件名を読めなければ `.actions(query: nil)`。`make(for:)` に `workflowRunID` と件名を渡す（今の `releaseTag` と同じ）。
+`target` は、種類が `.workflowRun` なら `details?.resource` が `.workflowRun(id:)` で ID が検証を通れば `.workflowRun`、無ければ `.actions(query: "is:waiting")`。`.checkSuite` なら同じく run の ID があれば `.workflowRun`、無ければ `CheckSuiteTitle` から作った絞り込み（ui の delta spec の順）で `.actions(query:)`、件名を読めなければ `.actions(query: nil)`。`make(for:)` は `thread.details` と件名を渡す。
 
 ### D6. 動く場所（A2）
 
