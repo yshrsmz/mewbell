@@ -3,9 +3,13 @@ import Testing
 
 @testable import Mewbell
 
-/// クエリの値のエスケープ（`+` も `%2B` にする）。
+/// クエリの値のエスケープ（`+` も `%2B` に、`;` も `%3B` にする）。
 struct URLQueryValueTests {
-    private let base = URL(string: "https://github.com/octo/app/actions")!
+    private let base: URL
+
+    init() throws {
+        base = try #require(URL(string: "https://github.com/octo/app/actions"))
+    }
 
     @Test(arguments: [
         ("is:waiting", "query=is:waiting"),
@@ -22,8 +26,8 @@ struct URLQueryValueTests {
         #expect(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first?.value == value)
     }
 
-    @Test func keepsTheExistingQuery() {
-        let url = URL(string: "https://api.github.com/repos/octo/app/actions/runs?status=waiting")!
+    @Test func keepsTheExistingQuery() throws {
+        let url = try #require(URL(string: "https://api.github.com/repos/octo/app/actions/runs?status=waiting"))
             .appending(queryValue: "20", for: "per_page")
         #expect(url.absoluteString == "https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=20")
     }
