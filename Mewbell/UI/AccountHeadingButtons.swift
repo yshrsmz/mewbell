@@ -68,9 +68,9 @@ struct MarkAllReadLabels: Equatable {
 /// 確認の状態は見出しが持つ（すべて既読と同時に確認の表示にしないため）。
 struct MarkAllDoneButton: View {
     @Binding var confirming: Bool
-    /// 一覧のスレッドの ID。Done はスレッドごとに効くので、件数や最新が同じでもスレッドが入れ替わったら確認からやり直す。
-    /// 空のときは押せなくする
+    /// 一覧のスレッドの ID。Done はスレッドごとに効くので、件数や最新が同じでもスレッドが入れ替わったら確認からやり直す
     let threadIDs: [String]
+    let isEnabled: Bool
     let action: () -> Void
 
     var body: some View {
@@ -78,7 +78,7 @@ struct MarkAllDoneButton: View {
         ConfirmingButton(
             confirming: $confirming, icon: ActionIcon("checkmark"), confirmation: labels.confirmation,
             help: labels.help(confirming: confirming),
-            accessibilityLabel: labels.accessibilityLabel(confirming: confirming), isEnabled: !threadIDs.isEmpty,
+            accessibilityLabel: labels.accessibilityLabel(confirming: confirming), isEnabled: isEnabled,
             target: threadIDs, action: action)
     }
 }
@@ -111,13 +111,13 @@ struct MarkAllDoneLabels: Equatable {
         HStack(spacing: 2) {
             OpenWebNotificationsButton(host: "github.com") {}
             MarkAllReadButton(confirming: .constant(false), labels: three, newest: .now, isEnabled: true) {}
-            MarkAllDoneButton(confirming: .constant(false), threadIDs: ids) {}
+            MarkAllDoneButton(confirming: .constant(false), threadIDs: ids, isEnabled: true) {}
         }
         MarkAllReadButton(confirming: .constant(true), labels: three, newest: .now, isEnabled: true) {}
-        MarkAllDoneButton(confirming: .constant(true), threadIDs: ids) {}
+        MarkAllDoneButton(confirming: .constant(true), threadIDs: ids, isEnabled: true) {}
         HStack(spacing: 2) {
             MarkAllReadButton(confirming: .constant(false), labels: none, newest: nil, isEnabled: false) {}
-            MarkAllDoneButton(confirming: .constant(false), threadIDs: []) {}
+            MarkAllDoneButton(confirming: .constant(false), threadIDs: [], isEnabled: false) {}
         }
         MarkAllReadButton(
             confirming: .constant(true), labels: participating, newest: .now, isEnabled: true

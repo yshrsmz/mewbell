@@ -57,8 +57,8 @@ struct FeedState: Sendable, Equatable {
         threads.map(\.updatedAt).max()
     }
 
-    /// 「すべて既読」を押せるか（取得できていて、一覧が 1 件以上あるとき）。
-    var canMarkAllRead: Bool {
+    /// 「すべて既読」と「すべて Done」を押せるか（取得できていて、一覧が 1 件以上あるとき）。
+    var canMarkAll: Bool {
         guard case .loaded = phase else { return false }
         return !threads.isEmpty
     }

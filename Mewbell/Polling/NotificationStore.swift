@@ -241,16 +241,17 @@ final class NotificationStore {
     }
 
     /// アカウントの一覧に表示しているスレッドを、まとめて Done にする。送るのは更新日時が新しい順
-    /// （一覧は条件付きの取得で重ねると、新しい順に並んでいるとは限らない）。
+    /// （一覧は条件付きの取得で重ねると、新しい順に並んでいるとは限らない）。取得できていないときは、前の一覧のスレッドを
+    /// まとめて Done にしないよう何もしない（すべて既読と同じ条件）。
     func markAllDone(in account: AccountID) {
-        let threads = feeds[account]?.threads.sorted(by: RepositoryGroup.isNewer) ?? []
-        perform(threads.map { .done(threadID: $0.id) }, in: account)
+        guard let feed = feeds[account], feed.canMarkAll else { return }
+        perform(feed.threads.sorted(by: RepositoryGroup.isNewer).map { .done(threadID: $0.id) }, in: account)
     }
 
     /// アカウントの一覧を、表示している一覧の最新のスレッドまですべて既読にする。一覧から外すのはポーラーで、
     /// その結果は `apply` で届く（取得できていない・トークンが無いときに外さない判断を、ポーラーの 1 か所でするため）。
     func markAllRead(in account: AccountID) {
-        guard let feed = feeds[account], feed.canMarkAllRead, let newest = feed.newestUpdate,
+        guard let feed = feeds[account], feed.canMarkAll, let newest = feed.newestUpdate,
             let poller = pollers[account]?.poller
         else { return }
         Task { await poller.markAllRead(through: newest) }

@@ -128,24 +128,6 @@ struct NotificationStoreActionTests {
         store.stopAll()
     }
 
-    @Test func ignoresMarkAllDoneWithAnEmptyList() async {
-        transport.setHandler { request in
-            switch request.httpMethod {
-            case "DELETE": HTTPResponse(statusCode: 204)
-            default: PollerFixture.ok(body: Data("[]".utf8))
-            }
-        }
-        tokens.set("test-token-alice", for: alice)
-        let store = makeStore(notifier: nil)
-        store.sync(with: .accounts([AccountStatus(account: Account(id: alice, isActive: true), tokenState: .ready)]))
-        await sleeper.waitForSleeps(1)
-        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.phase.showsThreads == true } }
-        store.markAllDone(in: alice)
-        #expect(store.feeds[alice]?.threads.isEmpty == true)
-        #expect(urls("DELETE").isEmpty)
-        store.stopAll()
-    }
-
     @Test func marksAThreadReadWithoutOpeningIt() async throws {
         let store = await loadedStore()
         let thread = try #require(store.feeds[alice]?.threads.first { $0.id == "2" })
@@ -172,13 +154,13 @@ struct NotificationStoreActionTests {
         let store = await loadedStore(notifier: notifier)
         await notifier.waitForPendingWork()
         center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/bob/3"]
-        #expect(store.feeds[alice]?.canMarkAllRead == true)
+        #expect(store.feeds[alice]?.canMarkAll == true)
         store.markAllRead(in: alice)
         await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.threads.isEmpty == true } }
         #expect(store.feeds[alice]?.threads.isEmpty == true)
         #expect(store.feeds[bob]?.threads.count == 3)
         #expect(store.unreadCount == 3)
-        #expect(store.feeds[alice]?.canMarkAllRead != true)
+        #expect(store.feeds[alice]?.canMarkAll != true)
         // 一覧から外した後に PUT を送るので、届くまで待つ
         await waitUntil { self.urls("PUT").count == 1 }
         #expect(urls("PUT") == ["https://api.github.com/notifications"])
@@ -194,14 +176,14 @@ struct NotificationStoreActionTests {
             repository: try #require(RepositoryName(owner: "octo", name: "app")), detailsSubject: nil)
     }
 
-    /// 取得し終えていて、スレッドがあるときだけ、すべて既読にできる。
+    /// 取得し終えていて、スレッドがあるときだけ、すべて既読とすべて Done にできる。
     @Test(arguments: [
         (FeedPhase.loaded(updatedAt: .now), true, true),
         (.loaded(updatedAt: .now), false, false),
         (.retrying(nextAttempt: .now, rateLimited: false), true, false),
     ])
-    func canMarkAllReadOnlyWhenLoadedWithThreads(_ phase: FeedPhase, _ hasThreads: Bool, _ expected: Bool) throws {
+    func canMarkAllOnlyWhenLoadedWithThreads(_ phase: FeedPhase, _ hasThreads: Bool, _ expected: Bool) throws {
         let feed = FeedState(phase: phase, threads: hasThreads ? [try Self.thread()] : [])
-        #expect(feed.canMarkAllRead == expected)
+        #expect(feed.canMarkAll == expected)
     }
 }
