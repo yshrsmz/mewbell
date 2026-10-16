@@ -42,8 +42,8 @@ struct NotificationTracker {
     }
 
     /// 既読か Done にしたスレッドを今の一覧から外す（通知の取り下げは呼び出し元がする）。
-    mutating func remove(_ threadID: String, for account: AccountID) {
-        current[account]?.remove(threadID)
+    mutating func remove(_ threadIDs: Set<String>, for account: AccountID) {
+        current[account]?.subtract(threadIDs)
     }
 
     /// アカウントの基準の取得を覚えているか。

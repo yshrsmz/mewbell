@@ -7,8 +7,8 @@ protocol ThreadNotifying: AnyObject {
     func baselineSet(for account: AccountID, keeping threadIDs: Set<String>)
     /// 基準の後の取得で、`posted` が新着になり、`retracted` が一覧から消えた。
     func threadsChanged(for account: AccountID, posted: [NotificationThread], retracted: Set<String>)
-    /// スレッドを既読か Done にした。出ている通知を取り下げる。
-    func threadRemoved(_ threadID: String, for account: AccountID)
+    /// スレッドを既読か Done にした。出ている通知を 1 回でまとめて取り下げる。
+    func threadsRemoved(_ threadIDs: Set<String>, for account: AccountID)
     /// アカウントの出ている通知をすべて取り下げる（ポーリングを止めた、macOS の通知をオフにした）。
     func retractAll(for account: AccountID)
     /// `accounts` 以外のアカウントの通知をすべて取り下げる。
@@ -53,9 +53,10 @@ final class SystemNotifier: ThreadNotifying {
         }
     }
 
-    func threadRemoved(_ threadID: String, for account: AccountID) {
-        let identifier = ThreadNotificationContent.identifier(threadID: threadID, account: account)
-        enqueue { center in await center.removeDelivered(identifiers: [identifier]) }
+    func threadsRemoved(_ threadIDs: Set<String>, for account: AccountID) {
+        guard !threadIDs.isEmpty else { return }
+        let identifiers = threadIDs.map { ThreadNotificationContent.identifier(threadID: $0, account: account) }
+        enqueue { center in await center.removeDelivered(identifiers: identifiers) }
     }
 
     func retractAll(for account: AccountID) {

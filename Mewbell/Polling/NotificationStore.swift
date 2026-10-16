@@ -265,9 +265,7 @@ final class NotificationStore {
         guard !actions.isEmpty else { return }
         let threadIDs = Set(actions.map(\.threadID))
         feeds[account]?.threads.removeAll { threadIDs.contains($0.id) }
-        for threadID in threadIDs {
-            threadChanges.threadRemoved(threadID, for: account)
-        }
+        threadChanges.threadsRemoved(threadIDs, for: account)
         if let poller {
             Task { await poller.perform(actions) }
         } else {

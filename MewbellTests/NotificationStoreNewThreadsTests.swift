@@ -104,7 +104,7 @@ struct NotificationStoreNewThreadsTests {
         let store = makeStore()
         await send(feed([try thread("1"), try thread("2")]))
         store.markRead(try thread("2"), in: alice)
-        #expect(recorder.events.last == "threadRemoved github.com/alice 2")
+        #expect(recorder.events.last == "threadsRemoved github.com/alice 2")
         // 既読にしたスレッドは取り下げ済みなので、次の取得で一覧に無くても取り下げ直さない
         await send(feed([try thread("1"), try thread("3")]))
         #expect(recorder.changes[alice]?.map(\.posted) == [["3"]])
@@ -117,6 +117,26 @@ struct NotificationStoreNewThreadsTests {
     }
 
     /// すべて既読のように取り下げだけのときは、macOS の通知には渡すが `onNewThreads` は呼ばない。
+    @Test func removesTheThreadsOfAGroupMarkedDoneTogether() async throws {
+        let store = makeStore()
+        let threads = [try thread("1"), try thread("2"), try thread("3")]
+        await send(feed(threads))
+        recorder.events = []
+        let group = RepositoryGroup(repository: threads[0].repository, threads: Array(threads.prefix(2)))
+        store.markDone(group, in: alice)
+        #expect(recorder.events == ["threadsRemoved github.com/alice 1,2"])
+        store.stopAll()
+    }
+
+    @Test func removesAllThreadsMarkedDoneTogether() async throws {
+        let store = makeStore()
+        await send(feed([try thread("1"), try thread("2"), try thread("3")]))
+        recorder.events = []
+        store.markAllDone(in: alice)
+        #expect(recorder.events == ["threadsRemoved github.com/alice 1,2,3"])
+        store.stopAll()
+    }
+
     @Test func doesNotReportRetractionsAloneAsNewThreads() async throws {
         let store = makeStore()
         await send(feed([try thread("1"), try thread("2")]))

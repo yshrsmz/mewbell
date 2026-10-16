@@ -47,8 +47,8 @@ final class RecordingNotifier: ThreadNotifying {
         changes[account, default: []].append((posted.map(\.id), retracted))
     }
 
-    func threadRemoved(_ threadID: String, for account: AccountID) {
-        events.append("threadRemoved \(account) \(threadID)")
+    func threadsRemoved(_ threadIDs: Set<String>, for account: AccountID) {
+        events.append("threadsRemoved \(account) \(threadIDs.sorted().joined(separator: ","))")
     }
 
     func retractAll(for account: AccountID) {
