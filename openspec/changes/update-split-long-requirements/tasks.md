@@ -4,7 +4,7 @@
 
 - [x] 1.1 `git show 2d64cb0:openspec/specs/<capability>/spec.md` で分ける前の main spec を作業用のディレクトリに取り出し、`python3 -I work/specsplit.py check <分ける前> work/target`（design D4）で、分ける前と分けた後の main spec を比べ、規範の文とシナリオが 1 つも落ちていないこと、すべての要件の本文が 500 文字以内で SHALL か MUST を含み、シナリオを 1 つ以上持つことを確かめる
 - [x] 1.2 確認スクリプトが一覧にした、形を変えた文・補った句・置き換えた指示語・足したシナリオ・行を足したシナリオを 1 件ずつ目で確かめ、規範の意味が変わっていないことを確かめる。450 文字を超えて残る要件（対象外の gh-cli「gh のバージョン確認」467、github-api「スレッドの状態の決定」484、settings「Accounts タブ」453）は、後で書き足すと上限を超えやすいことを PR 本文に書く
-- [x] 1.3 分けた要件の名前への参照（`capability「要件名」` と `「要件名」`）を `openspec/specs/`・`docs/`・`Mewbell/`・`MewbellTests/`・`scripts/`・`.github/` で grep し、参照している中身が別の要件へ移ったものだけを直す（design D2）。`openspec/specs/` の中の参照は delta spec で直してある（polling「スレッドの Done」、ui「スレッドの行のイベント」「見出しの押せる範囲の高さ」など）ので、delta の外の参照（`MewbellTests/ThreadIconTests.swift` と `MewbellTests/ActionsThreadWebURLTests.swift` のコメント）を直す（`git apply openspec/changes/update-split-long-requirements/work/test-comment-refs.patch`）。`docs/architecture.md` を直すときはスキル `update-architecture-doc` に従い、`bash scripts/check-architecture.sh` を回す
+- [x] 1.3 分けた要件の名前への参照（`capability「要件名」` と `「要件名」`）を `openspec/specs/`・`docs/`・`Mewbell/`・`MewbellTests/`・`scripts/`・`.github/` で grep し、参照している中身が別の要件へ移ったものだけを直す（design D2）。`openspec/specs/` の中の参照は delta spec で直してある（polling「スレッドの Done」、ui「スレッドの行のイベント」「見出しの押せる範囲の高さ」など）ので、delta の外の参照（`MewbellTests/ThreadIconTests.swift` と `MewbellTests/ActionsThreadWebURLTests.swift` のコメント）を直す。`docs/architecture.md` を直すときはスキル `update-architecture-doc` に従い、`bash scripts/check-architecture.sh` を回す
 
 ## 2. 再発の防止
 
@@ -18,7 +18,7 @@
 
 ## 4. 仕上げ
 
-- [ ] 4.1 `bash scripts/lint.sh` が通ることを確かめる。コードは変えないので、ビルド・テスト・手元での起動は、Swift のファイルに差分が無いこと（`git diff --stat main -- Mewbell MewbellTests Mewbell.xcodeproj` が空であること）で代える。コードのコメントの参照を 1.3 で直したときは、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` と、警告をエラー扱いにした Debug と Release のビルドを回す
+- [ ] 4.1 `bash scripts/lint.sh` が通ることを確かめる。1.3 でテストのコメントを直したので、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` と、警告をエラー扱いにした Debug と Release のビルドを回す。手元での起動は、`git diff --stat main -- Mewbell Mewbell.xcodeproj` が空であること（アプリのコードに差分が無いこと）で代える
 
 ## 5. レビュー（.claude/rules/review-process.md）
 

@@ -17,29 +17,27 @@ import sys
 
 CAPS = "accounts diagnostics distribution gh-cli github-api notifications polling settings ui".split()
 NORM = re.compile(r"\b(MUST|SHALL|SHOULD)\b")
+QUOTED = re.compile(r"「[^「」]*」")
 
 
 def parse(path):
     """Return (head, [(name, raw)], tail). raw = block text without trailing blank lines."""
     lines = open(path, encoding="utf-8").read().split("\n")
     head, blocks, cur, fence, tail = [], [], None, False, []
-    in_reqs = False
     for line in lines:
         if line.strip().startswith("```"):
             fence = not fence
         if not fence and line.startswith("## ") and cur is not None:
             blocks.append(cur)
             cur = None
-            in_reqs = False
         if not fence and line.startswith("### Requirement: "):
             if cur is not None:
                 blocks.append(cur)
             cur = [line[len("### Requirement: "):].strip(), [line]]
-            in_reqs = True
             continue
         if cur is not None:
             cur[1].append(line)
-        elif not in_reqs and not blocks:
+        elif not blocks:
             head.append(line)
         else:
             tail.append(line)
@@ -88,6 +86,18 @@ def load(d, cap):
     return parse(os.path.join(d, cap, "spec.md"))
 
 
+def mask_refs(text):
+    """Replace 「...」 references so a renamed reference (design D2) still matches."""
+    return QUOTED.sub("「」", text)
+
+
+def expected(name, tm, bm):
+    """The block an archive leaves for `name`: MODIFIED keeps the original scenarios."""
+    if name in bm and bm[name] != tm[name]:
+        return keep_scenarios(tm[name], bm[name])
+    return tm[name]
+
+
 def keep_scenarios(target_raw, before_raw):
     """MODIFIED may not drop scenarios: append the original ones the target moved away."""
     _, tscen = body_and_scenarios(target_raw)
@@ -110,7 +120,8 @@ def cmd_delta(before, target, outdir):
             sys.exit(f"{cap}: removed requirements {missing}")
         if len(set(tnames)) != len(tnames):
             sys.exit(f"{cap}: duplicate names")
-        mod = [(n, keep_scenarios(r, bmap[n])) for n, r in t if n in bmap and bmap[n] != r]
+        tmap = dict(t)
+        mod = [(n, expected(n, tmap, bmap)) for n, r in t if n in bmap and bmap[n] != r]
         add = [(n, r) for n, r in t if n not in bmap]
         if not mod and not add:
             continue
@@ -130,15 +141,23 @@ def cmd_check(before, target):
     for cap in CAPS:
         _, b, _ = load(before, cap)
         _, t, _ = load(target, cap)
-        tbodies = "\n".join("\n".join(body_and_scenarios(r)[0]) for _, r in t)
-        tscen = [s for _, r in t for s in body_and_scenarios(r)[1]]
+        tparsed = [(n, *body_and_scenarios(r)) for n, r in t]
+        tbodies = "\n".join("\n".join(body) for _, body, _ in tparsed)
+        tbodies_masked = mask_refs(tbodies)
+        tscen = {s for _, _, scen in tparsed for s in scen}
+        theads = {s.split("\n")[0] for s in tscen}
         tall = "\n".join(r for _, r in t)
         bmap = dict(b)
+        ball = "\n".join(bmap.values())
         for name, raw in b:
             body, scen = body_and_scenarios(raw)
             for s in sentences(body):
                 if NORM.search(s):
-                    if s not in tbodies:
+                    if s in tbodies:
+                        continue
+                    if mask_refs(s) in tbodies_masked:
+                        print(f"[INFO reference renamed] {cap}「{name}」: {s}")
+                    else:
                         problems += 1
                         print(f"[NORM MISSING] {cap}「{name}」: {s}")
                 elif s not in tall:
@@ -146,13 +165,12 @@ def cmd_check(before, target):
             for sc in scen:
                 if sc not in tscen:
                     head = sc.split("\n")[0]
-                    if any(x.split("\n")[0] == head for x in tscen):
+                    if head in theads:
                         print(f"[INFO scenario edited] {cap}「{name}」: {head}")
                     else:
                         problems += 1
                         print(f"[SCENARIO MISSING] {cap}「{name}」: {head}")
-        for name, raw in t:
-            body, scen = body_and_scenarios(raw)
+        for name, body, scen in tparsed:
             text = "\n".join(body)
             if len(text) > 500:
                 problems += 1
@@ -165,24 +183,13 @@ def cmd_check(before, target):
             if not scen:
                 problems += 1
                 print(f"[NO SCENARIO] {cap}「{name}」")
-            if name in bmap:
-                continue
+            # an existing requirement is compared with itself, an added one with all of before
+            source = bmap.get(name, ball)
             for s in sentences(body):
-                if s not in "\n".join(bmap.values()):
+                if s not in source:
                     print(f"[INFO new text] {cap}「{name}」: {s}")
             for sc in scen:
-                if sc not in "\n".join(bmap.values()):
-                    print(f"[INFO new scenario] {cap}「{name}」: {sc.splitlines()[0]}")
-        # sentences added to existing requirements
-        for name, raw in t:
-            if name not in bmap:
-                continue
-            body, scen = body_and_scenarios(raw)
-            for s in sentences(body):
-                if s not in bmap[name]:
-                    print(f"[INFO new text] {cap}「{name}」: {s}")
-            for sc in scen:
-                if sc not in "\n".join(bmap.values()):
+                if sc not in ball:
                     print(f"[INFO new scenario] {cap}「{name}」: {sc.splitlines()[0]}")
     print(f"problems: {problems}")
     return problems
@@ -201,8 +208,7 @@ def cmd_verify_archive(before, target, archived):
             print(f"{cap}: requirement names differ")
             continue
         for name, raw in a:
-            exp = keep_scenarios(tm[name], bm[name]) if name in bm and bm[name] != tm[name] else tm[name]
-            if raw.strip() != exp.strip():
+            if raw.strip() != expected(name, tm, bm).strip():
                 bad += 1
                 print(f"{cap}: unexpected「{name}」")
     print(f"unexpected: {bad}")
@@ -224,6 +230,7 @@ def cmd_same(a, bdir):
             bad += 1
             print(f"{cap}: head/tail differs")
     print(f"differences: {bad}")
+    return bad
 
 
 if __name__ == "__main__":
@@ -235,4 +242,4 @@ if __name__ == "__main__":
     elif cmd == "verify-archive":
         sys.exit(1 if cmd_verify_archive(*sys.argv[2:5]) else 0)
     elif cmd == "same":
-        cmd_same(*sys.argv[2:4])
+        sys.exit(1 if cmd_same(*sys.argv[2:4]) else 0)
