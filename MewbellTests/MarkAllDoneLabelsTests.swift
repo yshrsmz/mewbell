@@ -5,7 +5,7 @@ import Testing
 struct MarkAllDoneLabelsTests {
     @Test func namesTheCount() {
         let labels = MarkAllDoneLabels(count: 3)
-        #expect(labels.done == "Mark all as done")
+        #expect(MarkAllDoneLabels.done == "Mark all as done")
         #expect(labels.confirmation == "Mark 3 as done?")
         #expect(labels.help(confirming: false) == "Mark all as done")
         #expect(labels.help(confirming: true) == "Click again to mark 3 as done")

@@ -21,7 +21,8 @@ struct RepositoryGroup: Identifiable, Equatable, Sendable {
             }
     }
 
-    private static func isNewer(_ lhs: NotificationThread, _ rhs: NotificationThread) -> Bool {
+    /// 更新日時が新しい順の並び（同じ時刻はスレッドの ID 順）。一覧のグループとすべて Done の送る順で同じ並びにする
+    static func isNewer(_ lhs: NotificationThread, _ rhs: NotificationThread) -> Bool {
         lhs.updatedAt != rhs.updatedAt ? lhs.updatedAt > rhs.updatedAt : lhs.id < rhs.id
     }
 }

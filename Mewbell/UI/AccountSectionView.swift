@@ -80,11 +80,16 @@ struct AccountSectionView: View {
             Button(OpenWebNotificationsButton.label(for: account.host), action: openWebNotifications)
             if let feed = markAllFeed {
                 if feed.canMarkAllRead {
-                    Button(MarkAllReadLabels.read) { announceConfirming(.markAllRead, feed: feed) }
+                    Button(MarkAllReadLabels.read) {
+                        announceConfirming(
+                            .markAllRead, label: markAllReadLabels(feed).accessibilityLabel(confirming: true))
+                    }
                 }
                 if !feed.threads.isEmpty {
-                    Button(MarkAllDoneLabels(count: feed.threads.count).done) {
-                        announceConfirming(.markAllDone, feed: feed)
+                    Button(MarkAllDoneLabels.done) {
+                        announceConfirming(
+                            .markAllDone,
+                            label: MarkAllDoneLabels(count: feed.threads.count).accessibilityLabel(confirming: true))
                     }
                 }
             }
@@ -110,16 +115,12 @@ struct AccountSectionView: View {
         OpenWebNotificationsButton(host: account.host, action: openWebNotifications)
         if let feed = markAllFeed {
             MarkAllReadButton(
-                confirming: confirmingBinding(.markAllRead), count: feed.threads.count,
-                newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead,
-                participatingOnly: participatingOnly, isTruncated: feed.isTruncated
+                confirming: confirmingBinding(.markAllRead), labels: markAllReadLabels(feed),
+                newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead
             ) {
                 actions.markAllRead(account.id)
             }
-            MarkAllDoneButton(
-                confirming: confirmingBinding(.markAllDone), threadIDs: feed.threads.map(\.id),
-                isEnabled: !feed.threads.isEmpty
-            ) {
+            MarkAllDoneButton(confirming: confirmingBinding(.markAllDone), threadIDs: feed.threads.map(\.id)) {
                 actions.markAllDone(account.id)
             }
         }
@@ -129,18 +130,16 @@ struct AccountSectionView: View {
         actions.openWebNotifications(account.id)
     }
 
-    /// VoiceOver の操作から確認の表示にする。見出しの表示が変わるだけでは何も読まれないので、確認を待っていることを知らせる
-    private func announceConfirming(_ action: AccountHeadingAction, feed: FeedState) {
+    /// すべて既読のボタンの文（ボタンと VoiceOver の読み上げで同じものを使う）
+    private func markAllReadLabels(_ feed: FeedState) -> MarkAllReadLabels {
+        MarkAllReadLabels(
+            count: feed.threads.count, participatingOnly: participatingOnly, isTruncated: feed.isTruncated)
+    }
+
+    /// VoiceOver の操作から確認の表示にする。見出しの表示が変わるだけでは何も読まれないので、確認を待っていることを
+    /// `label`（確認の表示のボタンの読み上げ）で知らせる
+    private func announceConfirming(_ action: AccountHeadingAction, label: String) {
         confirming = action
-        let label =
-            switch action {
-            case .markAllRead:
-                MarkAllReadLabels(
-                    count: feed.threads.count, participatingOnly: participatingOnly, isTruncated: feed.isTruncated
-                )
-                .accessibilityLabel(confirming: true)
-            case .markAllDone: MarkAllDoneLabels(count: feed.threads.count).accessibilityLabel(confirming: true)
-            }
         AccessibilityNotification.Announcement(label).post()
     }
 

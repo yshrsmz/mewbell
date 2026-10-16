@@ -4,34 +4,19 @@ import SwiftUI
 /// 確認の状態は見出しが持つ（すべて Done と同時に確認の表示にしないため）。
 struct MarkAllReadButton: View {
     @Binding var confirming: Bool
-    let count: Int
+    /// ボタンの文と件数（一覧に出ていない未読も既読にすることになるときは、件数を出さない）
+    let labels: MarkAllReadLabels
     /// 一覧の最新のスレッドの `updated_at`。確認の途中で変わったら確認からやり直す
     let newest: Date?
     let isEnabled: Bool
-    /// ボタンの文（一覧に出ていない未読も既読にすることになるときは、件数を出さない）
-    let labels: MarkAllReadLabels
     let action: () -> Void
-
-    /// `participatingOnly` は `participating=true` で取得している、`isTruncated` は一覧を 10 ページで打ち切った
-    /// （どちらも `PUT /notifications` が一覧に出ていない未読まで既読にする）。
-    init(
-        confirming: Binding<Bool>, count: Int, newest: Date?, isEnabled: Bool, participatingOnly: Bool = false,
-        isTruncated: Bool = false, action: @escaping () -> Void
-    ) {
-        _confirming = confirming
-        self.count = count
-        self.newest = newest
-        self.isEnabled = isEnabled
-        labels = MarkAllReadLabels(count: count, participatingOnly: participatingOnly, isTruncated: isTruncated)
-        self.action = action
-    }
 
     var body: some View {
         ConfirmingButton(
             confirming: $confirming, icon: ActionIcon("envelope.open"), confirmation: labels.confirmation,
             help: labels.help(confirming: confirming),
             accessibilityLabel: labels.accessibilityLabel(confirming: confirming), isEnabled: isEnabled,
-            target: Target(count: count, newest: newest), action: action)
+            target: Target(count: labels.count, newest: newest), action: action)
     }
 
     /// 確認の途中で変わったら確認からやり直す値。すべて既読は時刻で区切るので、件数と最新のスレッドで足りる
@@ -83,9 +68,9 @@ struct MarkAllReadLabels: Equatable {
 /// 確認の状態は見出しが持つ（すべて既読と同時に確認の表示にしないため）。
 struct MarkAllDoneButton: View {
     @Binding var confirming: Bool
-    /// 一覧のスレッドの ID。Done はスレッドごとに効くので、件数や最新が同じでもスレッドが入れ替わったら確認からやり直す
+    /// 一覧のスレッドの ID。Done はスレッドごとに効くので、件数や最新が同じでもスレッドが入れ替わったら確認からやり直す。
+    /// 空のときは押せなくする
     let threadIDs: [String]
-    let isEnabled: Bool
     let action: () -> Void
 
     var body: some View {
@@ -93,7 +78,7 @@ struct MarkAllDoneButton: View {
         ConfirmingButton(
             confirming: $confirming, icon: ActionIcon("checkmark"), confirmation: labels.confirmation,
             help: labels.help(confirming: confirming),
-            accessibilityLabel: labels.accessibilityLabel(confirming: confirming), isEnabled: isEnabled,
+            accessibilityLabel: labels.accessibilityLabel(confirming: confirming), isEnabled: !threadIDs.isEmpty,
             target: threadIDs, action: action)
     }
 }
@@ -102,37 +87,47 @@ struct MarkAllDoneButton: View {
 struct MarkAllDoneLabels: Equatable {
     let count: Int
 
-    var done: String { "Mark all as done" }
+    /// 操作の名前（VoiceOver の操作と、確認の前のツールチップ・読み上げ）
+    static let done = "Mark all as done"
+
     var confirmation: String { "Mark \(count) as done?" }
 
     func help(confirming: Bool) -> String {
-        confirming ? "Click again to mark \(count) as done" : done
+        confirming ? "Click again to mark \(count) as done" : Self.done
     }
 
     func accessibilityLabel(confirming: Bool) -> String {
-        confirming ? "Confirm marking \(count) as done" : done
+        confirming ? "Confirm marking \(count) as done" : Self.done
     }
 }
 
 #Preview("Account heading buttons") {
     let ids = ["1", "2", "3"]
+    let three = MarkAllReadLabels(count: 3, participatingOnly: false, isTruncated: false)
+    let none = MarkAllReadLabels(count: 0, participatingOnly: false, isTruncated: false)
+    let participating = MarkAllReadLabels(count: 2, participatingOnly: true, isTruncated: false)
+    let truncated = MarkAllReadLabels(count: 500, participatingOnly: false, isTruncated: true)
     VStack(alignment: .trailing, spacing: 12) {
         HStack(spacing: 2) {
             OpenWebNotificationsButton(host: "github.com") {}
-            MarkAllReadButton(confirming: .constant(false), count: 3, newest: .now, isEnabled: true) {}
-            MarkAllDoneButton(confirming: .constant(false), threadIDs: ids, isEnabled: true) {}
+            MarkAllReadButton(confirming: .constant(false), labels: three, newest: .now, isEnabled: true) {}
+            MarkAllDoneButton(confirming: .constant(false), threadIDs: ids) {}
         }
-        MarkAllReadButton(confirming: .constant(true), count: 3, newest: .now, isEnabled: true) {}
-        MarkAllDoneButton(confirming: .constant(true), threadIDs: ids, isEnabled: true) {}
+        MarkAllReadButton(confirming: .constant(true), labels: three, newest: .now, isEnabled: true) {}
+        MarkAllDoneButton(confirming: .constant(true), threadIDs: ids) {}
         HStack(spacing: 2) {
-            MarkAllReadButton(confirming: .constant(false), count: 0, newest: nil, isEnabled: false) {}
-            MarkAllDoneButton(confirming: .constant(false), threadIDs: [], isEnabled: false) {}
+            MarkAllReadButton(confirming: .constant(false), labels: none, newest: nil, isEnabled: false) {}
+            MarkAllDoneButton(confirming: .constant(false), threadIDs: []) {}
         }
         MarkAllReadButton(
-            confirming: .constant(true), count: 2, newest: .now, isEnabled: true, participatingOnly: true
+            confirming: .constant(true), labels: participating, newest: .now, isEnabled: true
         ) {}
-        MarkAllReadButton(confirming: .constant(false), count: 500, newest: .now, isEnabled: true, isTruncated: true) {}
-        MarkAllReadButton(confirming: .constant(true), count: 500, newest: .now, isEnabled: true, isTruncated: true) {}
+        MarkAllReadButton(
+            confirming: .constant(false), labels: truncated, newest: .now, isEnabled: true
+        ) {}
+        MarkAllReadButton(
+            confirming: .constant(true), labels: truncated, newest: .now, isEnabled: true
+        ) {}
     }
     .padding()
 }

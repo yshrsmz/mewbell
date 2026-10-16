@@ -58,7 +58,7 @@
 
 ### D4. すべて Done のボタンと文言は、すべて既読と同じ形の型にし、アカウントの見出しのボタンを 1 つのファイルにまとめる（A1・A4）
 
-`MarkAllDoneButton`（`count`、`threadIDs`、`isEnabled`、`confirming: Binding<Bool>`、`action`）と `MarkAllDoneLabels`（`count`。`done`・`confirmation`（`Mark N as done?`）・`help(confirming:)`・`accessibilityLabel(confirming:)`）を足す。確認を解く値（`target`）はスレッド ID の並びにする（件数と最新が同じでもスレッドが入れ替わったら解く。spec「すべて Done のボタンの確認」。リポジトリの Done と同じ）。
+`MarkAllDoneButton`（`threadIDs`、`confirming: Binding<Bool>`、`action`。件数は `threadIDs` の数で、空なら押せなくする）と `MarkAllDoneLabels`（`count`。操作の名前の `static let done`・`confirmation`（`Mark N as done?`）・`help(confirming:)`・`accessibilityLabel(confirming:)`）を足す。`MarkAllReadButton` は文を `labels: MarkAllReadLabels` で受け取り、見出しはボタンと VoiceOver の読み上げに同じ `MarkAllReadLabels` を渡す。確認を解く値（`target`）はスレッド ID の並びにする（件数と最新が同じでもスレッドが入れ替わったら解く。spec「すべて Done のボタンの確認」。リポジトリの Done と同じ）。
 
 `MarkAllReadButton` と `MarkAllReadLabels` は今 `ThreadRow.swift` にあるが、スレッドの行の部品ではない。新しいファイル `UI/AccountHeadingButtons.swift` に、`MarkAllReadButton`・`MarkAllReadLabels`・`MarkAllDoneButton`・`MarkAllDoneLabels` をまとめる（名前は変えないので、`docs/architecture.md` の更新は要らない）。`OpenWebNotificationsButton` は今のファイルのまま。
 
@@ -66,7 +66,7 @@
 
 ### D5. すべて Done の入口は `NotificationStore.markAllDone(in:)` にし、押したときの一覧を store から読む（A2・A14）
 
-`ThreadListActions` に `markAllDone: (AccountID) -> Void` を足し、`MenuBarContentView` で `NotificationStore.markAllDone(in:)` につなぐ。`markAllDone(in:)` は `feeds[account]?.threads` を `updatedAt` の新しい順に並べ直し、`perform(threads.map { .done(threadID: $0.id) }, in: account)` を呼ぶ。対象が 0 件なら `perform` が何もしない。並べ直すのは、`feeds` の並びが新しい順だと決まっていないため（`ThreadListMerge.merge` は受け取ったスレッドの後に今の一覧を並べるだけで、並べ替えない）。spec「リポジトリのグループの既読化と Done のリクエストの順」の「更新日時が新しい順」を守る（リポジトリのグループは `RepositoryGroup.groups(from:)` が並べ替えている）。
+`ThreadListActions` に `markAllDone: (AccountID) -> Void` を足し、`MenuBarContentView` で `NotificationStore.markAllDone(in:)` につなぐ。`markAllDone(in:)` は `feeds[account]?.threads` を、リポジトリのグループと同じ `RepositoryGroup.isNewer`（`updatedAt` の新しい順、同じ時刻は ID 順）で並べ直し、`perform(threads.map { .done(threadID: $0.id) }, in: account)` を呼ぶ。対象が 0 件なら `perform` が何もしない。並べ直すのは、`feeds` の並びが新しい順だと決まっていないため（`ThreadListMerge.merge` は受け取ったスレッドの後に今の一覧を並べるだけで、並べ替えない）。spec「リポジトリのグループの既読化と Done のリクエストの順」の「更新日時が新しい順」を守る（リポジトリのグループは `RepositoryGroup.groups(from:)` が並べ替えている）。
 
 View が表示している一覧は `feeds` そのもの（どちらも `@MainActor`）で、確認の途中で一覧のスレッドが変わったら確認が解ける（D4 の `target`）。そのため、2 回目を押したときの `feeds` は、ユーザーが確認の表示で見ていたスレッドと同じになる（spec「アカウントのすべて Done」の「押したときに表示していたスレッドだけ」）。押した後に届いたスレッドは、`perform` が一覧から外した後に届くので、対象に入らない。
 

@@ -243,7 +243,7 @@ final class NotificationStore {
     /// アカウントの一覧に表示しているスレッドを、まとめて Done にする。送るのは更新日時が新しい順
     /// （一覧は条件付きの取得で重ねると、新しい順に並んでいるとは限らない）。
     func markAllDone(in account: AccountID) {
-        let threads = feeds[account]?.threads.sorted { $0.updatedAt > $1.updatedAt } ?? []
+        let threads = feeds[account]?.threads.sorted(by: RepositoryGroup.isNewer) ?? []
         perform(threads.map { .done(threadID: $0.id) }, in: account)
     }
 
