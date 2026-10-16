@@ -14,7 +14,7 @@
 
 ## 3. すべて Done の経路
 
-- [ ] 3.1 `NotificationStore.markAllDone(in:)` を足し、`feeds[account]` のスレッドを Done の配列にして `perform(_:in:)` に渡す（design D5）。`NotificationStoreActionTests` に、一覧のスレッドがすべて外れてポーラーに Done の配列が 1 回渡ること、一覧が空なら何もしないこと、ほかのアカウントの一覧が変わらないことのテストを足す
+- [ ] 3.1 `NotificationStore.markAllDone(in:)` を足し、`feeds[account]` のスレッドを `updatedAt` の新しい順に並べ直して Done の配列にし、`perform(_:in:)` に渡す（design D5）。`NotificationStoreActionTests` に、一覧のスレッドがすべて外れてポーラーに Done の配列が新しい順で 1 回渡ること（一覧の並びが新しい順でないときも）、一覧が空なら何もしないこと、ほかのアカウントの一覧が変わらないことのテストを足す
 - [ ] 3.2 `ThreadListActions` に `markAllDone: (AccountID) -> Void` を足し、`.none` と `MenuBarContentView` のつなぎ込みを更新する（design D5）
 
 ## 4. 手元での確認（spec の Scenario ごと）

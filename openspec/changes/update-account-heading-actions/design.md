@@ -66,7 +66,7 @@
 
 ### D5. すべて Done の入口は `NotificationStore.markAllDone(in:)` にし、押したときの一覧を store から読む（A2・A14）
 
-`ThreadListActions` に `markAllDone: (AccountID) -> Void` を足し、`MenuBarContentView` で `NotificationStore.markAllDone(in:)` につなぐ。`markAllDone(in:)` は `feeds[account]?.threads` を対象に `perform(threads.map { .done(threadID: $0.id) }, in: account)` を呼ぶ。対象が 0 件なら `perform` が何もしない。
+`ThreadListActions` に `markAllDone: (AccountID) -> Void` を足し、`MenuBarContentView` で `NotificationStore.markAllDone(in:)` につなぐ。`markAllDone(in:)` は `feeds[account]?.threads` を `updatedAt` の新しい順に並べ直し、`perform(threads.map { .done(threadID: $0.id) }, in: account)` を呼ぶ。対象が 0 件なら `perform` が何もしない。並べ直すのは、`feeds` の並びが新しい順だと決まっていないため（`ThreadListMerge.merge` は受け取ったスレッドの後に今の一覧を並べるだけで、並べ替えない）。spec「リポジトリのグループの既読化と Done のリクエストの順」の「更新日時が新しい順」を守る（リポジトリのグループは `RepositoryGroup.groups(from:)` が並べ替えている）。
 
 View が表示している一覧は `feeds` そのもの（どちらも `@MainActor`）で、確認の途中で一覧のスレッドが変わったら確認が解ける（D4 の `target`）。そのため、2 回目を押したときの `feeds` は、ユーザーが確認の表示で見ていたスレッドと同じになる（spec「アカウントのすべて Done」の「押したときに表示していたスレッドだけ」）。押した後に届いたスレッドは、`perform` が一覧から外した後に届くので、対象に入らない。
 
@@ -76,7 +76,7 @@ View が表示している一覧は `feeds` そのもの（どちらも `@MainAc
 
 ### D6. ポーラーは変えない（A7・A9）
 
-`AccountPoller.perform(_:)` は、配列の順に 1 件ずつ送り、止まったとき・トークンが無いとき・認証エラーとレート制限で残りを送らず、失敗を最後の 1 つで記録する。これは spec「アカウントのすべて Done のスレッドごとの扱い」が求める振る舞いそのものなので、ポーラーに新しいメソッドは足さない。配列の順は `feeds` の並び（更新日時が新しい順）になる。
+`AccountPoller.perform(_:)` は、配列の順に 1 件ずつ送り、止まったとき・トークンが無いとき・認証エラーとレート制限で残りを送らず、失敗を最後の 1 つで記録する。これは spec「アカウントのすべて Done のスレッドごとの扱い」が求める振る舞いそのものなので、ポーラーに新しいメソッドは足さない。配列の順は D5 で並べ直した順（更新日時が新しい順）になる。
 
 ## actor と @MainActor の境界
 
@@ -93,7 +93,7 @@ View が表示している一覧は `feeds` そのもの（どちらも `@MainAc
 
 ## セキュリティ
 
-- トークンの流れは変えない。トークンは `AccountPoller` が 1 件ごとに `TokenProvider`（メモリ上の actor）から読み、`GitHubAPIClient` の Done のメソッドでそのアカウントの API ベースへの `DELETE` に付けて送る。永続化はしない。アカウントの削除・無効化・終了でトークンを捨てたら、残りのスレッドへは送らない（`perform` の `isDiscarded` の確認。spec「リポジトリのグループの既読化と Done の途中で止まったとき」）
+- トークンの流れは変えない。トークンは `AccountPoller` が 1 件ごとに `TokenProviding`（メモリ上の actor）から読み、`GitHubAPIClient` の Done のメソッドでそのアカウントの API ベースへの `DELETE` に付けて送る。永続化はしない。アカウントの削除・無効化・終了でトークンを捨てたら、残りのスレッドへは送らない（`perform` の `isDiscarded` の確認。spec「リポジトリのグループの既読化と Done の途中で止まったとき」）
 - `.claude/rules/security.md` との対応:
   - トークンの扱い: 新しい保持先を作らない。確認の状態とボタンの文言にトークンは入らない
   - gh サブプロセス: 触れない（`perform` のトークンの読み直しはメモリを読むだけで、gh を起動しない）
