@@ -200,10 +200,18 @@ struct SystemNotifierTests {
         #expect(center.delivered.value == ["github.com/alice/3"])
     }
 
+    @Test func doesNotRetractForNewThreadsAlone() async throws {
+        notifier.threadsChanged(for: alice, posted: [try thread("3")], retracted: [])
+        await notifier.waitForPendingWork()
+        #expect(center.removals.value.isEmpty)
+        #expect(center.delivered.value == ["github.com/alice/3"])
+    }
+
     @Test func retractsAThreadMarkedRead() async {
         center.delivered.value = ["github.com/alice/1", "github.com/alice/2"]
         notifier.threadsRemoved(["1"], for: alice)
         await notifier.waitForPendingWork()
+        #expect(center.removals.value == [["github.com/alice/1"]])
         #expect(center.delivered.value == ["github.com/alice/2"])
     }
 

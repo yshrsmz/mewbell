@@ -19,7 +19,7 @@ proposal.md の Why のとおり。今の流れは次のとおり（どれも `@
 **Non-Goals:**
 
 - 取り下げる通知・取り下げる時機を変えること。
-- ポーラーへの既読・Done のリクエストの送り方を変えること（送る間隔や上限は、引き継ぎの別の検討事項）。
+- ポーラーへの既読・Done のリクエストの送り方を変えること（送る間隔や 1 回に送る数の上限は、この change では扱わない）。
 - `UserNotificationCenter` の口を変えること。
 
 ## Decisions
@@ -35,7 +35,9 @@ proposal.md の Why のとおり。今の流れは次のとおり（どれも `@
 
 ### D2. `SystemNotifier` は 1 回の `enqueue` で取り下げる（A2）
 
-`threadsRemoved` は、受け取った ID から通知の ID の配列を作り、`enqueue` を 1 回だけ呼んで `removeDelivered(identifiers:)` に渡す。集合が空なら何もしない（`perform` は空のときに呼ばないが、口として空を受け取っても順番待ちを増やさない）。`enqueue` の直列化（同じスレッドの追加と取り下げが入れ替わらない）は今のまま使う。
+今の形: `threadsRemoved` は、新着の無い `threadsChanged(for:posted: [], retracted:)` に委ねる。`threadsChanged` は、受け取った ID から通知の ID の配列を作り、`enqueue` を 1 回だけ呼んで `removeDelivered(identifiers:)` に渡す。出すものも取り下げるものも無ければ何もせず（`perform` は空のときに呼ばないが、口として空を受け取っても順番待ちを増やさない）、取り下げるものが無ければ `removeDelivered` を呼ばない（新着だけの取得で空の取り下げを呼ばない）。`enqueue` の直列化（同じスレッドの追加と取り下げが入れ替わらない）は今のまま使う。
+
+- 代替案: `threadsRemoved` に、通知の ID の組み立てと `enqueue` を `threadsChanged` と別に書く。最初はこの形にしたが、同じ 3 行が 2 か所に並び、空のときの扱いも兄弟の 2 つで食い違ったので、code-review の指摘を受けて委ねる形に改めた（A9）。
 
 ## 境界とスレッド
 
@@ -52,4 +54,4 @@ proposal.md の Why のとおり。今の流れは次のとおり（どれも `@
 ## Risks / Trade-offs
 
 - [1 件の操作の取り下げが 1 件の集合を作るぶん、わずかに重くなる] → `perform` はもともと集合を作っているので、新しく作るものは無い。
-- [取り下げを 1 回にまとめると、途中で失敗したときに残りもまとめて残る] → `removeDeliveredNotifications(withIdentifiers:)` は失敗を返さない口で、1 件ずつ呼んでも同じ。残った通知は、次の基準の取得（`baselineSet`）で今の一覧に無いものとして取り下げられる。
+- [取り下げを 1 回にまとめると、途中で失敗したときに残りもまとめて残る] → `removeDeliveredNotifications(withIdentifiers:)` は失敗を返さない口で、1 件ずつ呼んでも同じ。外したスレッドは新着の判定の今の一覧からも外すので、次の取得では取り下げ直さない。残った通知は、次の基準の取得（`baselineSet`。ポーラーを作り直したときか、アプリを起動し直したとき）で、今の一覧に無いものとして取り下げられる。

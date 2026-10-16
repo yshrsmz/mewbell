@@ -45,8 +45,12 @@ final class SystemNotifier: ThreadNotifying {
             notifies(account)
             ? posted.map { ThreadNotificationContent(thread: $0, account: account, playsSound: sound) } : []
         let identifiers = retracted.map { ThreadNotificationContent.identifier(threadID: $0, account: account) }
+        // 出すものも取り下げるものも無ければ、順番待ちを増やさない
+        guard !identifiers.isEmpty || !contents.isEmpty else { return }
         enqueue { center in
-            await center.removeDelivered(identifiers: identifiers)
+            if !identifiers.isEmpty {
+                await center.removeDelivered(identifiers: identifiers)
+            }
             for content in contents {
                 await center.add(content)
             }
@@ -54,9 +58,7 @@ final class SystemNotifier: ThreadNotifying {
     }
 
     func threadsRemoved(_ threadIDs: Set<String>, for account: AccountID) {
-        guard !threadIDs.isEmpty else { return }
-        let identifiers = threadIDs.map { ThreadNotificationContent.identifier(threadID: $0, account: account) }
-        enqueue { center in await center.removeDelivered(identifiers: identifiers) }
+        threadsChanged(for: account, posted: [], retracted: threadIDs)
     }
 
     func retractAll(for account: AccountID) {
