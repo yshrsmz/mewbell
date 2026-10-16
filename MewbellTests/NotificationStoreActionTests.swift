@@ -3,7 +3,7 @@ import Testing
 
 @testable import Mewbell
 
-/// `NotificationStore` の、開かずに既読・Done・すべて既読のテスト。
+/// `NotificationStore` の、開かずに既読・Done・すべて既読・すべて Done のテスト。
 @MainActor
 struct NotificationStoreActionTests {
     private let transport = FakeHTTPTransport { request in
@@ -100,6 +100,51 @@ struct NotificationStoreActionTests {
         store.stopAll()
     }
 
+    @Test func marksAllThreadsOfOneAccountDoneNewestFirst() async {
+        // 一覧の並びは新しい順でなくても、Done は更新日時が新しい順に 1 件ずつ送る
+        let page = [("1", "12:00"), ("2", "12:30"), ("3", "11:00")]
+            .map { FakeHTTPTransport.threadJSON(id: $0.0, updatedAt: "2026-10-08T\($0.1):00Z") }
+        transport.setHandler { request in
+            switch request.httpMethod {
+            case "DELETE": HTTPResponse(statusCode: 204)
+            default: PollerFixture.ok(body: Data("[\(page.joined(separator: ","))]".utf8))
+            }
+        }
+        let notifier = SystemNotifier(center: center)
+        let store = await loadedStore(notifier: notifier)
+        await notifier.waitForPendingWork()
+        center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/bob/3"]
+        store.markAllDone(in: alice)
+        #expect(store.feeds[alice]?.threads.isEmpty == true)
+        #expect(store.feeds[bob]?.threads.count == 3)
+        #expect(opened.value.isEmpty)
+        await waitUntil { self.urls("DELETE").count == 3 }
+        #expect(
+            urls("DELETE") == ["2", "1", "3"].map { "https://api.github.com/notifications/threads/\($0)" })
+        #expect(urls("PUT").isEmpty)
+        // alice の通知だけが取り下がる
+        await notifier.waitForPendingWork()
+        #expect(center.delivered.value == ["github.com/bob/3"])
+        store.stopAll()
+    }
+
+    @Test func ignoresMarkAllDoneWhileRetrying() async {
+        let store = await loadedStore()
+        // 次の取得を失敗させ、前の一覧を出したまま待っている状態にする
+        transport.setHandler { _ in HTTPResponse(statusCode: 500) }
+        // alice と bob のどちらの待ちが先かは決まっていないので、両方を進める
+        sleeper.advance()
+        sleeper.advance()
+        await waitUntil {
+            MainActor.assumeIsolated {
+                if case .retrying = store.feeds[alice]?.phase { true } else { false }
+            }
+        }
+        store.markAllDone(in: alice)
+        #expect(store.feeds[alice]?.threads.count == 3)
+        store.stopAll()
+    }
+
     @Test func marksAThreadReadWithoutOpeningIt() async throws {
         let store = await loadedStore()
         let thread = try #require(store.feeds[alice]?.threads.first { $0.id == "2" })
@@ -126,13 +171,13 @@ struct NotificationStoreActionTests {
         let store = await loadedStore(notifier: notifier)
         await notifier.waitForPendingWork()
         center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/bob/3"]
-        #expect(store.feeds[alice]?.canMarkAllRead == true)
+        #expect(store.feeds[alice]?.canMarkAll == true)
         store.markAllRead(in: alice)
         await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.threads.isEmpty == true } }
         #expect(store.feeds[alice]?.threads.isEmpty == true)
         #expect(store.feeds[bob]?.threads.count == 3)
         #expect(store.unreadCount == 3)
-        #expect(store.feeds[alice]?.canMarkAllRead != true)
+        #expect(store.feeds[alice]?.canMarkAll != true)
         // 一覧から外した後に PUT を送るので、届くまで待つ
         await waitUntil { self.urls("PUT").count == 1 }
         #expect(urls("PUT") == ["https://api.github.com/notifications"])
@@ -148,14 +193,14 @@ struct NotificationStoreActionTests {
             repository: try #require(RepositoryName(owner: "octo", name: "app")), detailsSubject: nil)
     }
 
-    /// 取得し終えていて、スレッドがあるときだけ、すべて既読にできる。
+    /// 取得し終えていて、スレッドがあるときだけ、すべて既読とすべて Done にできる。
     @Test(arguments: [
         (FeedPhase.loaded(updatedAt: .now), true, true),
         (.loaded(updatedAt: .now), false, false),
         (.retrying(nextAttempt: .now, rateLimited: false), true, false),
     ])
-    func canMarkAllReadOnlyWhenLoadedWithThreads(_ phase: FeedPhase, _ hasThreads: Bool, _ expected: Bool) throws {
+    func canMarkAllOnlyWhenLoadedWithThreads(_ phase: FeedPhase, _ hasThreads: Bool, _ expected: Bool) throws {
         let feed = FeedState(phase: phase, threads: hasThreads ? [try Self.thread()] : [])
-        #expect(feed.canMarkAllRead == expected)
+        #expect(feed.canMarkAll == expected)
     }
 }

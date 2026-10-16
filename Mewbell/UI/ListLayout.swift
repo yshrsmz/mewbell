@@ -14,6 +14,23 @@ enum ListLayout {
     static let headingHeight: CGFloat = 24
     /// 区画の中の文（取得とトークンの状態、未読が無いこと、操作の失敗、案内とコマンドの行）の、行と行の間隔
     static let noteSpacing: CGFloat = 6
+    /// スレッドの行とリポジトリ・アカウントの見出しの、アイコンのボタンの枠の大きさ（`ActionIcon`）
+    static let actionIconSize: CGFloat = 22
+}
+
+/// スレッドの行とリポジトリ・アカウントの見出しの、アイコンのボタンの記号。
+/// 記号を `ListLayout.actionIconSize` 四方の枠の中央に置き、どのボタンも同じ大きさと押せる範囲にする
+struct ActionIcon: View {
+    let systemName: String
+
+    init(_ systemName: String) {
+        self.systemName = systemName
+    }
+
+    var body: some View {
+        Image(systemName: systemName)
+            .frame(width: ListLayout.actionIconSize, height: ListLayout.actionIconSize)
+    }
 }
 
 extension View {

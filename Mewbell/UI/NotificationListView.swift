@@ -12,6 +12,8 @@ struct ThreadListActions {
     var markGroupRead: (RepositoryGroup, AccountID) -> Void
     var markGroupDone: (RepositoryGroup, AccountID) -> Void
     var markAllRead: (AccountID) -> Void
+    /// アカウントの一覧のスレッドを、まとめて Done にする
+    var markAllDone: (AccountID) -> Void
     /// アカウントのホストの Web の通知一覧をブラウザで開く（既読にはしない）
     var openWebNotifications: (AccountID) -> Void
 
@@ -19,7 +21,7 @@ struct ThreadListActions {
     static var none: ThreadListActions {
         ThreadListActions(
             open: { _, _ in }, markRead: { _, _ in }, markDone: { _, _ in }, markGroupRead: { _, _ in },
-            markGroupDone: { _, _ in }, markAllRead: { _ in },
+            markGroupDone: { _, _ in }, markAllRead: { _ in }, markAllDone: { _ in },
             openWebNotifications: { _ in })
     }
 }

@@ -18,7 +18,10 @@ struct AccountSectionView: View {
         let disclosure = AccountDisclosure(
             tokenState: status.tokenState, feed: feed, isStoredCollapsed: expansion.isCollapsed)
         VStack(alignment: .leading, spacing: 8) {
-            header(disclosure)
+            // ホバーと確認の状態は見出しが持つ（マウスを載せるたびに、区画のスレッドまで描き直さないように）
+            AccountHeadingView(
+                status: status, feed: feed, disclosure: disclosure, participatingOnly: participatingOnly,
+                expansion: expansion, actions: actions)
             switch status.tokenState {
             case .fetching where feed == nil:
                 Text("Checking gh…")
@@ -47,76 +50,6 @@ struct AccountSectionView: View {
                 }
             }
         }
-    }
-
-    private func header(_ disclosure: AccountDisclosure) -> some View {
-        HStack(spacing: 6) {
-            // 開閉のボタンと「すべて既読」は分ける（押し間違えて開閉しないように）
-            DisclosureButton(
-                isCollapsed: disclosure.isCollapsed, name: account.displayName,
-                isCollapsible: disclosure.showsThreads, count: feed?.threads.count ?? 0
-            ) {
-                expansion.toggle()
-            } label: {
-                title
-            }
-            Spacer(minLength: 0)
-            // トークンや取得の状態にかかわらず出す（止まっていても Web では通知を見られる）
-            OpenWebNotificationsButton(host: account.host) {
-                actions.openWebNotifications(account.id)
-            }
-            if status.tokenState == .ready, let feed, !feed.phase.isStopped {
-                MarkAllReadButton(
-                    count: feed.threads.count, newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead,
-                    participatingOnly: participatingOnly, isTruncated: feed.isTruncated
-                ) {
-                    actions.markAllRead(account.id)
-                }
-            }
-        }
-    }
-
-    /// 見出しのうち、開閉のボタンになる部分（山形は `DisclosureButton` が付ける）。
-    private var title: some View {
-        HStack(spacing: ListLayout.spacing) {
-            tokenIcon
-                .frame(width: ListLayout.iconColumnWidth)
-            // 幅が足りないときはホスト名から縮め、それでも足りなければユーザー名の末尾を省略する（active の印は省略しない）
-            OneLineText(text: account.user, truncation: .tail)
-                .font(.headline)
-                .layoutPriority(1)
-            if account.isActive {
-                Text("active")
-                    .font(.subheadline)
-                    .capsuleBadge(.tint.opacity(0.15))
-                    .help("The active account for this host in gh")
-            }
-            OneLineText(text: account.hostLabel, truncation: .middle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            if participatingOnly {
-                Image(systemName: "person.crop.circle.badge.checkmark")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .help("Showing only threads you are participating in")
-                    .accessibilityLabel("Participating only")
-            }
-        }
-    }
-
-    /// 名前は記号の既定の名前の代わりに読ませ、ツールチップにも出す
-    private var tokenIcon: some View {
-        let icon = TokenStateIcon(tokenState: status.tokenState, phase: feed?.phase)
-        return Group {
-            if let symbol = icon.symbol {
-                Image(systemName: symbol)
-                    .foregroundStyle(icon.color.map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
-            } else {
-                ProgressView().controlSize(.mini)
-            }
-        }
-        .help(icon.label)
-        .accessibilityLabel(icon.label)
     }
 
     @ViewBuilder private func threads() -> some View {

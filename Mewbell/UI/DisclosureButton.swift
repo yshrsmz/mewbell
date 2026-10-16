@@ -53,6 +53,9 @@ struct DisclosureButton<Label: View>: View {
                 DisclosureChevron(isCollapsed: isCollapsed).hidden()
                 labelWithCount
             }
+            .padding(.trailing, trailingInset)
+            // 畳めるときのボタンと同じく 1 つの要素にまとめる（見出しに付けた VoiceOver の操作が、まとまった要素に付くように）
+            .accessibilityElement(children: .combine)
             // 畳めるようになっても見出しの高さが変わらないように、畳めるときと同じ枠にする
             .frame(maxWidth: .infinity, minHeight: ListLayout.headingHeight, alignment: .leading)
         }

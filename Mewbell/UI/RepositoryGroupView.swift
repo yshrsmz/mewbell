@@ -55,13 +55,17 @@ struct RepositoryGroupView: View {
                 AccessibilityNotification.Announcement(labels.doneAccessibilityLabel(confirming: true)).post()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            // ボタンは常に並べて幅を測っておき、出さないときは見えず・押せず・読まれないようにする
-            // （出してから測ると、最初のホバーの 1 フレームだけ、リポジトリ名と件数がボタンに重なる）
-            .overlay(alignment: .trailing) {
-                actionButtons
-                    .opacity(showsActions ? 1 : 0)
-                    .allowsHitTesting(showsActions)
-                    .accessibilityHidden(!showsActions)
+            .headingActions(isShown: showsActions, width: $actionsWidth) {
+                HoverActionButtons.markReadButton(labels.read, action: markRead)
+                ConfirmingButton(
+                    confirming: $confirmingDone, icon: ActionIcon("checkmark"),
+                    confirmation: labels.confirmation, help: labels.doneHelp(confirming: confirmingDone),
+                    accessibilityLabel: labels.doneAccessibilityLabel(confirming: confirmingDone),
+                    // Done はスレッドごとに効くので、件数や最新が同じでも、スレッドが入れ替わったら確認からやり直す
+                    target: group.threads.map(\.id)
+                ) {
+                    actions.markGroupDone(group, account)
+                }
             }
             .onHover { isHovering = $0 }
             .contextMenu {
@@ -77,25 +81,6 @@ struct RepositoryGroupView: View {
                         markDone: { actions.markDone(thread, account) })
                 }
             }
-        }
-    }
-
-    private var actionButtons: some View {
-        HoverActionButtons(readLabel: labels.read, markRead: markRead) {
-            ConfirmingButton(
-                confirming: $confirmingDone, icon: HoverActionButtons.icon("checkmark"),
-                confirmation: labels.confirmation, help: labels.doneHelp(confirming: confirmingDone),
-                accessibilityLabel: labels.doneAccessibilityLabel(confirming: confirmingDone),
-                // Done はスレッドごとに効くので、件数や最新が同じでも、スレッドが入れ替わったら確認からやり直す
-                target: group.threads.map(\.id)
-            ) {
-                actions.markGroupDone(group, account)
-            }
-        }
-        .onGeometryChange(for: CGFloat.self) {
-            $0.size.width
-        } action: {
-            actionsWidth = $0
         }
     }
 

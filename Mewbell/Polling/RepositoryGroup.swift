@@ -12,16 +12,12 @@ struct RepositoryGroup: Identifiable, Equatable, Sendable {
     static func groups(from threads: [NotificationThread]) -> [RepositoryGroup] {
         Dictionary(grouping: threads, by: \.repository)
             .map { repository, threads in
-                RepositoryGroup(repository: repository, threads: threads.sorted(by: isNewer))
+                RepositoryGroup(repository: repository, threads: threads.sorted(by: NotificationThread.isNewer))
             }
             .sorted { lhs, rhs in
                 let lhsDate = lhs.threads[0].updatedAt
                 let rhsDate = rhs.threads[0].updatedAt
                 return lhsDate != rhsDate ? lhsDate > rhsDate : lhs.id < rhs.id
             }
-    }
-
-    private static func isNewer(_ lhs: NotificationThread, _ rhs: NotificationThread) -> Bool {
-        lhs.updatedAt != rhs.updatedAt ? lhs.updatedAt > rhs.updatedAt : lhs.id < rhs.id
     }
 }

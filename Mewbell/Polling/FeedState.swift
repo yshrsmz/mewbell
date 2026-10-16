@@ -57,9 +57,17 @@ struct FeedState: Sendable, Equatable {
         threads.map(\.updatedAt).max()
     }
 
-    /// 「すべて既読」を押せるか（取得できていて、一覧が 1 件以上あるとき）。
-    var canMarkAllRead: Bool {
+    /// 「すべて既読」と「すべて Done」を押せるか（取得できていて、一覧が 1 件以上あるとき）。
+    var canMarkAll: Bool {
         guard case .loaded = phase else { return false }
         return !threads.isEmpty
+    }
+}
+
+extension NotificationThread {
+    /// 一覧の並び（更新日時が新しい順、同じ時刻はスレッドの ID 順）。リポジトリのグループの中の並びと、
+    /// すべて Done で送る順に使う
+    static func isNewer(_ lhs: NotificationThread, _ rhs: NotificationThread) -> Bool {
+        lhs.updatedAt != rhs.updatedAt ? lhs.updatedAt > rhs.updatedAt : lhs.id < rhs.id
     }
 }
