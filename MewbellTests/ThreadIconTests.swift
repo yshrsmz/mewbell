@@ -36,7 +36,7 @@ struct ThreadIconTests {
         #expect(ThreadIcon(kind: .issue, state: .merged) == ThreadIcon(kind: .issue, state: nil))
     }
 
-    /// 状態の色は GitHub の Web と同じ（ui「スレッドの行の状態のアイコン」）。nil は薄い色
+    /// 状態の色は GitHub の Web と同じ（ui「スレッドの行の状態のアイコンの色」）。nil は薄い色
     @Test(arguments: [
         (SubjectKind.pullRequest, SubjectState.open, ColorResource?.some(.stateOpen)),
         (.pullRequest, .draft, nil),
@@ -51,7 +51,7 @@ struct ThreadIconTests {
     }
 }
 
-/// 状態の色セットの値は Primer の `fgColor-open`・`fgColor-closed`・`fgColor-done`（ui「スレッドの行の状態のアイコン」の表）。
+/// 状態の色セットの値は Primer の `fgColor-open`・`fgColor-closed`・`fgColor-done`（ui「スレッドの行の状態のアイコンの色の値」の表）。
 /// コントラストを上げたときの外観は `NSAppearance(named:)` で作れない（作ると普通の外観になる）ので、ライトとダークだけを確かめる
 struct StateColorTests {
     private static let appearances: [NSAppearance.Name] = [.aqua, .darkAqua]
