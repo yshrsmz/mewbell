@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 
 /// 一覧のスクロールバーの分の幅。
 enum ListScroller {
@@ -10,18 +9,5 @@ enum ListScroller {
     @MainActor static func contentWidthLimit(scrollerStyle: NSScroller.Style, listWidth: CGFloat?) -> CGFloat? {
         guard scrollerStyle == .legacy, let listWidth else { return nil }
         return max(0, listWidth - NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy))
-    }
-}
-
-/// 開閉のアニメーションの間はスクロールバーを出さない。
-/// 数を読むのをこの modifier に閉じ込め、開閉のたびに一覧全体が描き直されないようにする
-struct HidesScrollIndicatorsWhileAnimating: ViewModifier {
-    let animations: DisclosureAnimations
-
-    func body(content: Content) -> some View {
-        content
-            .scrollIndicators(animations.running > 0 ? .never : .automatic)
-            // ポップオーバーを開くたびに、終わりが届かずに残った数を捨てる
-            .onAppear { animations.reset() }
     }
 }

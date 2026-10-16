@@ -25,10 +25,10 @@ macOS のスクロールバーが常に出る設定（「スクロールバー�
 
 ## Impact
 
-- コード: `Mewbell/UI/AccountSectionView.swift`（`NotificationListView` の `ScrollView` と、`HidesScrollIndicatorsWhileAnimating`）。スクロールバーの空きを決める部品を `UI/` に足す
-- テスト: 空きの幅を決める判断の単体テストを足す
+- コード: `Mewbell/UI/AccountSectionView.swift`（`NotificationListView` の `ScrollView`。行数の上限のため、`NotificationListView` を `UI/NotificationListView.swift` に分ける）。中身の幅の上限を決める関数を `UI/` に足す
+- テスト: 中身の幅の上限を決める関数の単体テストを足す
 - トークン: 触れない
 - gh サブプロセス: 触れない
 - ネットワーク: 触れない
 - URL を開く処理: 触れない
-- 永続化: しない。スクロールバーの表示のしかたは AppKit（`NSScroller.preferredScrollerStyle`）から読み、はみ出しているかどうかは View の中にだけ持つ
+- 永続化: しない。スクロールバーの表示のしかたは AppKit（`NSScroller.preferredScrollerStyle`）から読み、一覧の幅とあわせて View の中にだけ持つ

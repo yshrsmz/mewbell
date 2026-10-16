@@ -50,11 +50,11 @@ legacy のときは、`ScrollView` の中身に `.frame(maxWidth: 一覧の幅 �
 
 スクロールバーの幅は `NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)` で得る。SwiftUI の `ScrollView` のスクロールバーは標準の大きさの `NSScroller` なので、同じ値になる。合っていることは手元で確かめる（tasks の 4）。値がずれても上限なので、見える幅がそれより狭ければ中身はそちらに合わせ、右端は切れず、横にもスクロールしない。
 
-`ListScroller` と、`AccountSectionView.swift` から移した `HidesScrollIndicatorsWhileAnimating` は、新しいファイル `UI/ListScroller.swift` に置く（AppKit の型を使い、一覧だけが使う。A1。`AccountSectionView.swift` が行数の上限に当たるため、スクロールバーに関わるものをまとめて移す）。`HidesScrollIndicatorsWhileAnimating` は別のファイルから使うので `private` を外す。
+`ListScroller` は新しいファイル `UI/ListScroller.swift` に置く（AppKit の型を使い、一覧だけが使う。A1）。`AccountSectionView.swift` が行数の上限に当たるため、`NotificationListView` と `ThreadListActions`、一覧のプレビュー、`HidesScrollIndicatorsWhileAnimating` を `UI/NotificationListView.swift` に分ける。型とファイル名を揃え、`HidesScrollIndicatorsWhileAnimating` は移した先でも `private` のままにする（A10。可視性を広げるより、型ごとにファイルを分ける。ユーザーの判断）。
 
 ### D3. スクロールバーの表示のしかたの変化は通知で拾う（A3・A5）
 
-スクロールバーの表示のしかたは、`NotificationListView` の `@State` に `NSScroller.preferredScrollerStyle` を持ち、`NSScroller.preferredScrollerStyleDidChangeNotification` を受けたら読み直す（マウスをつないだ・外した、システム設定を変えたときに届く）。`@State` の初期値は View が作られたときに 1 回だけ読まれるが、View が生きている間は通知の購読も生きているので、ポップオーバーを閉じている間に切り替わっても通知で読み直される。
+スクロールバーの表示のしかたは、`NotificationListView` の `@State` に `NSScroller.preferredScrollerStyle` を持ち、`NSScroller.preferredScrollerStyleDidChangeNotification` を受けたら読み直す（マウスをつないだ・外した、システム設定を変えたときに届く）。通知を受ける `onReceive` は一覧（`ScrollView`）の側に付くので、「すべてのアカウントが無効」の表示の間は購読していない。その間に切り替わっても古い値が残らないよう、一覧が出るたび（`onAppear`）にも読み直す。
 
 表示のしかたは AppKit のシステムの値で、テストで差し替えたい外部ではない（判断は D2 の関数に引数で渡してテストする）ので、プロトコルの裏には置かない（A5 の対象外）。
 
@@ -64,7 +64,7 @@ legacy のときは、`ScrollView` の中身に `.frame(maxWidth: 一覧の幅 �
 
 ## セキュリティ
 
-トークン・gh サブプロセス・ネットワーク・URL を開く処理のどれにも触れない。一覧の余白の付け外しだけを変え、表示する文字や開く URL は変えないので、`.claude/rules/security.md` の各項目は該当しない。新しく持つ状態（はみ出しているか、スクロールバーの表示のしかた）は View の `@State` にだけ置き、永続化しない。
+トークン・gh サブプロセス・ネットワーク・URL を開く処理のどれにも触れない。一覧の中身の幅の上限だけを変え、表示する文字や開く URL は変えないので、`.claude/rules/security.md` の各項目は該当しない。新しく持つ状態（一覧の幅、スクロールバーの表示のしかた）は View の `@State` にだけ置き、永続化しない。
 
 ## Risks / Trade-offs
 
