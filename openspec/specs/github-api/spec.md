@@ -735,9 +735,9 @@ Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling
 
 #### Scenario: 後から待ち始めた run は選ばない
 
-- **GIVEN** スレッドの `updated_at` が 12:00 で、承認を待っている run が `103`（`updated_at` 12:20）の 1 件だけで、`current_user_can_approve: true` の待ちがある
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドの run は「無い」になる
+- **GIVEN** スレッドの `updated_at` が 12:00 で、承認を待っている run が `102`（`updated_at` 11:59）と `103`（12:20）の 2 件
+- **WHEN** `102` の `pending_deployments` が `current_user_can_approve: false` の待ちだけを、`103` の `pending_deployments` が `current_user_can_approve: true` の待ちを返す
+- **THEN** 通知より前に作られた run の一覧のリクエストは送られず、そのスレッドの run は「無い」になる
 
 #### Scenario: 承認できる run が決まらない
 
