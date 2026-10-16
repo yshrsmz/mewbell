@@ -62,7 +62,7 @@ OpenSpec は、`MODIFIED` で今の main spec にあるシナリオを減らす�
 
 ### D4. 保存の確認
 
-分ける前の main spec と分けた後の main spec を比べる確認を、作業用のスクリプトで行う（リポジトリには入れない。この change の後には使わないため）。
+分ける前の main spec と分けた後の main spec を比べる確認を、作業用のスクリプトで行う。目標の spec（`work/target/<capability>/spec.md`）とスクリプト（`work/specsplit.py`）は、apply を別のセッションでも続けられるように change の `work/` に置き、tasks 3.2 で main specs を目標の spec に置き換えた後に消す（この change の後には使わないため）。分ける前の main spec は、`git show 2d64cb0:openspec/specs/<capability>/spec.md` で取り出す。delta spec（`specs/`）は `specsplit.py delta` で目標の spec から作ったもので、手で直さない。直すときは目標の spec を直して作り直す。
 
 - 分ける前の要件の本文の、規範の文（`。` と改行で区切り、MUST / SHALL / SHOULD を含むもの）が、分けた後のどれかの要件の本文に一字一句そのまま現れる
 - 分ける前のシナリオ（見出しと中身）が、分けた後のどれかの要件の下にそのまま現れる。中身に行を足したシナリオは一覧にして目で確かめる
