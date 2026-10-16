@@ -30,3 +30,4 @@ Timeline の項目のうち、「スレッドのイベントの決定の候補�
 「一覧の折りたたみの畳める条件」を満たさないとき（トークンを取れない、取得の状態がまだ無い（polling「取得の状態」の「最初の取得中」を含む。「参加しているスレッドだけにする」の切り替えや再開の後の最初の取得中も同じ）、スコープ不足や認証エラーで止まったなど）は、畳むものが無いので、そのアカウントの見出しに折りたたみの操作を出してはならない（MUST NOT）。
 種類が `WorkflowRun` で（`subject.url` が「通知のスレッドを開く URL の Pull request と Issue」「通知のスレッドを開く URL の Commit とそのほか」の Pull request・Issue・Commit に当たらないとき）、run の ID を覚えていないとき（取る前、取れなかった、決まらなかったなど）: `<Web ベース>/<owner>/<name>/actions?query=is:waiting`
 種類が `CheckSuite` で（`subject.url` が「通知のスレッドを開く URL の Pull request と Issue」「通知のスレッドを開く URL の Commit とそのほか」の Pull request・Issue・Commit に当たらないとき）、run の ID を覚えていないとき: `<Web ベース>/<owner>/<name>/actions` に、件名（github-api「ワークフローの実行の検索の CheckSuite の件名」の形）から作った絞り込みを `query` に付けたもの。
+レート制限（polling「失敗したときの待ち方」「待ち時間が分からないレート制限の待ち方」）で待っているアカウントは、再読み込みを押しても早めてはならない（MUST NOT）。

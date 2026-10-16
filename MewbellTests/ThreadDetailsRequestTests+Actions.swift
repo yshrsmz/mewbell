@@ -4,7 +4,7 @@ import Testing
 @testable import Mewbell
 
 // WorkflowRun と CheckSuite のスレッドの `GitHubAPIClient.fetchDetails` のリクエストと結果
-// （github-api「ワークフローの実行の検索のリクエスト」）。スレッドの `updated_at` は 2026-10-08T12:00:00Z
+// （github-api の「ワークフローの実行の検索の」で始まる要件）。スレッドの `updated_at` は 2026-10-08T12:00:00Z
 extension ThreadDetailsRequestTests {
     private func approvalThread(host: String = "github.com", repository: String = "octo/app") throws
         -> (NotificationThread, APIEndpoints)

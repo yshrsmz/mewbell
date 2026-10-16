@@ -371,7 +371,8 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
 
-3. 1〜5 件なら、それぞれの `GET <API ベース URL>/repos/{owner}/{name}/actions/runs/{run の ID}/pending_deployments` を取り、`current_user_can_approve` が true の待ちを 1 つでも持つ run のうち、`updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内で、差が最も小さいものにする。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」
+3. 承認を待っている run が 1〜5 件なら、それぞれの `GET <API ベース URL>/repos/{owner}/{name}/actions/runs/{run の ID}/pending_deployments` を取り、`current_user_can_approve` が true の待ちを 1 つでも持つ run のうち、`updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内で、差が最も小さいものにする。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」
+
 1 件のときも `pending_deployments` で確かめ、時刻も照らさなければならない（MUST）。通知の run がほかの人に承認された後に、ユーザーが承認できない別の run や、後から待ち始めた別の run だけが待っていることがあるため。
 
 #### Scenario: 承認を待っている run が複数
@@ -402,7 +403,7 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
 
-4. 6 件以上（`total_count` が 6 以上のときを含む）なら、run は「無い」
+4. 承認を待っている run が 6 件以上（`total_count` が 6 以上のときを含む）なら、run は「無い」
 
 #### Scenario: 承認を待っている run が多い
 
@@ -424,7 +425,7 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 
 ### Requirement: ワークフローの実行の検索の日時の書き方
 
-種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
+「ワークフローの実行の検索の通知より前に作られた run」の URL の `<スレッドの updated_at>` は、次のように書かなければならない（MUST）。
 
 `<スレッドの updated_at>` は UTC の `YYYY-MM-DDTHH:MM:SSZ` の形で書き、`<=` とあわせてクエリの値としてエスケープする。
 

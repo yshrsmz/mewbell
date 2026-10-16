@@ -18,7 +18,7 @@
 
 ## 4. 仕上げ
 
-- [ ] 4.1 `bash scripts/lint.sh` が通ることを確かめる。1.3 でテストのコメントを直したので、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` と、警告をエラー扱いにした Debug と Release のビルドを回す。手元での起動は、`git diff --stat main -- Mewbell Mewbell.xcodeproj` が空であること（アプリのコードに差分が無いこと）で代える
+- [ ] 4.1 `bash scripts/lint.sh` が通ることを確かめる。1.3 でコードとテストのコメントを直したので、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` と、警告をエラー扱いにした Debug と Release のビルドを回す。手元での起動は、`git diff main -- Mewbell Mewbell.xcodeproj` がコメントの行だけであること（アプリの振る舞いに差分が無いこと）で代える
 
 ## 5. レビュー（.claude/rules/review-process.md）
 

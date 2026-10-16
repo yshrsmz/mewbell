@@ -269,6 +269,14 @@ def cmd_check(before, target):
             if not scen:
                 problems += 1
                 print(f"[NO SCENARIO] {cap}「{name}」")
+            # an item takes its force from the nearest line above it that is not an item (design D1)
+            intro = ""
+            for line in body:
+                if not ITEM.match(line):
+                    intro = line
+                elif not SHALL_MUST.search(line) and not SHALL_MUST.search(intro):
+                    problems += 1
+                    print(f"[ITEM WITHOUT MUST] {cap}「{name}」: {line}")
             # an existing requirement is compared with itself, an added one with all of before
             source = bmap.get(name, ball)
             for s in sentences(body):

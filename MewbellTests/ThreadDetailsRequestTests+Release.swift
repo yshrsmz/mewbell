@@ -3,7 +3,8 @@ import Testing
 
 @testable import Mewbell
 
-// Release のスレッドの `GitHubAPIClient.fetchDetails` のリクエストと結果（github-api「リリースのタグの取得のリクエスト」）
+// Release のスレッドの `GitHubAPIClient.fetchDetails` のリクエストと結果（github-api「リリースのタグの取得のリクエスト」
+// 「リリースのタグの取得の tag_name」「リリースのタグの取得のレスポンス」「リリースのタグの取得のレート制限と失敗」）
 extension ThreadDetailsRequestTests {
     private func releaseThread(
         host: String = "github.com", repository: String = "octo/app",
