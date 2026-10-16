@@ -7,7 +7,7 @@ Mewbell のリリースの流れと配布物の約束を定める。release-plea
 
 ### Requirement: バージョンとリリースの起点
 
-Mewbell のバージョンは `X.Y.Z`（それぞれ 0 以上の整数）の形式で、`project.xcproj` のプロジェクトの設定の 1 か所（`MARKETING_VERSION` と `CURRENT_PROJECT_VERSION`）にだけ書かなければならない（MUST）。バージョンの更新は release-please の Release PR だけで行い、Release PR は `main` に入った Conventional Commits から作らなければならない（SHALL）。Release PR をマージしたときに、タグ `vX.Y.Z` と draft の GitHub Release を作らなければならない（SHALL）。リリースのワークフローは `main` への push と、draft のまま残った Release をタグ（`vX.Y.Z` の形式を確かめる）を指定してビルドし直す `main` からの手動の実行（`workflow_dispatch`）でだけ動き、`pull_request` や `pull_request_target` で動いてはならない（MUST NOT）。
+Mewbell のバージョンは `X.Y.Z`（それぞれ 0 以上の整数）の形式で、`project.xcproj` のプロジェクトの設定の 1 か所（`MARKETING_VERSION` と `CURRENT_PROJECT_VERSION`）にだけ書かなければならない（MUST）。バージョンの更新は release-please の Release PR だけで行い、Release PR は `main` に入った Conventional Commits から作らなければならない（SHALL）。Release PR をマージしたときに、タグ `vX.Y.Z` と draft の GitHub Release を作らなければならない（SHALL）。
 
 #### Scenario: Release PR
 
@@ -44,10 +44,6 @@ Mewbell のバージョンは `X.Y.Z`（それぞれ 0 以上の整数）の形�
 
 - `codesign --verify --deep --strict` が通る（ad-hoc 署名でよい）
 - コード署名のフラグに Hardened Runtime（`runtime`）が含まれる
-- entitlement に `com.apple.security.get-task-allow`、`com.apple.security.cs.disable-library-validation`、`com.apple.security.cs.allow-dyld-environment-variables`、`com.apple.security.cs.allow-unsigned-executable-memory`、`com.apple.security.cs.allow-jit`、`com.apple.security.cs.disable-executable-page-protection` のいずれも含まれない
-- Info.plist に `NSAppTransportSecurity` の例外（`NSAllowsArbitraryLoads` などの緩める設定と `NSExceptionDomains`）が無い
-- Info.plist の `CFBundleIdentifier` が `com.codingfeline.mewbell`、`CFBundleShortVersionString` と `CFBundleVersion` がリリースのバージョンと一致する
-- 実行ファイルが `arm64` と `x86_64` の両方を含む
 
 Gatekeeper の評価（`spctl --assess`）は ad-hoc 署名では通らないため、検査の条件にしてはならない（MUST NOT）。
 
@@ -57,17 +53,17 @@ Gatekeeper の評価（`spctl --assess`）は ad-hoc 署名では通らないた
 - **WHEN** バージョン `0.2.0` として検査する
 - **THEN** 検査を通る
 
-#### Scenario: get-task-allow が付いている
-
-- **GIVEN** Release ビルドの entitlement に `com.apple.security.get-task-allow` が入っている
-- **WHEN** 検査する
-- **THEN** その entitlement の名前を表示して失敗し、配布物は作られない
-
 #### Scenario: Hardened Runtime が無効
 
 - **GIVEN** Release ビルドのコード署名のフラグに `runtime` が無い
 - **WHEN** 検査する
 - **THEN** Hardened Runtime が無効なことを表示して失敗する
+
+#### Scenario: get-task-allow が付いている
+
+- **GIVEN** Release ビルドの entitlement に `com.apple.security.get-task-allow` が入っている
+- **WHEN** 検査する
+- **THEN** その entitlement の名前を表示して失敗し、配布物は作られない
 
 #### Scenario: バージョンがタグと違う
 
@@ -81,7 +77,6 @@ Gatekeeper の評価（`spctl --assess`）は ad-hoc 署名では通らないた
 
 - `Mewbell-X.Y.Z.zip`: `Mewbell.app` だけを、コード署名を壊さない方法で圧縮したもの。dSYM やビルドの中間ファイルを含めてはならない（MUST NOT）
 - `Mewbell-X.Y.Z.zip.sha256`: zip の SHA-256（16 進数小文字）とファイル名
-- `mewbell.rb`: Cask の雛形にバージョンと zip の SHA-256 を入れた Homebrew Cask（リリースのワークフローが作り、`brew style` と `brew audit --cask --strict` を通す）
 
 作った zip を展開した `Mewbell.app` が同じ検査を通ることを確かめなければならない（MUST）。配布物には、トークン、gh の出力、ビルドした環境のパスを含む設定ファイルを入れてはならない（MUST NOT）。同じ処理を手元でも実行でき、手元では Release への添付も公開もしてはならない（MUST NOT）。
 
@@ -110,7 +105,7 @@ Release は、`mewbell.rb` が `brew style` と `brew audit` を通り、zip と
 
 ### Requirement: CI の資格情報
 
-リリースと tap の更新に使う資格情報は GitHub App のインストールトークンだけにし、個人のアクセストークン（PAT）を使ってはならない（MUST NOT）。App の秘密鍵は、`main` からの実行だけに限定した Environment のシークレットに置かなければならない（MUST）。トークンはジョブごとに発行し、対象のリポジトリと権限をそのジョブに要るものに絞らなければならない（MUST）。tap へ知らせるトークンは、`yshrsmz/homebrew-tap` だけを対象にし、Contents の書き込みだけを持たなければならない（MUST）。ワークフローの既定の `permissions` は `contents: read` にし、書き込みはそれが要るジョブにだけ与えなければならない（MUST）。テスト・ビルド・配布物の作成（リポジトリのコードと依存のコードを実行する処理）は、書き込み権限・OIDC トークン（`id-token: write`）・App の秘密鍵を持たないジョブで行わなければならない（MUST）。attestation・添付・公開・tap への知らせは、リポジトリのコードを実行しない別のジョブで行わなければならない（MUST）。トークンと秘密鍵をログに出してはならない（MUST NOT）。ワークフローで使う Action はコミット SHA で固定しなければならない（MUST）。
+リリースと tap の更新に使う資格情報は GitHub App のインストールトークンだけにし、個人のアクセストークン（PAT）を使ってはならない（MUST NOT）。App の秘密鍵は、`main` からの実行だけに限定した Environment のシークレットに置かなければならない（MUST）。トークンはジョブごとに発行し、対象のリポジトリと権限をそのジョブに要るものに絞らなければならない（MUST）。tap へ知らせるトークンは、`yshrsmz/homebrew-tap` だけを対象にし、Contents の書き込みだけを持たなければならない（MUST）。トークンと秘密鍵をログに出してはならない（MUST NOT）。
 
 #### Scenario: tap へ知らせるトークン
 
@@ -130,18 +125,7 @@ Mewbell は、Release を公開した後に `yshrsmz/homebrew-tap` へ `reposito
 
 - バージョンが `X.Y.Z` の形式でなければ何もせずに失敗する。payload の値をシェルのコマンドに直接埋め込まない
 - 添付ファイルの URL をバージョンから `https://github.com/yshrsmz/mewbell/releases/download/vX.Y.Z/<file>` として組み立て、それ以外の URL を使わない
-- zip と `mewbell.rb` の build provenance attestation を確かめ、`yshrsmz/mewbell` の `.github/workflows/release.yml` が `main` で作ったものでなければ失敗する
-- zip を自分でダウンロードして SHA-256 を計算し、Release に添付された `.sha256` の値と一致しなければ失敗する（ダウンロードの破損を見つけるため）
-- `mewbell.rb` の `version` が知らせのバージョンと、`sha256` が自分で計算した zip の SHA-256 と一致しなければ失敗する（attestation は Cask とバージョンを結び付けないため、別の版の Cask を差し込まれるのを防ぐ）
-- Cask は確かめた `mewbell.rb` をそのまま使い、自分では作らない
 - いまの Cask と同じか古いバージョンの知らせでは、何も変えずに終わる
-- Cask を更新する PR を作り、tap の CI（`brew style` と `brew audit`）が通ったときだけ自動でマージする。この版の PR が開いているときはその PR を更新し、古い版の PR が開いているときは閉じる
-
-#### Scenario: Cask を更新する
-
-- **GIVEN** `v0.2.0` の Release が公開され、tap に `version: 0.2.0` の知らせが届いた
-- **WHEN** tap のワークフローが動く
-- **THEN** attestation と `version`・`sha256` を確かめた `mewbell.rb` で `Casks/mewbell.rb` を更新する PR ができ、CI が通った後にマージされる
 
 #### Scenario: 不正なバージョン
 
@@ -154,6 +138,12 @@ Mewbell は、Release を公開した後に `yshrsmz/homebrew-tap` へ `reposito
 - **GIVEN** tap の Cask が `0.2.0` で、`version: 0.1.0` の知らせが届いた
 - **WHEN** tap のワークフローが動く
 - **THEN** 更新しないことを表示して終わり、ダウンロードも PR も行わない
+
+#### Scenario: Cask を更新する
+
+- **GIVEN** `v0.2.0` の Release が公開され、tap に `version: 0.2.0` の知らせが届いた
+- **WHEN** tap のワークフローが動く
+- **THEN** attestation と `version`・`sha256` を確かめた `mewbell.rb` で `Casks/mewbell.rb` を更新する PR ができ、CI が通った後にマージされる
 
 #### Scenario: 差し替えられた zip
 
@@ -182,10 +172,6 @@ Homebrew Cask（`Casks/mewbell.rb`）は次を満たさなければならない�
 - `depends_on macos: :tahoe`（macOS 26 以上。今の Homebrew では `">= :tahoe"` ではなくこの書き方）を持つ
 - `app "Mewbell.app"` で `/Applications` に入れる
 - アンインストールのときに `com.codingfeline.mewbell` を終了させる
-- `zap` で `~/Library/Application Support/com.codingfeline.mewbell`（二重起動防止のロックファイル）と `~/Library/Preferences/com.codingfeline.mewbell.plist` を消す
-- `caveats` で、Mewbell が notarize されておらず初回起動で Gatekeeper に止められること、システム設定の「プライバシーとセキュリティ」の「このまま開く」で開けること、更新のたびに同じ操作が要ること、gh CLI が要ることを案内する
-
-Cask は quarantine 属性を消してはならず（MUST NOT）、`postflight` や `postflight_steps` などで `xattr` を実行したり Gatekeeper を迂回したりする処理を入れてはならない（MUST NOT）。
 
 #### Scenario: Cask でインストールする
 
@@ -204,3 +190,131 @@ README には、Homebrew（`yshrsmz/tap` の tap、`brew trust`、`brew install 
 - **WHEN** README の手順を読む
 - **THEN** システム設定の「プライバシーとセキュリティ」の「このまま開く」で開く手順が書かれている
 - **AND** Gatekeeper をシステム全体で無効にする手順は書かれていない
+
+### Requirement: バージョンとリリースの起点のワークフローの起動
+
+リリースのワークフローは `main` への push と、draft のまま残った Release をタグ（`vX.Y.Z` の形式を確かめる）を指定してビルドし直す `main` からの手動の実行（`workflow_dispatch`）でだけ動き、`pull_request` や `pull_request_target` で動いてはならない（MUST NOT）。
+
+#### Scenario: draft の Release をビルドし直す
+
+- **GIVEN** `v0.2.0` の Release が draft のまま残っている
+- **WHEN** `main` からタグ `v0.2.0` を指定してリリースのワークフローを手動で実行する
+- **THEN** タグの形式を確かめた後に、`v0.2.0` のビルドが動く
+
+#### Scenario: pull_request では動かない
+
+- **GIVEN** `main` に向けた PR が作られた
+- **WHEN** `pull_request` または `pull_request_target` のイベントが起きる
+- **THEN** リリースのワークフローは動かない
+
+### Requirement: 署名と entitlement の検査の entitlement
+
+配布物を作る処理は、Release でビルドした `Mewbell.app` について次をすべて確かめ、1 つでも満たさないときは配布物を作らずに失敗しなければならない（MUST）。
+
+- entitlement に `com.apple.security.get-task-allow`、`com.apple.security.cs.disable-library-validation`、`com.apple.security.cs.allow-dyld-environment-variables`、`com.apple.security.cs.allow-unsigned-executable-memory`、`com.apple.security.cs.allow-jit`、`com.apple.security.cs.disable-executable-page-protection` のいずれも含まれない
+
+#### Scenario: get-task-allow が付いている
+
+- **GIVEN** Release ビルドの entitlement に `com.apple.security.get-task-allow` が入っている
+- **WHEN** 検査する
+- **THEN** その entitlement の名前を表示して失敗し、配布物は作られない
+
+### Requirement: 署名と entitlement の検査の Info.plist と実行ファイル
+
+配布物を作る処理は、Release でビルドした `Mewbell.app` について次をすべて確かめ、1 つでも満たさないときは配布物を作らずに失敗しなければならない（MUST）。
+
+- Info.plist に `NSAppTransportSecurity` の例外（`NSAllowsArbitraryLoads` などの緩める設定と `NSExceptionDomains`）が無い
+- Info.plist の `CFBundleIdentifier` が `com.codingfeline.mewbell`、`CFBundleShortVersionString` と `CFBundleVersion` がリリースのバージョンと一致する
+- 実行ファイルが `arm64` と `x86_64` の両方を含む
+
+#### Scenario: バージョンがタグと違う
+
+- **GIVEN** Release ビルドの `CFBundleShortVersionString` が `0.1.0`
+- **WHEN** バージョン `0.2.0` として検査する
+- **THEN** 一致しないことを表示して失敗する
+
+### Requirement: 配布物の Homebrew Cask
+
+配布物を作る処理は、検査を通った `Mewbell.app` から次を作らなければならない（SHALL）。
+
+- `mewbell.rb`: Cask の雛形にバージョンと zip の SHA-256 を入れた Homebrew Cask（リリースのワークフローが作り、`brew style` と `brew audit --cask --strict` を通す）
+
+#### Scenario: リリースのワークフローで Cask を作る
+
+- **GIVEN** バージョン `0.2.0` で、確認と検査をすべて通った
+- **WHEN** リリースのワークフローが配布物を作る
+- **THEN** Cask の雛形にバージョン `0.2.0` と zip の SHA-256 を入れた `mewbell.rb` ができる
+- **AND** `mewbell.rb` は `brew style` と `brew audit --cask --strict` を通る
+
+### Requirement: CI の資格情報のジョブの権限
+
+ワークフローの既定の `permissions` は `contents: read` にし、書き込みはそれが要るジョブにだけ与えなければならない（MUST）。テスト・ビルド・配布物の作成（リポジトリのコードと依存のコードを実行する処理）は、書き込み権限・OIDC トークン（`id-token: write`）・App の秘密鍵を持たないジョブで行わなければならない（MUST）。attestation・添付・公開・tap への知らせは、リポジトリのコードを実行しない別のジョブで行わなければならない（MUST）。ワークフローで使う Action はコミット SHA で固定しなければならない（MUST）。
+
+#### Scenario: リポジトリのコードを実行するジョブ
+
+- **GIVEN** リリースのワークフローが動く
+- **WHEN** テスト・ビルド・配布物の作成のジョブが動く
+- **THEN** そのジョブは書き込み権限・OIDC トークン（`id-token: write`）・App の秘密鍵を持たない
+- **AND** attestation・添付・公開・tap への知らせは、リポジトリのコードを実行しない別のジョブで行われる
+
+### Requirement: Homebrew tap の Cask の更新の検証
+
+tap 側のワークフローは payload を信用せず、次を満たさなければならない（MUST）。
+
+- zip と `mewbell.rb` の build provenance attestation を確かめ、`yshrsmz/mewbell` の `.github/workflows/release.yml` が `main` で作ったものでなければ失敗する
+- zip を自分でダウンロードして SHA-256 を計算し、Release に添付された `.sha256` の値と一致しなければ失敗する（ダウンロードの破損を見つけるため）
+- `mewbell.rb` の `version` が知らせのバージョンと、`sha256` が自分で計算した zip の SHA-256 と一致しなければ失敗する（attestation は Cask とバージョンを結び付けないため、別の版の Cask を差し込まれるのを防ぐ）
+
+#### Scenario: 差し替えられた zip
+
+- **GIVEN** 誰かが Release の zip・`.sha256`・`mewbell.rb` を、互いに一致する別のものに差し替えた
+- **WHEN** tap のワークフローが確かめる
+- **THEN** attestation を確かめられずに失敗し、PR を作らない
+
+#### Scenario: 別の版の Cask
+
+- **GIVEN** 誰かが `v0.3.0` の Release に、`v0.2.0` の正しい zip・`.sha256`・`mewbell.rb` を添付した
+- **WHEN** tap に `version: 0.3.0` の知らせが届く
+- **THEN** `mewbell.rb` の `version` が `0.3.0` ではないので失敗し、PR を作らない
+
+#### Scenario: SHA-256 が合わない
+
+- **GIVEN** ダウンロードした zip の SHA-256 が、Release に添付された `.sha256` の値と違う
+- **WHEN** tap のワークフローが比べる
+- **THEN** 失敗し、PR を作らない
+
+### Requirement: Homebrew tap の Cask の更新の PR
+
+tap 側のワークフローは payload を信用せず、次を満たさなければならない（MUST）。
+
+- Cask は確かめた `mewbell.rb` をそのまま使い、自分では作らない
+- Cask を更新する PR を作り、tap の CI（`brew style` と `brew audit`）が通ったときだけ自動でマージする。この版の PR が開いているときはその PR を更新し、古い版の PR が開いているときは閉じる
+
+#### Scenario: Cask を更新する
+
+- **GIVEN** `v0.2.0` の Release が公開され、tap に `version: 0.2.0` の知らせが届いた
+- **WHEN** tap のワークフローが動く
+- **THEN** attestation と `version`・`sha256` を確かめた `mewbell.rb` で `Casks/mewbell.rb` を更新する PR ができ、CI が通った後にマージされる
+
+### Requirement: Homebrew Cask の中身の zap と caveats
+
+Homebrew Cask（`Casks/mewbell.rb`）は次を満たさなければならない（SHALL）。
+
+- `zap` で `~/Library/Application Support/com.codingfeline.mewbell`（二重起動防止のロックファイル）と `~/Library/Preferences/com.codingfeline.mewbell.plist` を消す
+- `caveats` で、Mewbell が notarize されておらず初回起動で Gatekeeper に止められること、システム設定の「プライバシーとセキュリティ」の「このまま開く」で開けること、更新のたびに同じ操作が要ること、gh CLI が要ることを案内する
+
+#### Scenario: zap で消す
+
+- **GIVEN** Cask で Mewbell を入れて使った Mac
+- **WHEN** ユーザーが `brew uninstall --zap --cask yshrsmz/tap/mewbell` を実行する
+- **THEN** `~/Library/Application Support/com.codingfeline.mewbell` と `~/Library/Preferences/com.codingfeline.mewbell.plist` が消える
+
+### Requirement: Homebrew Cask の中身の Gatekeeper の扱い
+
+Cask は quarantine 属性を消してはならず（MUST NOT）、`postflight` や `postflight_steps` などで `xattr` を実行したり Gatekeeper を迂回したりする処理を入れてはならない（MUST NOT）。
+
+#### Scenario: quarantine 属性を残す
+
+- **GIVEN** `yshrsmz/tap` を tap して `brew trust` 済みの macOS 26 の Mac
+- **WHEN** ユーザーが `brew install --cask yshrsmz/tap/mewbell` を実行する
+- **THEN** `/Applications/Mewbell.app` の quarantine 属性は残り、Cask は `xattr` を実行しない
