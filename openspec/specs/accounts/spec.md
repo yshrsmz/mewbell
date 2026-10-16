@@ -73,11 +73,9 @@ Mewbell は、アプリの起動時、ポップオーバーを開いたとき、
 - **WHEN** ユーザーがポップオーバーを開き直す
 - **THEN** `github.com/alice` のための `gh auth token` は実行されない
 
-#### Scenario: 401 の後の取り直しと読み直しが重なる
+### Requirement: 無効のアカウントのトークンの取得
 
-- **GIVEN** `github.com/alice` の取得で API が `401` を返し、Mewbell が `alice` のトークンを取り直している
-- **WHEN** その間にユーザーがポップオーバーを開いて読み直しが始まる
-- **THEN** `alice` のための `gh auth token` は 1 回だけ実行される
+無効のアカウントのために `gh auth token` を実行してはならない（MUST NOT）。ユーザーが設定でアカウントを有効にし直したときは、読み直しを待たずにそのアカウントのトークンを取得しなければならない（MUST）。
 
 #### Scenario: 無効のアカウントに gh を呼ばない
 
@@ -90,6 +88,16 @@ Mewbell は、アプリの起動時、ポップオーバーを開いたとき、
 - **GIVEN** `github.com/bob` が「無効」
 - **WHEN** ユーザーが設定で `bob` を有効にする
 - **THEN** すぐに `bob` のための `gh auth token` が実行され、`bob` は「トークンの取得中」を経て「使える」になる
+
+### Requirement: トークン取得の重なりと gh の確かめ直しの省略
+
+同じアカウントのトークン取得を同時に 2 つ以上走らせてはならない（MUST NOT）。読み直しとトークンの取り直しが重なったときは、走っている取得の結果を共有しなければならない（MUST）。gh のパスが前回と同じなら、`gh --version` を実行し直さなくてよい（MAY）。
+
+#### Scenario: 401 の後の取り直しと読み直しが重なる
+
+- **GIVEN** `github.com/alice` の取得で API が `401` を返し、Mewbell が `alice` のトークンを取り直している
+- **WHEN** その間にユーザーがポップオーバーを開いて読み直しが始まる
+- **THEN** `alice` のための `gh auth token` は 1 回だけ実行される
 
 ### Requirement: トークンをメモリにだけ持つ
 
@@ -139,29 +147,3 @@ Mewbell は、アカウントが `hosts.yml` から消えたとき、全体の�
 - **WHEN** ユーザーが設定で gh の設定ディレクトリを `/Users/me/.gh-work` に上書きする
 - **THEN** `alice` のそれまでのトークンはメモリから捨てられる
 - **AND** `/Users/me/.gh-work/hosts.yml` に `alice` があれば、上書きした設定ディレクトリを渡した gh から取り直す
-
-### Requirement: 無効のアカウントのトークンの取得
-
-無効のアカウントのために `gh auth token` を実行してはならない（MUST NOT）。ユーザーが設定でアカウントを有効にし直したときは、読み直しを待たずにそのアカウントのトークンを取得しなければならない（MUST）。
-
-#### Scenario: 無効のアカウントに gh を呼ばない
-
-- **GIVEN** ユーザーが設定で `github.com/bob` を無効にしている
-- **WHEN** Mewbell を起動し、その後ユーザーが「再読み込み」を押す
-- **THEN** `bob` のための `gh auth token` は一度も実行されない
-
-#### Scenario: 有効にし直す
-
-- **GIVEN** `github.com/bob` が「無効」
-- **WHEN** ユーザーが設定で `bob` を有効にする
-- **THEN** すぐに `bob` のための `gh auth token` が実行され、`bob` は「トークンの取得中」を経て「使える」になる
-
-### Requirement: トークン取得の重なりと gh の確かめ直しの省略
-
-同じアカウントのトークン取得を同時に 2 つ以上走らせてはならない（MUST NOT）。読み直しとトークンの取り直しが重なったときは、走っている取得の結果を共有しなければならない（MUST）。gh のパスが前回と同じなら、`gh --version` を実行し直さなくてよい（MAY）。
-
-#### Scenario: 401 の後の取り直しと読み直しが重なる
-
-- **GIVEN** `github.com/alice` の取得で API が `401` を返し、Mewbell が `alice` のトークンを取り直している
-- **WHEN** その間にユーザーがポップオーバーを開いて読み直しが始まる
-- **THEN** `alice` のための `gh auth token` は 1 回だけ実行される

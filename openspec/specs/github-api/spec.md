@@ -83,6 +83,10 @@ Mewbell は `GET <API ベース URL>/notifications` に `all=false`、`participa
 - **WHEN** Mewbell が通知を取得する
 - **THEN** 結果は「打ち切っていない」
 
+### Requirement: 通知の取得の participating と続きのページ
+
+`participating` は、そのアカウントの設定「参加しているスレッドだけにする」がオンなら `true`、オフなら `false` にしなければならない（MUST）。ページネーションの続きのページ（`Link` の `rel="next"` の URL）にも、同じ `participating` の値が付いていなければならない（MUST。GitHub は `Link` にクエリを引き継いで返す）。レスポンスの `Link` ヘッダーに `rel="next"` があるときは、そのページを順にたどらなければならない（SHALL）。
+
 #### Scenario: 2 ページの通知
 
 - **GIVEN** 1 ページ目の 200 のレスポンスに 50 件のスレッドと `rel="next"` があり、2 ページ目に 3 件のスレッドがある
@@ -90,18 +94,22 @@ Mewbell は `GET <API ベース URL>/notifications` に `all=false`、`participa
 - **THEN** 53 件のスレッドが得られる
 - **AND** 結果は「打ち切っていない」
 
-#### Scenario: 形の崩れたスレッドを読み飛ばす
-
-- **GIVEN** 200 のレスポンスに 3 件のスレッドがあり、1 件は `repository.full_name` が無い
-- **WHEN** Mewbell がレスポンスを読む
-- **THEN** 2 件のスレッドが得られ、残りの取得は続く
-
 #### Scenario: 参加しているスレッドだけにしたアカウント
 
 - **GIVEN** `acme.ghe.com/dave` は「参加しているスレッドだけにする」がオンで、`github.com/alice` はオフ
 - **WHEN** Mewbell が両方の通知を取得する
 - **THEN** `dave` の 1 ページ目は `GET https://api.acme.ghe.com/notifications?all=false&participating=true&per_page=50` になる
 - **AND** `alice` の 1 ページ目は `GET https://api.github.com/notifications?all=false&participating=false&per_page=50` になる
+
+### Requirement: 通知の取得のスレッドの読み取り
+
+ページの間で同じ ID のスレッドが返ったときは、最初のものだけを残さなければならない（MUST）。スレッドからは ID、理由（`reason`）、更新日時（`updated_at`）、件名（`subject.title`）、種類（`subject.type`）、件名の API URL（`subject.url`、無いこともある）、リポジトリの `owner/name`（`repository.full_name`）を読み取り、必須の値が欠けているか `full_name` が `owner/name` の形でないスレッドは読み飛ばさなければならない（MUST）。1 ページのレスポンスボディが上限のサイズ（5 MiB）を超えたら、その回の取得は失敗として扱わなければならない（MUST）。
+
+#### Scenario: 形の崩れたスレッドを読み飛ばす
+
+- **GIVEN** 200 のレスポンスに 3 件のスレッドがあり、1 件は `repository.full_name` が無い
+- **WHEN** Mewbell がレスポンスを読む
+- **THEN** 2 件のスレッドが得られ、残りの取得は続く
 
 ### Requirement: ステータスコードの扱い
 
@@ -154,6 +162,32 @@ Mewbell は `GET /notifications` のレスポンスを次のように扱わな�
 - **GIVEN** API が `422` を返す
 - **WHEN** Mewbell がレスポンスを受け取る
 - **THEN** その結果は「リクエストの誤り」になる
+
+### Requirement: ステータスコードの扱いの成功と一時的な失敗
+
+Mewbell は `GET /notifications` のレスポンスを次のように扱わなければならない（MUST）。
+
+- `200`: スレッドを読み、`Last-Modified` と `X-Poll-Interval` の値を返す
+- `304`: 変化なしとして扱う（1 ページ目に `If-Modified-Since` を付けたときだけ起こる）
+- 上と「ステータスコードの扱い」に無い状態コード、通信の失敗、タイムアウト（30 秒）: 一時的な失敗として扱う
+
+#### Scenario: 304
+
+- **GIVEN** 1 ページ目に `If-Modified-Since` を付けた `GET /notifications` に、API が `304` を返す
+- **WHEN** Mewbell がレスポンスを受け取る
+- **THEN** その結果は「変化なし」になる
+
+### Requirement: ステータスコードの扱いの本文
+
+本文で二次レート制限を見分ける判定は、操作（「スレッドの既読化のリクエストのレスポンス」「スレッドを Done にするリクエストのレスポンス」「すべて既読のリクエストのレスポンス」）とスレッドのイベントの取得（「スレッドのイベントの取得のリクエストのレスポンス」）と同じにしなければならない（MUST）。見分けるために読んだ本文は、保持・ログ出力してはならない（MUST NOT）。
+
+Mewbell は API のエラーレスポンスのボディを UI に出してはならない（MUST NOT）。
+
+#### Scenario: 二次レート制限を見分けるために読んだ本文
+
+- **GIVEN** API が `403` を返し、本文の `message` が二次レート制限を示す
+- **WHEN** Mewbell がレスポンスを受け取る
+- **THEN** 見分けるために読んだ本文は保持されず、ログにも UI にも出ない
 
 ### Requirement: スコープの確認
 
@@ -222,6 +256,20 @@ Mewbell は、スレッドを既読にするとき、`PATCH <API ベース URL>/
 - **WHEN** Mewbell がそのレスポンスを受け取る
 - **THEN** `evil.example.com` にはリクエストを送らず、失敗として扱う
 
+### Requirement: スレッドの既読化のリクエストのレスポンス
+
+レスポンスは次のように扱わなければならない（MUST）。
+
+- `205`: 既読にできた
+- `304`: すでに既読だったとして、既読にできたものと同じに扱う
+- `404`: スレッドがもう無い（Done にした、など）として、既読にできたものと同じに扱う
+- `401`: 認証の失敗
+- `403`: レート制限（`X-RateLimit-Remaining: 0` か `Retry-After` があるとき、またはそれらが無くても本文の `message` が二次レート制限を示すとき。「ステータスコードの扱い」と同じ判定）か拒否
+- `429`: レート制限
+- `422`、それ以外の状態コード、リダイレクト、通信の失敗、タイムアウト: 失敗
+
+既読化のリクエストが失敗しても、トークンを取り直してはならず（MUST NOT）、そのアカウントのポーリングを止めてはならない（MUST NOT）。
+
 #### Scenario: Done にしたスレッド
 
 - **GIVEN** スレッド `123` は Web で Done にされている
@@ -263,6 +311,19 @@ Mewbell は、スレッドを Done にするとき、`DELETE <API ベース URL>
 - **WHEN** Mewbell がそのレスポンスを受け取る
 - **THEN** `evil.example.com` にはリクエストを送らず、失敗として扱う
 
+### Requirement: スレッドを Done にするリクエストのレスポンス
+
+レスポンスは次のように扱わなければならない（MUST）。
+
+- `204`: Done にできた
+- `404`: スレッドがもう無い（すでに Done にした、など）として、Done にできたものと同じに扱う
+- `401`: 認証の失敗
+- `403`: レート制限（`X-RateLimit-Remaining: 0` か `Retry-After` があるとき、またはそれらが無くても本文の `message` が二次レート制限を示すとき。「ステータスコードの扱い」と同じ判定）か拒否
+- `429`: レート制限
+- それ以外の状態コード、リダイレクト、通信の失敗、タイムアウト: 失敗
+
+Done のリクエストが失敗しても、トークンを取り直してはならず（MUST NOT）、そのアカウントのポーリングを止めてはならない（MUST NOT）。
+
 #### Scenario: Done の 401
 
 - **GIVEN** `DELETE /notifications/threads/123` に API が `401` を返す
@@ -292,6 +353,20 @@ Mewbell は、アカウントの通知をすべて既読にするとき、`PUT <
 - **GIVEN** `PUT /notifications` に API が `302` と `Location: https://evil.example.com/` を返す
 - **WHEN** Mewbell がそのレスポンスを受け取る
 - **THEN** `evil.example.com` にはリクエストを送らず、失敗として扱う
+
+### Requirement: すべて既読のリクエストのレスポンス
+
+レスポンスは次のように扱わなければならない（MUST）。
+
+- `205`: 既読にできた
+- `202`: 受け付けられた（GitHub が後から非同期に既読にする）。既読にできたものと同じに扱う
+- `304`: 既読にするものが無かったとして、既読にできたものと同じに扱う
+- `401`: 認証の失敗
+- `403`: レート制限（`X-RateLimit-Remaining: 0` か `Retry-After` があるとき、またはそれらが無くても本文の `message` が二次レート制限を示すとき。「ステータスコードの扱い」と同じ判定）か拒否
+- `429`: レート制限
+- それ以外の状態コード（`422` を含む）、リダイレクト、通信の失敗、タイムアウト: 失敗
+
+すべて既読のリクエストが失敗しても、トークンを取り直してはならず（MUST NOT）、そのアカウントのポーリングを止めてはならない（MUST NOT）。
 
 #### Scenario: 非同期に受け付けられる
 
@@ -329,409 +404,6 @@ Mewbell は、番号を持つスレッド（ui「アカウント一覧の表示�
 - **GIVEN** `github.com/alice` に、種類が Release のスレッドと、`subject.url` が `https://evil.example.com/repos/octo/app/issues/7` のスレッドがある
 - **WHEN** Mewbell がイベントを取るスレッドを選ぶ
 - **THEN** どちらのスレッドにもイベントのリクエストは送られない
-
-#### Scenario: Pull request も issues のパスで取る
-
-- **GIVEN** `ghe.example.com/dave` のスレッドの `subject.url` が `https://ghe.example.com/api/v3/repos/team/svc/pulls/42`
-- **WHEN** Mewbell がそのスレッドのイベントを取る
-- **THEN** リクエストは `https://ghe.example.com/api/v3/repos/team/svc/issues/42` と `.../issues/42/timeline?per_page=100` に送られる
-
-#### Scenario: 最後のページを取る
-
-- **GIVEN** Timeline の 1 ページ目の `Link` に `rel="last"` で `https://api.github.com/repositories/1/issues/7/timeline?per_page=100&page=5` がある
-- **WHEN** Mewbell がそのスレッドのイベントを取る
-- **THEN** 5 ページ目を取得し、2〜4 ページ目は、5 ページ目が近さの幅の始まりより前まで届いていないときの 4 ページ目を除いて取得しない
-
-#### Scenario: 最後のページが別のホストを指している
-
-- **GIVEN** Timeline の 1 ページ目の `rel="last"` が `https://evil.example.com/timeline?page=5` を指している
-- **WHEN** Mewbell が最後のページを取ろうとする
-- **THEN** `evil.example.com` へのリクエストは送られず、5 ページ目は `https://api.github.com/repos/octo/app/issues/7/timeline?per_page=100&page=5` から取る
-
-#### Scenario: 削除された Issue
-
-- **GIVEN** `GET /repos/octo/app/issues/7` が `404` を返す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドのイベントは「無い」になる
-
-#### Scenario: レート制限
-
-- **GIVEN** Timeline の取得に API が `403` と `X-RateLimit-Remaining: 0`、`X-RateLimit-Reset: <10 分後の時刻>` を返す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドの結果は「レート制限」になり、10 分後の時刻が得られる
-
-### Requirement: スレッドの状態の決定
-
-Mewbell は、イベントを取るときに得た Issue のレスポンスから、スレッドの件名の今の状態を次の規則で決めなければならない（MUST）。Issue のレスポンスを得られなかったスレッドの状態は「分からない」にしなければならない（MUST）。
-
-- Pull request（`pull_request` がある）: `pull_request.merged_at` があれば Merged、`state` が `closed` なら Closed、`draft` が `true` なら Draft、それ以外の `open` なら Open
-- Issue: `state` が `open` なら Open、`closed` で `state_reason` が `completed` か無いなら Closed as completed、それ以外（`not_planned`・`duplicate` など）の `closed` なら Closed as not planned
-- 上のどれにも当たらない値（知らない `state` など）は「分からない」
-
-#### Scenario: マージした Pull request
-
-- **GIVEN** `GET /repos/cli/cli/issues/14634` が `state: closed`、`pull_request.merged_at: 2026-10-09T14:47:45Z` を返す
-- **WHEN** Mewbell が状態を決める
-- **THEN** 状態は Merged になる
-
-#### Scenario: 対応しないで閉じた Issue
-
-- **GIVEN** Issue のレスポンスが `state: closed`、`state_reason: not_planned` で、`pull_request` が無い
-- **WHEN** Mewbell が状態を決める
-- **THEN** 状態は Closed as not planned になる
-
-#### Scenario: 下書きの Pull request
-
-- **GIVEN** Issue のレスポンスが `state: open`、`draft: true` で、`pull_request.merged_at` が `null`
-- **WHEN** Mewbell が状態を決める
-- **THEN** 状態は Draft になる
-
-### Requirement: スレッドのイベントの決定
-
-Mewbell は、Issue と Timeline のレスポンスから、スレッドの `updated_at` を更新したイベントを「スレッドのイベントの決定の候補のコメントとレビュー」「スレッドのイベントの決定の候補の状態の変化」「スレッドのイベントの決定の候補のそのほか」「スレッドのイベントの決定の近さの幅」「スレッドのイベントの決定の選び方」「スレッドのイベントの決定の実行者」で 1 つ決めなければならない（MUST）。
-
-Timeline の項目のうち、「スレッドのイベントの決定の候補のコメントとレビュー」「スレッドのイベントの決定の候補の状態の変化」「スレッドのイベントの決定の候補のそのほか」の表の `event` だけを候補にしなければならない（MUST）。ほかの `event`（`labeled`、`cross-referenced`、`referenced`、`mentioned`、`subscribed`、知らない値など）は候補にしてはならない（MUST NOT）。
-
-#### Scenario: コメント
-
-- **GIVEN** Issue `octo/app#7` の作成日時が 10:00、スレッドの `updated_at` が 12:00:30 で、Timeline の作成より後の候補が 11:30 の `labeled`（候補にしない）と 12:00 の `commented`（`actor.login: bob`）
-- **WHEN** Mewbell がイベントを決める
-- **THEN** イベントは Commented、実行者は `bob` になる
-
-#### Scenario: 候補にしないイベントだけ
-
-- **GIVEN** Issue の作成日時が 10:00、スレッドの `updated_at` が 12:00 で、Timeline の 10:00 より後の項目は 12:00 の `labeled` と `cross-referenced` だけ
-- **WHEN** Mewbell がイベントを決める
-- **THEN** イベントは「無い」になる（`labeled` や `cross-referenced` は出さない）
-
-#### Scenario: マージ
-
-- **GIVEN** Pull request の Timeline の最後が、14:47:45 の `merged`（`williammartin`）、14:47:45 の `closed`（`williammartin`）、14:47:47 の `head_ref_deleted` で、スレッドの `updated_at` が 14:47:45
-- **WHEN** Mewbell がイベントを決める
-- **THEN** イベントは Merged、実行者は `williammartin` になる
-
-#### Scenario: updated_at の後の出来事は使わない
-
-- **GIVEN** スレッドの `updated_at` が 12:00 で、Timeline に 11:59 の `closed`（`alice`）と 15:00 の `commented`（`bob`）がある
-- **WHEN** Mewbell がイベントを決める
-- **THEN** イベントは Closed、実行者は `alice` になる
-
-#### Scenario: 開かれた Pull request
-
-- **GIVEN** Pull request の作成日時が 19:39:42、作成者が `BagToad`、スレッドの `updated_at` が 19:39:42 で、Timeline には作成前のコミットの `committed` と 19:39:43 の `review_requested` しか無い
-- **WHEN** Mewbell がイベントを決める
-- **THEN** イベントは Opened、実行者は `BagToad` になる
-
-#### Scenario: いちばん近い候補を選ぶ
-
-- **GIVEN** Pull request の作成日時が 16:12:06、スレッドの `updated_at` が 16:18:08 で、Timeline に 16:17:15 の `commented`（`github-actions[bot]`）、16:17:32 の `merged` と `closed`（`yshrsmz`）、16:17:46 の `commented`（`sincetimer-android-app[bot]`）がある
-- **WHEN** Mewbell がイベントを決める
-- **THEN** イベントは Commented、実行者は `sincetimer-android-app[bot]` になる
-
-#### Scenario: 遠い候補は使わない
-
-- **GIVEN** Pull request の作成日時が 09:00、スレッドの `updated_at` が 12:00 で、Timeline の作成より後の候補は 10:00 の `commented`（`bob`）と、`committer.date` が 11:00 の `committed`（12:00 に push された）だけ
-- **WHEN** Mewbell がイベントを決める
-- **THEN** イベントは「無い」になる（Commented by `bob` も Pushed commits も出さない）
-
-#### Scenario: ボットの実行者
-
-- **GIVEN** 最後の候補が `commented` で、`actor.login` が `dependabot[bot]`
-- **WHEN** Mewbell がイベントを決める
-- **THEN** イベントは Commented、実行者は `dependabot[bot]` になる
-
-#### Scenario: 妥当でない実行者
-
-- **GIVEN** 最後の候補が `closed` で、`actor` が `null`
-- **WHEN** Mewbell がイベントを決める
-- **THEN** イベントは実行者なしの Closed になる
-
-### Requirement: リリースのタグの取得のリクエスト
-
-Mewbell は、リリースの ID を持つ Release のスレッド（polling「スレッドのイベントの取得のリリースのタグ」の条件を満たすもの）についてだけ、タグを求めるために `GET <API ベース URL>/repos/{owner}/{name}/releases/{ID}` を送らなければならない（SHALL）。リクエストの URL は、`subject.url` をそのまま使わず、検証済みのリポジトリの `owner/name` と検証済みの ID（1〜20 桁の数字）から組み立てなければならない（MUST）。組み立てた URL にも「トークンを送る相手の制限」の確認をしなければならず（MUST）、「トークンをリクエストごとに付ける」「リダイレクトとキャッシュ」「通信の内容をログに出さない」を同じく適用しなければならない（MUST）。1 つのスレッドについて送るリクエストは、この 1 回だけにしなければならない（MUST）。
-
-#### Scenario: リリースのタグを取る
-
-- **GIVEN** `github.com/alice` の種類が Release のスレッドのリポジトリが `openai/codex`、`subject.url` が `https://api.github.com/repos/openai/codex/releases/413167889`
-- **WHEN** Mewbell がそのスレッドのタグを取り、API が `200` と `tag_name: rust-v0.163.0-alpha.10.1` を返す
-- **THEN** リクエストは `https://api.github.com/repos/openai/codex/releases/413167889` に `alice` のトークンを付けて送られる
-- **AND** そのスレッドのタグは `rust-v0.163.0-alpha.10.1` になる
-
-#### Scenario: GHES のリリースのタグを取る
-
-- **GIVEN** `ghe.example.com/dave` の種類が Release のスレッドのリポジトリが `team/svc`、`subject.url` が `https://ghe.example.com/api/v3/repos/team/svc/releases/12`
-- **WHEN** Mewbell がそのスレッドのタグを取る
-- **THEN** リクエストは `https://ghe.example.com/api/v3/repos/team/svc/releases/12` に送られる
-
-#### Scenario: 削除されたリリース
-
-- **GIVEN** `GET /repos/octo/app/releases/12` が `404` を返す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドのタグは「無い」になる
-
-#### Scenario: 検証を通らないタグ
-
-- **GIVEN** `GET /repos/octo/app/releases/12` が `200` と `tag_name: ../../settings` を返す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドのタグは「無い」になる
-
-#### Scenario: html_url は使わない
-
-- **GIVEN** `GET /repos/octo/app/releases/12` が `200` と `tag_name: v1.0.0`、`html_url: https://evil.example.com/octo/app/releases/tag/v1.0.0` を返す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドのタグは `v1.0.0` になり、`evil.example.com` の URL は覚えない
-
-#### Scenario: リリースのタグの取得のレート制限
-
-- **GIVEN** リリースのタグの取得に API が `403` と `X-RateLimit-Remaining: 0`、`X-RateLimit-Reset: <10 分後の時刻>` を返す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドの結果は「レート制限」になり、10 分後の時刻が得られる
-
-### Requirement: ワークフローの実行の検索のリクエスト
-
-Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling「スレッドのイベントの取得の run の ID」の条件を満たすもの）についてだけ、そのスレッドのワークフローの実行（run）を探すために、次のリクエストを送らなければならない（SHALL）。リクエストの URL は、`subject.url` を使わず、検証済みのリポジトリの `owner/name`、検証済みの run の ID（1〜20 桁の数字）、件名から読んだ値から組み立てなければならない（MUST）。組み立てた URL にも「トークンを送る相手の制限」の確認をしなければならず（MUST）、「トークンをリクエストごとに付ける」「リダイレクトとキャッシュ」「通信の内容をログに出さない」を同じく適用しなければならない（MUST）。
-
-#### Scenario: 承認を待っている run が 1 件
-
-- **GIVEN** `github.com/alice` の種類が `WorkflowRun` のスレッドのリポジトリが `octo/app`
-- **WHEN** Mewbell がそのスレッドの run を探し、API が `200` と、`id: 38692691414` の run 1 件を返す
-- **AND** `GET /repos/octo/app/actions/runs/38692691414/pending_deployments` が `current_user_can_approve: true` の待ちを返す
-- **THEN** リクエストは `https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=6` に `alice` のトークンを付けて送られる
-- **AND** そのスレッドの run は `38692691414` になる
-
-#### Scenario: 承認を待っている 1 件の run を承認できない
-
-- **GIVEN** 承認を待っている run が `103` の 1 件だけで、その `pending_deployments` が `current_user_can_approve: false` の待ちだけを返す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドの run は「無い」になる
-
-#### Scenario: 承認を待っている run が複数
-
-- **GIVEN** `github.com/alice` の種類が `WorkflowRun` のスレッドのリポジトリが `octo/app` で、承認を待っている run が `101` と `102` の 2 件
-- **WHEN** `GET /repos/octo/app/actions/runs/101/pending_deployments` が `current_user_can_approve: false` の待ちを、`.../102/pending_deployments` が `current_user_can_approve: true` の待ちを返す
-- **THEN** そのスレッドの run は `102` になる
-
-#### Scenario: 承認できる run が複数ある
-
-- **GIVEN** `github.com/alice` の種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run が `101`（`updated_at` 11:50:30）と `102`（12:01）の 2 件あり、どちらにも `current_user_can_approve: true` の待ちがある
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドの run は `102` になる
-
-#### Scenario: 後から待ち始めた run は選ばない
-
-- **GIVEN** スレッドの `updated_at` が 12:00 で、承認を待っている run が `103`（`updated_at` 12:20）の 1 件だけで、`current_user_can_approve: true` の待ちがある
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドの run は「無い」になる
-
-#### Scenario: 承認できる run が決まらない
-
-- **GIVEN** 承認を待っている run が 2 件あり、`updated_at` がスレッドの `updated_at` の 2 分前と 2 分後で、どちらにも `current_user_can_approve: true` の待ちがある
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドの run は「無い」になる
-
-#### Scenario: 承認を待っている run が多い
-
-- **GIVEN** `GET /repos/octo/app/actions/runs?status=waiting&per_page=6` が `total_count: 8` を返す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** `pending_deployments` のリクエストは送られず、そのスレッドの run は「無い」になる
-
-#### Scenario: 失敗したワークフローの run を探す
-
-- **GIVEN** `github.com/alice` の種類が `CheckSuite` のスレッドのリポジトリが `octo/app`、件名が `CI workflow run failed for main branch`、`updated_at` が 12:05
-- **WHEN** `GET https://api.github.com/repos/octo/app/actions/runs?branch=main&per_page=30` が、`name: CI`・`conclusion: failure` で `updated_at` 12:04 の run `201`、`name: CI`・`conclusion: failure` で `updated_at` 11:30 の run `200`、`name: Release` で `updated_at` 12:05 の run `202`、`name: CI`・`conclusion: success` で `updated_at` 12:05 の run `203` を返す
-- **THEN** そのスレッドの run は `201` になる
-
-#### Scenario: 試行の回数が付いた件名
-
-- **GIVEN** 種類が `CheckSuite` のスレッドの件名が `Build and test workflow run, Attempt #2 failed for feat/a+b branch`
-- **WHEN** Mewbell がそのスレッドの run を探す
-- **THEN** リクエストは `https://api.github.com/repos/octo/app/actions/runs?branch=feat/a%2Bb&per_page=30` に送られ、`name` が `Build and test` の run から選ぶ
-
-#### Scenario: 読めない件名
-
-- **GIVEN** 種類が `CheckSuite` のスレッドの件名が `Something happened`
-- **WHEN** Mewbell がそのスレッドの run を探す
-- **THEN** リクエストは送られず、そのスレッドの run は「無い」になる
-
-#### Scenario: Actions を読めないトークン
-
-- **GIVEN** run の一覧のリクエストに API が `404` を返す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドの run は「無い」になる
-
-#### Scenario: html_url は使わない
-
-- **GIVEN** run の一覧の `200` のレスポンスの run に `html_url: https://evil.example.com/octo/app/actions/runs/1` がある
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** `evil.example.com` の URL は覚えない
-
-#### Scenario: 承認された後の通知
-
-- **GIVEN** `acme.ghe.com/dave` の種類が `WorkflowRun` のスレッドのリポジトリが `team/infra`、`updated_at` が 07:16:58Z
-- **AND** 承認を待っている run は 0 件
-- **WHEN** `GET https://api.acme.ghe.com/repos/team/infra/actions/runs?created=%3C%3D2026-10-15T07:16:58Z&per_page=30` が、`run_started_at` 07:16:53Z・`status: completed`・`updated_at` 07:22:14Z の run `14190806` と、`run_started_at` 07:15:49Z・`status: completed`・`updated_at` 07:16:27Z の run `14190661` を返す
-- **THEN** そのスレッドの run は `14190806` になる
-
-#### Scenario: 通知の時刻を挟む run が複数ある
-
-- **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run は 0 件
-- **WHEN** 通知より前に作られた run に、11:50〜12:10 の run と、11:55 に始まってまだ終わっていない run がある
-- **THEN** そのスレッドの run は「無い」になる
-
-#### Scenario: 承認を待っている run があるのに決まらない
-
-- **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run は 11:59 に待ち始めた `103` の 1 件だけで、その `pending_deployments` が `current_user_can_approve: false` の待ちだけを返す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** 通知より前に作られた run の一覧のリクエストは送られず、そのスレッドの run は「無い」になる
-
-#### Scenario: 通知から離れた時刻に待ち始めた run だけが承認を待っている
-
-- **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run は 15:00 に待ち始めた `201` の 1 件だけ
-- **WHEN** 通知より前に作られた run の一覧が、`run_started_at` 11:59:55・`status: completed`・`updated_at` 12:05:16 の run `14190806` を返す
-- **THEN** `201` の `pending_deployments` のリクエストは送られず、そのスレッドの run は `14190806` になる
-
-#### Scenario: 一覧を取るまでに承認を待ち始めた run は数えない
-
-- **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run は 0 件
-- **WHEN** 通知より前に作られた run の一覧が、`status: waiting`・`run_started_at` 11:55 の run `104` だけを返す
-- **THEN** そのスレッドの run は「無い」になる
-
-#### Scenario: 承認を待っている run の一覧が一時的に失敗した
-
-- **GIVEN** 種類が `WorkflowRun` のスレッドの、承認を待っている run の一覧のリクエストが `502` になった
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** 通知より前に作られた run の一覧のリクエストは送られず、そのスレッドの結果は一時的な失敗になる
-
-### Requirement: 通知の取得の participating と続きのページ
-
-`participating` は、そのアカウントの設定「参加しているスレッドだけにする」がオンなら `true`、オフなら `false` にしなければならない（MUST）。ページネーションの続きのページ（`Link` の `rel="next"` の URL）にも、同じ `participating` の値が付いていなければならない（MUST。GitHub は `Link` にクエリを引き継いで返す）。レスポンスの `Link` ヘッダーに `rel="next"` があるときは、そのページを順にたどらなければならない（SHALL）。
-
-#### Scenario: 2 ページの通知
-
-- **GIVEN** 1 ページ目の 200 のレスポンスに 50 件のスレッドと `rel="next"` があり、2 ページ目に 3 件のスレッドがある
-- **WHEN** Mewbell が通知を取得する
-- **THEN** 53 件のスレッドが得られる
-- **AND** 結果は「打ち切っていない」
-
-#### Scenario: 参加しているスレッドだけにしたアカウント
-
-- **GIVEN** `acme.ghe.com/dave` は「参加しているスレッドだけにする」がオンで、`github.com/alice` はオフ
-- **WHEN** Mewbell が両方の通知を取得する
-- **THEN** `dave` の 1 ページ目は `GET https://api.acme.ghe.com/notifications?all=false&participating=true&per_page=50` になる
-- **AND** `alice` の 1 ページ目は `GET https://api.github.com/notifications?all=false&participating=false&per_page=50` になる
-
-### Requirement: 通知の取得のスレッドの読み取り
-
-ページの間で同じ ID のスレッドが返ったときは、最初のものだけを残さなければならない（MUST）。スレッドからは ID、理由（`reason`）、更新日時（`updated_at`）、件名（`subject.title`）、種類（`subject.type`）、件名の API URL（`subject.url`、無いこともある）、リポジトリの `owner/name`（`repository.full_name`）を読み取り、必須の値が欠けているか `full_name` が `owner/name` の形でないスレッドは読み飛ばさなければならない（MUST）。1 ページのレスポンスボディが上限のサイズ（5 MiB）を超えたら、その回の取得は失敗として扱わなければならない（MUST）。
-
-#### Scenario: 形の崩れたスレッドを読み飛ばす
-
-- **GIVEN** 200 のレスポンスに 3 件のスレッドがあり、1 件は `repository.full_name` が無い
-- **WHEN** Mewbell がレスポンスを読む
-- **THEN** 2 件のスレッドが得られ、残りの取得は続く
-
-### Requirement: ステータスコードの扱いの成功と一時的な失敗
-
-Mewbell は `GET /notifications` のレスポンスを次のように扱わなければならない（MUST）。
-
-- `200`: スレッドを読み、`Last-Modified` と `X-Poll-Interval` の値を返す
-- `304`: 変化なしとして扱う（1 ページ目に `If-Modified-Since` を付けたときだけ起こる）
-- 上と「ステータスコードの扱い」に無い状態コード、通信の失敗、タイムアウト（30 秒）: 一時的な失敗として扱う
-
-#### Scenario: 304
-
-- **GIVEN** 1 ページ目に `If-Modified-Since` を付けた `GET /notifications` に、API が `304` を返す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** その結果は「変化なし」になる
-
-### Requirement: ステータスコードの扱いの本文
-
-本文で二次レート制限を見分ける判定は、操作（「スレッドの既読化のリクエストのレスポンス」「スレッドを Done にするリクエストのレスポンス」「すべて既読のリクエストのレスポンス」）とスレッドのイベントの取得（「スレッドのイベントの取得のリクエストのレスポンス」）と同じにしなければならない（MUST）。見分けるために読んだ本文は、保持・ログ出力してはならない（MUST NOT）。
-
-Mewbell は API のエラーレスポンスのボディを UI に出してはならない（MUST NOT）。
-
-#### Scenario: 二次レート制限を見分けるために読んだ本文
-
-- **GIVEN** API が `403` を返し、本文の `message` が二次レート制限を示す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** 見分けるために読んだ本文は保持されず、ログにも UI にも出ない
-
-### Requirement: スレッドの既読化のリクエストのレスポンス
-
-レスポンスは次のように扱わなければならない（MUST）。
-
-- `205`: 既読にできた
-- `304`: すでに既読だったとして、既読にできたものと同じに扱う
-- `404`: スレッドがもう無い（Done にした、など）として、既読にできたものと同じに扱う
-- `401`: 認証の失敗
-- `403`: レート制限（`X-RateLimit-Remaining: 0` か `Retry-After` があるとき、またはそれらが無くても本文の `message` が二次レート制限を示すとき。「ステータスコードの扱い」と同じ判定）か拒否
-- `429`: レート制限
-- `422`、それ以外の状態コード、リダイレクト、通信の失敗、タイムアウト: 失敗
-
-既読化のリクエストが失敗しても、トークンを取り直してはならず（MUST NOT）、そのアカウントのポーリングを止めてはならない（MUST NOT）。
-
-#### Scenario: Done にしたスレッド
-
-- **GIVEN** スレッド `123` は Web で Done にされている
-- **WHEN** Mewbell がスレッド `123` を既読にし、API が `404` を返す
-- **THEN** 既読にできたものとして扱う
-
-#### Scenario: 既読化が二次レート制限になる
-
-- **GIVEN** `PATCH /notifications/threads/123` に API が `403` を返し、待ち時間のヘッダーが無く、本文の `message` が二次レート制限を示す
-- **WHEN** Mewbell がそのレスポンスを受け取る
-- **THEN** 結果は状態コードの失敗ではなく「レート制限」になり、トークンは取り直さず、ポーリングも止めない
-
-### Requirement: スレッドを Done にするリクエストのレスポンス
-
-レスポンスは次のように扱わなければならない（MUST）。
-
-- `204`: Done にできた
-- `404`: スレッドがもう無い（すでに Done にした、など）として、Done にできたものと同じに扱う
-- `401`: 認証の失敗
-- `403`: レート制限（`X-RateLimit-Remaining: 0` か `Retry-After` があるとき、またはそれらが無くても本文の `message` が二次レート制限を示すとき。「ステータスコードの扱い」と同じ判定）か拒否
-- `429`: レート制限
-- それ以外の状態コード、リダイレクト、通信の失敗、タイムアウト: 失敗
-
-Done のリクエストが失敗しても、トークンを取り直してはならず（MUST NOT）、そのアカウントのポーリングを止めてはならない（MUST NOT）。
-
-#### Scenario: Done の 401
-
-- **GIVEN** `DELETE /notifications/threads/123` に API が `401` を返す
-- **WHEN** Mewbell がそのレスポンスを受け取る
-- **THEN** 結果は「認証の失敗」になり、トークンは取り直さず、ポーリングも止めない
-
-### Requirement: すべて既読のリクエストのレスポンス
-
-レスポンスは次のように扱わなければならない（MUST）。
-
-- `205`: 既読にできた
-- `202`: 受け付けられた（GitHub が後から非同期に既読にする）。既読にできたものと同じに扱う
-- `304`: 既読にするものが無かったとして、既読にできたものと同じに扱う
-- `401`: 認証の失敗
-- `403`: レート制限（`X-RateLimit-Remaining: 0` か `Retry-After` があるとき、またはそれらが無くても本文の `message` が二次レート制限を示すとき。「ステータスコードの扱い」と同じ判定）か拒否
-- `429`: レート制限
-- それ以外の状態コード（`422` を含む）、リダイレクト、通信の失敗、タイムアウト: 失敗
-
-すべて既読のリクエストが失敗しても、トークンを取り直してはならず（MUST NOT）、そのアカウントのポーリングを止めてはならない（MUST NOT）。
-
-#### Scenario: 非同期に受け付けられる
-
-- **GIVEN** `alice` の未読が多い
-- **WHEN** Mewbell がすべて既読のリクエストを送り、API が `202` を返す
-- **THEN** 既読にできたものとして扱う
-
-#### Scenario: すべて既読のレート制限
-
-- **GIVEN** `PUT /notifications` に API が `403` と `X-RateLimit-Remaining: 0` を返す
-- **WHEN** Mewbell がそのレスポンスを受け取る
-- **THEN** 結果は「レート制限」になり、ポーリングの待ち時間は変わらない
-
-#### Scenario: すべて既読が二次レート制限になる
-
-- **GIVEN** `PUT /notifications` に API が `403` を返し、待ち時間のヘッダーが無く、本文の `message` が二次レート制限を示す
-- **WHEN** Mewbell がそのレスポンスを受け取る
-- **THEN** 結果は「レート制限」になり、ポーリングの待ち時間は変わらない
 
 ### Requirement: スレッドのイベントの取得のリクエストの URL
 
@@ -795,6 +467,50 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 - **GIVEN** Timeline の取得に API が `403` と `X-RateLimit-Remaining: 0`、`X-RateLimit-Reset: <10 分後の時刻>` を返す
 - **WHEN** Mewbell がレスポンスを受け取る
 - **THEN** そのスレッドの結果は「レート制限」になり、10 分後の時刻が得られる
+
+### Requirement: スレッドの状態の決定
+
+Mewbell は、イベントを取るときに得た Issue のレスポンスから、スレッドの件名の今の状態を次の規則で決めなければならない（MUST）。Issue のレスポンスを得られなかったスレッドの状態は「分からない」にしなければならない（MUST）。
+
+- Pull request（`pull_request` がある）: `pull_request.merged_at` があれば Merged、`state` が `closed` なら Closed、`draft` が `true` なら Draft、それ以外の `open` なら Open
+- Issue: `state` が `open` なら Open、`closed` で `state_reason` が `completed` か無いなら Closed as completed、それ以外（`not_planned`・`duplicate` など）の `closed` なら Closed as not planned
+- 上のどれにも当たらない値（知らない `state` など）は「分からない」
+
+#### Scenario: マージした Pull request
+
+- **GIVEN** `GET /repos/cli/cli/issues/14634` が `state: closed`、`pull_request.merged_at: 2026-10-09T14:47:45Z` を返す
+- **WHEN** Mewbell が状態を決める
+- **THEN** 状態は Merged になる
+
+#### Scenario: 対応しないで閉じた Issue
+
+- **GIVEN** Issue のレスポンスが `state: closed`、`state_reason: not_planned` で、`pull_request` が無い
+- **WHEN** Mewbell が状態を決める
+- **THEN** 状態は Closed as not planned になる
+
+#### Scenario: 下書きの Pull request
+
+- **GIVEN** Issue のレスポンスが `state: open`、`draft: true` で、`pull_request.merged_at` が `null`
+- **WHEN** Mewbell が状態を決める
+- **THEN** 状態は Draft になる
+
+### Requirement: スレッドのイベントの決定
+
+Mewbell は、Issue と Timeline のレスポンスから、スレッドの `updated_at` を更新したイベントを「スレッドのイベントの決定の候補のコメントとレビュー」「スレッドのイベントの決定の候補の状態の変化」「スレッドのイベントの決定の候補のそのほか」「スレッドのイベントの決定の近さの幅」「スレッドのイベントの決定の選び方」「スレッドのイベントの決定の実行者」で 1 つ決めなければならない（MUST）。
+
+Timeline の項目のうち、「スレッドのイベントの決定の候補のコメントとレビュー」「スレッドのイベントの決定の候補の状態の変化」「スレッドのイベントの決定の候補のそのほか」の表の `event` だけを候補にしなければならない（MUST）。ほかの `event`（`labeled`、`cross-referenced`、`referenced`、`mentioned`、`subscribed`、知らない値など）は候補にしてはならない（MUST NOT）。
+
+#### Scenario: コメント
+
+- **GIVEN** Issue `octo/app#7` の作成日時が 10:00、スレッドの `updated_at` が 12:00:30 で、Timeline の作成より後の候補が 11:30 の `labeled`（候補にしない）と 12:00 の `commented`（`actor.login: bob`）
+- **WHEN** Mewbell がイベントを決める
+- **THEN** イベントは Commented、実行者は `bob` になる
+
+#### Scenario: 候補にしないイベントだけ
+
+- **GIVEN** Issue の作成日時が 10:00、スレッドの `updated_at` が 12:00 で、Timeline の 10:00 より後の項目は 12:00 の `labeled` と `cross-referenced` だけ
+- **WHEN** Mewbell がイベントを決める
+- **THEN** イベントは「無い」になる（`labeled` や `cross-referenced` は出さない）
 
 ### Requirement: スレッドのイベントの決定の候補のコメントとレビュー
 
@@ -906,6 +622,23 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 - **WHEN** Mewbell がイベントを決める
 - **THEN** イベントは実行者なしの Closed になる
 
+### Requirement: リリースのタグの取得のリクエスト
+
+Mewbell は、リリースの ID を持つ Release のスレッド（polling「スレッドのイベントの取得のリリースのタグ」の条件を満たすもの）についてだけ、タグを求めるために `GET <API ベース URL>/repos/{owner}/{name}/releases/{ID}` を送らなければならない（SHALL）。リクエストの URL は、`subject.url` をそのまま使わず、検証済みのリポジトリの `owner/name` と検証済みの ID（1〜20 桁の数字）から組み立てなければならない（MUST）。組み立てた URL にも「トークンを送る相手の制限」の確認をしなければならず（MUST）、「トークンをリクエストごとに付ける」「リダイレクトとキャッシュ」「通信の内容をログに出さない」を同じく適用しなければならない（MUST）。1 つのスレッドについて送るリクエストは、この 1 回だけにしなければならない（MUST）。
+
+#### Scenario: リリースのタグを取る
+
+- **GIVEN** `github.com/alice` の種類が Release のスレッドのリポジトリが `openai/codex`、`subject.url` が `https://api.github.com/repos/openai/codex/releases/413167889`
+- **WHEN** Mewbell がそのスレッドのタグを取り、API が `200` と `tag_name: rust-v0.163.0-alpha.10.1` を返す
+- **THEN** リクエストは `https://api.github.com/repos/openai/codex/releases/413167889` に `alice` のトークンを付けて送られる
+- **AND** そのスレッドのタグは `rust-v0.163.0-alpha.10.1` になる
+
+#### Scenario: GHES のリリースのタグを取る
+
+- **GIVEN** `ghe.example.com/dave` の種類が Release のスレッドのリポジトリが `team/svc`、`subject.url` が `https://ghe.example.com/api/v3/repos/team/svc/releases/12`
+- **WHEN** Mewbell がそのスレッドのタグを取る
+- **THEN** リクエストは `https://ghe.example.com/api/v3/repos/team/svc/releases/12` に送られる
+
 ### Requirement: リリースのタグの取得の tag_name
 
 レスポンスのうち、使ってよいのは `tag_name` だけで、`html_url` などの URL や本文（`body`）を保持・表示・ログ出力してはならない（MUST NOT）。
@@ -955,6 +688,18 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 - **GIVEN** リリースのタグの取得に API が `403` と `X-RateLimit-Remaining: 0`、`X-RateLimit-Reset: <10 分後の時刻>` を返す
 - **WHEN** Mewbell がレスポンスを受け取る
 - **THEN** そのスレッドの結果は「レート制限」になり、10 分後の時刻が得られる
+
+### Requirement: ワークフローの実行の検索のリクエスト
+
+Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling「スレッドのイベントの取得の run の ID」の条件を満たすもの）についてだけ、そのスレッドのワークフローの実行（run）を探すために、次のリクエストを送らなければならない（SHALL）。リクエストの URL は、`subject.url` を使わず、検証済みのリポジトリの `owner/name`、検証済みの run の ID（1〜20 桁の数字）、件名から読んだ値から組み立てなければならない（MUST）。組み立てた URL にも「トークンを送る相手の制限」の確認をしなければならず（MUST）、「トークンをリクエストごとに付ける」「リダイレクトとキャッシュ」「通信の内容をログに出さない」を同じく適用しなければならない（MUST）。
+
+#### Scenario: 承認を待っている run が 1 件
+
+- **GIVEN** `github.com/alice` の種類が `WorkflowRun` のスレッドのリポジトリが `octo/app`
+- **WHEN** Mewbell がそのスレッドの run を探し、API が `200` と、`id: 38692691414` の run 1 件を返す
+- **AND** `GET /repos/octo/app/actions/runs/38692691414/pending_deployments` が `current_user_can_approve: true` の待ちを返す
+- **THEN** リクエストは `https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=6` に `alice` のトークンを付けて送られる
+- **AND** そのスレッドの run は `38692691414` になる
 
 ### Requirement: ワークフローの実行の検索の承認を待っている run の一覧
 

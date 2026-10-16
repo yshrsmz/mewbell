@@ -13,13 +13,13 @@
 
 ## 3. アーカイブと並べ直し
 
-- [ ] 3.1 main に追いついた後、`python3 -I work/specsplit.py same <分ける前> openspec/specs` の差が 0 件であることを確かめる（`MODIFIED` は要件を丸ごと置き換えるので、2d64cb0 の後に main specs を変えた PR があると、アーカイブで黙って上書きする。差があれば目標の spec にその変更を入れて delta を作り直す）。`pnpm exec openspec validate update-split-long-requirements --strict` が通ることを確かめる
-- [ ] 3.2 アーカイブした後、main spec を目標の spec に置き換える（design D3）。`ADDED` で末尾に足された要件を分けた元の要件のすぐ後ろへ並べ直し、元の要件に重ねて残したシナリオを消す。置き換える前に `python3 -I <archive の work>/specsplit.py verify-archive <分ける前> <archive の work>/target openspec/specs` の差が 0 件であることを確かめ、`work/target/*/spec.md` を `openspec/specs/` へ写す。アーカイブとは別のコミットにし、同じコミットでアーカイブした change の `work/` を消す
-- [ ] 3.3 PR #56 の worktree の 1.14.1 の実行ファイルで、`openspec validate --all --strict` がこのブランチで通ることを確かめる。1.13.2 の `pnpm exec openspec validate --all --strict` も通ることを確かめる
+- [x] 3.1 main に追いついた後、`python3 -I work/specsplit.py same <分ける前> openspec/specs` の差が 0 件であることを確かめる（`MODIFIED` は要件を丸ごと置き換えるので、2d64cb0 の後に main specs を変えた PR があると、アーカイブで黙って上書きする。差があれば目標の spec にその変更を入れて delta を作り直す）。`pnpm exec openspec validate update-split-long-requirements --strict` が通ることを確かめる
+- [x] 3.2 アーカイブした後、main spec を目標の spec に置き換える（design D3）。`ADDED` で末尾に足された要件を分けた元の要件のすぐ後ろへ並べ直し、元の要件に重ねて残したシナリオを消す。置き換える前に `python3 -I <archive の work>/specsplit.py verify-archive <分ける前> <archive の work>/target openspec/specs` の差が 0 件であることを確かめ、`work/target/*/spec.md` を `openspec/specs/` へ写す。アーカイブとは別のコミットにし、同じコミットでアーカイブした change の `work/` を消す
+- [x] 3.3 PR #56 の worktree の 1.14.1 の実行ファイルで、`openspec validate --all --strict` がこのブランチで通ることを確かめる。1.13.2 の `pnpm exec openspec validate --all --strict` も通ることを確かめる
 
 ## 4. 仕上げ
 
-- [ ] 4.1 `bash scripts/lint.sh` が通ることを確かめる。1.3 でコードとテストのコメントを直したので、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` と、警告をエラー扱いにした Debug と Release のビルドを回す。手元での起動は、`git diff main -- Mewbell Mewbell.xcodeproj` がコメントの行だけであること（アプリの振る舞いに差分が無いこと）で代える
+- [x] 4.1 `bash scripts/lint.sh` が通ることを確かめる。1.3 でコードとテストのコメントを直したので、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` と、警告をエラー扱いにした Debug と Release のビルドを回す。手元での起動は、`git diff main -- Mewbell Mewbell.xcodeproj` がコメントの行だけであること（アプリの振る舞いに差分が無いこと）で代える
 
 ## 5. レビュー（.claude/rules/review-process.md）
 

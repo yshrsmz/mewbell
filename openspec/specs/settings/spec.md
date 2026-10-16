@@ -49,6 +49,10 @@ Mewbell の設定は次の項目だけでなければならず（MUST）、値�
 - **WHEN** ユーザーが `github.com/alice` で Mewbell を使う
 - **THEN** `alice` は有効で、`participating=false` で取得され、macOS の通知は音付きで出る
 
+### Requirement: アカウントごとの設定の識別と保持
+
+アカウントごとの設定は `<host>/<user>`（ホスト名は小文字）で識別しなければならない（MUST）。gh からログアウトして一覧から消えたアカウントの設定は消さずに残し、同じアカウントでログインし直したときに同じ設定に戻らなければならない（SHALL）。
+
 #### Scenario: ログインし直すと設定が戻る
 
 - **GIVEN** `github.com/bob` を無効にした後、ユーザーが `gh auth logout --user bob` を実行し、Mewbell がアカウントを読み直した
@@ -147,13 +151,3 @@ Mewbell は、設定ウィンドウでの変更を、適用ボタンや再起動
 - **GIVEN** gh のパスを `/Users/me/bin/gh` で上書きしている
 - **WHEN** ユーザーが上書きを消すボタンを押す
 - **THEN** 入力欄は空になって既定の探し方の控えの文が出て、Mewbell は `/opt/homebrew/bin/gh` から探し直す
-
-### Requirement: アカウントごとの設定の識別と保持
-
-アカウントごとの設定は `<host>/<user>`（ホスト名は小文字）で識別しなければならない（MUST）。gh からログアウトして一覧から消えたアカウントの設定は消さずに残し、同じアカウントでログインし直したときに同じ設定に戻らなければならない（SHALL）。
-
-#### Scenario: ログインし直すと設定が戻る
-
-- **GIVEN** `github.com/bob` を無効にした後、ユーザーが `gh auth logout --user bob` を実行し、Mewbell がアカウントを読み直した
-- **WHEN** ユーザーが `gh auth login` で `bob` にログインし直し、Mewbell がアカウントを読み直す
-- **THEN** `bob` は無効のまま一覧に戻る
