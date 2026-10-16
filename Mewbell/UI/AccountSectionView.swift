@@ -38,6 +38,9 @@ struct NotificationListView: View {
     let actions: ThreadListActions
 
     @State private var animations = DisclosureAnimations()
+    /// 一覧（`ScrollView`）の幅。ポップオーバーの幅で決まり、スクロールバーが出ても消えても変わらない
+    @State private var listWidth: CGFloat?
+    @State private var scrollerStyle = NSScroller.preferredScrollerStyle
 
     var body: some View {
         let shown = statuses.enabled
@@ -60,9 +63,27 @@ struct NotificationListView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                // スクロールバーが出ていても消えていても中身の幅を同じにし、右端のボタンを動かさない
+                .frame(
+                    maxWidth: ListScroller.contentWidthLimit(scrollerStyle: scrollerStyle, listWidth: listWidth),
+                    alignment: .leading
+                )
+                // `ScrollView` は狭い中身を中央に置くので、左に寄せる
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .modifier(ListScrollerModifier(animations: animations))
+            .modifier(HidesScrollIndicatorsWhileAnimating(animations: animations))
             .environment(animations)
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.width
+            } action: {
+                listWidth = $0
+            }
+            // マウスをつないだ・外したときや、システム設定でスクロールバーの表示を変えたときに届く
+            .onReceive(
+                NotificationCenter.default.publisher(for: NSScroller.preferredScrollerStyleDidChangeNotification)
+            ) { _ in
+                scrollerStyle = NSScroller.preferredScrollerStyle
+            }
             .frame(maxHeight: 480)
             .fixedSize(horizontal: false, vertical: true)
         }
