@@ -28,7 +28,10 @@ SHALL_MUST = re.compile(r"\b(MUST|SHALL)\b")
 ITEM = re.compile(r"^(?:[-*]|\d+\.)\s+")
 # reviewed.txt: one sentence per line, as it reads after the split, checked by eye (design D1, D2)
 REVIEWED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reviewed.txt")
-# refs-reviewed.txt: <file>\t<cap>「<name>」\t<reason>, a reference checked by eye that still points correctly (design D2)
+# clarified.txt: <before>\t<after>, a sentence changed on purpose to resolve an ambiguity (design D1), not a rewording
+CLARIFIED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "clarified.txt")
+# refs-reviewed.txt: <file>\t<cap>「<name>」\t<count>\t<reason>, references checked by eye that still point correctly
+# (design D2). <count> is how many times the reference occurs in the file; a new occurrence is listed for review again.
 REFS_REVIEWED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "refs-reviewed.txt")
 REF_DIRS = ["Mewbell", "MewbellTests", "docs", "scripts", ".claude"]
 REF_EXTS = (".swift", ".md", ".sh")
@@ -112,6 +115,14 @@ def sentences(lines):
 def item_sentences(lines):
     """Sentences of the bullet and numbered items, without the item marker."""
     return sentences(ITEM.sub("", l) for l in lines if ITEM.match(l))
+
+
+def load_clarified():
+    """before sentence -> after sentence, for the ambiguities the split makes explicit (design D1)."""
+    if not os.path.exists(CLARIFIED):
+        return {}
+    lines = open(CLARIFIED, encoding="utf-8").read().split("\n")
+    return dict(line.split("\t", 1) for line in lines if line.strip())
 
 
 def load_reviewed():
@@ -206,6 +217,7 @@ def cmd_delta(before, target, outdir):
 def cmd_check(before, target):
     problems = 0
     reviewed = load_reviewed()
+    clarified = load_clarified()
     used = set()
     found = set()
     specs = {cap: (load(before, cap)[1], load(target, cap)[1]) for cap in CAPS}
@@ -226,6 +238,10 @@ def cmd_check(before, target):
         found.update(creviewed)
 
         def missing(label, s):
+            if clarified.get(s, "\0") in tbodies:
+                used.add(clarified[s])
+                print(f"[INFO clarified] {cap}「{name}」: {s}\n    -> {clarified[s]}")
+                return 0
             r = explain(s, creviewed)
             if r is None:
                 print(f"[{label}] {cap}「{name}」: {s}")
@@ -299,6 +315,10 @@ def cmd_check(before, target):
         elif r not in used:
             problems += 1
             print(f"[REVIEWED UNUSED] explains no missing sentence: {r}")
+    for s, r in clarified.items():
+        if r not in used:
+            problems += 1
+            print(f"[CLARIFIED UNUSED] {s}\n    -> {r}")
     print(f"problems: {problems}")
     return problems
 
@@ -379,12 +399,12 @@ def ref_files(target):
 def cmd_refs(before, target):
     """List references to a split requirement whose children do not all start with its name."""
     groups = split_groups(before, target)
-    allowed = {}
+    allowed, seen = {}, {}
     if os.path.exists(REFS_REVIEWED):
         for line in open(REFS_REVIEWED, encoding="utf-8").read().split("\n"):
             if line.strip():
-                f, ref, _ = line.split("\t", 2)
-                allowed[(f, ref)] = False
+                f, ref, count, _ = line.split("\t", 3)
+                allowed[(f, ref)] = int(count)
     for path, own in ref_files(target):
         for no, text in logical_lines(path):
             for m in REF.finditer(text):
@@ -395,14 +415,14 @@ def cmd_refs(before, target):
                         continue
                     key = (path, f"{cap}「{m.group(2)}」")
                     context = text[max(m.start() - 40, 0) : m.end() + 40].strip()
-                    if key in allowed:
-                        allowed[key] = True
+                    seen[key] = seen.get(key, 0) + 1
+                    if seen[key] <= allowed.get(key, 0):
                         print(f"[INFO ref reviewed] {path}:{no} {key[1]}")
                     else:
                         print(f"[REF TO REVIEW] {path}:{no} {key[1]} -> {children}\n    {context}")
-    for (f, ref), seen in allowed.items():
-        if not seen:
-            print(f"[REF REVIEWED NOT FOUND] {f}\t{ref}")
+    for (f, ref), count in allowed.items():
+        if seen.get((f, ref), 0) != count:
+            print(f"[REF REVIEWED COUNT] {f}\t{ref}: reviewed {count}, found {seen.get((f, ref), 0)}")
     return 0
 
 

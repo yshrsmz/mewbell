@@ -359,7 +359,7 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。1 つのスレッドについて送るリクエストは最大 6 回にしなければならない（MUST。「ワークフローの実行の検索の通知より前に作られた run」のリクエストは「ワークフローの実行の検索の承認できる run」の `pending_deployments` と同じ回には送らない）。
 
 1. `GET <API ベース URL>/repos/{owner}/{name}/actions/runs?status=waiting&per_page=6` で、承認を待っている run を取る
-2. 1 件も無ければ、run は「無い」
+2. 1 件も無ければ、「ワークフローの実行の検索の通知より前に作られた run」で run を決める
 
 #### Scenario: 承認を待っている 1 件の run を承認できない
 
