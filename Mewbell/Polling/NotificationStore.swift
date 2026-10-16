@@ -240,6 +240,13 @@ final class NotificationStore {
         perform(group.threads.map { .done(threadID: $0.id) }, in: account)
     }
 
+    /// アカウントの一覧に表示しているスレッドを、まとめて Done にする。送るのは更新日時が新しい順
+    /// （一覧は条件付きの取得で重ねると、新しい順に並んでいるとは限らない）。
+    func markAllDone(in account: AccountID) {
+        let threads = feeds[account]?.threads.sorted { $0.updatedAt > $1.updatedAt } ?? []
+        perform(threads.map { .done(threadID: $0.id) }, in: account)
+    }
+
     /// アカウントの一覧を、表示している一覧の最新のスレッドまですべて既読にする。一覧から外すのはポーラーで、
     /// その結果は `apply` で届く（取得できていない・トークンが無いときに外さない判断を、ポーラーの 1 か所でするため）。
     func markAllRead(in account: AccountID) {

@@ -15,8 +15,6 @@ struct ConfirmingButton<Icon: View, Target: Equatable>: View {
     var isEnabled = true
     /// 操作の対象を表す値（件数と最新のスレッド、スレッドの ID など）。確認の途中で変わったら確認からやり直す
     let target: Target
-    /// `HoverHighlightButtonStyle` の塗りのはみ出し
-    var outset: CGFloat = 0
     let action: () -> Void
 
     var body: some View {
@@ -37,7 +35,7 @@ struct ConfirmingButton<Icon: View, Target: Equatable>: View {
                 icon
             }
         }
-        .buttonStyle(HoverHighlightButtonStyle(outset: outset))
+        .buttonStyle(HoverHighlightButtonStyle())
         .disabled(!isEnabled)
         .help(help)
         .accessibilityLabel(accessibilityLabel)

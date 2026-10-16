@@ -3,7 +3,7 @@ import Testing
 
 @testable import Mewbell
 
-/// `NotificationStore` の、開かずに既読・Done・すべて既読のテスト。
+/// `NotificationStore` の、開かずに既読・Done・すべて既読・すべて Done のテスト。
 @MainActor
 struct NotificationStoreActionTests {
     private let transport = FakeHTTPTransport { request in
@@ -97,6 +97,52 @@ struct NotificationStoreActionTests {
             ])
         await notifier.waitForPendingWork()
         #expect(center.delivered.value.isEmpty)
+        store.stopAll()
+    }
+
+    @Test func marksAllThreadsOfOneAccountDoneNewestFirst() async {
+        // 一覧の並びは新しい順でなくても、Done は更新日時が新しい順に 1 件ずつ送る
+        let page = [("1", "12:00"), ("2", "12:30"), ("3", "11:00")]
+            .map { FakeHTTPTransport.threadJSON(id: $0.0, updatedAt: "2026-10-08T\($0.1):00Z") }
+        transport.setHandler { request in
+            switch request.httpMethod {
+            case "DELETE": HTTPResponse(statusCode: 204)
+            default: PollerFixture.ok(body: Data("[\(page.joined(separator: ","))]".utf8))
+            }
+        }
+        let notifier = SystemNotifier(center: center)
+        let store = await loadedStore(notifier: notifier)
+        await notifier.waitForPendingWork()
+        center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/bob/3"]
+        store.markAllDone(in: alice)
+        #expect(store.feeds[alice]?.threads.isEmpty == true)
+        #expect(store.feeds[bob]?.threads.count == 3)
+        #expect(opened.value.isEmpty)
+        await waitUntil { self.urls("DELETE").count == 3 }
+        #expect(
+            urls("DELETE") == ["2", "1", "3"].map { "https://api.github.com/notifications/threads/\($0)" })
+        #expect(urls("PUT").isEmpty)
+        // alice の通知だけが取り下がる
+        await notifier.waitForPendingWork()
+        #expect(center.delivered.value == ["github.com/bob/3"])
+        store.stopAll()
+    }
+
+    @Test func ignoresMarkAllDoneWithAnEmptyList() async {
+        transport.setHandler { request in
+            switch request.httpMethod {
+            case "DELETE": HTTPResponse(statusCode: 204)
+            default: PollerFixture.ok(body: Data("[]".utf8))
+            }
+        }
+        tokens.set("test-token-alice", for: alice)
+        let store = makeStore(notifier: nil)
+        store.sync(with: .accounts([AccountStatus(account: Account(id: alice, isActive: true), tokenState: .ready)]))
+        await sleeper.waitForSleeps(1)
+        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.phase.showsThreads == true } }
+        store.markAllDone(in: alice)
+        #expect(store.feeds[alice]?.threads.isEmpty == true)
+        #expect(urls("DELETE").isEmpty)
         store.stopAll()
     }
 

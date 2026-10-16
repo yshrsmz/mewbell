@@ -63,7 +63,7 @@ struct ThreadRow: View {
             if isHovering {
                 HoverActionButtons(readLabel: "Mark as read", markRead: markRead) {
                     Button(action: markDone) {
-                        HoverActionButtons.icon("checkmark")
+                        ActionIcon("checkmark")
                     }
                     .help("Mark as done")
                     .accessibilityLabel("Mark as done")
@@ -99,82 +99,6 @@ struct ThreadRow: View {
     }
 }
 
-/// アカウントの通知をすべて既読にするボタン。1 回目で確認の表示に変わり、5 秒以内にもう一度押したときだけ実行する。
-struct MarkAllReadButton: View {
-    let count: Int
-    /// 一覧の最新のスレッドの `updated_at`。確認の途中で変わったら確認からやり直す
-    let newest: Date?
-    let isEnabled: Bool
-    /// ボタンの文（一覧に出ていない未読も既読にすることになるときは、件数を出さない）
-    let labels: MarkAllReadLabels
-    let action: () -> Void
-
-    @State private var confirming: Bool
-
-    /// `participatingOnly` は `participating=true` で取得している、`isTruncated` は一覧を 10 ページで打ち切った
-    /// （どちらも `PUT /notifications` が一覧に出ていない未読まで既読にする）。
-    init(
-        count: Int, newest: Date?, isEnabled: Bool, participatingOnly: Bool = false, isTruncated: Bool = false,
-        confirming: Bool = false, action: @escaping () -> Void
-    ) {
-        self.count = count
-        self.newest = newest
-        self.isEnabled = isEnabled
-        labels = MarkAllReadLabels(count: count, participatingOnly: participatingOnly, isTruncated: isTruncated)
-        self.action = action
-        _confirming = State(initialValue: confirming)
-    }
-
-    var body: some View {
-        ConfirmingButton(
-            confirming: $confirming, icon: Image(systemName: "checkmark.circle"), confirmation: labels.confirmation,
-            help: labels.help(confirming: confirming),
-            accessibilityLabel: labels.accessibilityLabel(confirming: confirming), isEnabled: isEnabled,
-            target: Target(count: count, newest: newest), outset: 3, action: action)
-    }
-
-    /// 確認の途中で変わったら確認からやり直す値。すべて既読は時刻で区切るので、件数と最新のスレッドで足りる
-    private struct Target: Equatable {
-        let count: Int
-        let newest: Date?
-    }
-}
-
-/// すべて既読のボタンの文。一覧に出ていない未読も既読になるとき（参加しているスレッドだけ、10 ページで打ち切った）は
-/// 件数を出さず、そのことをツールチップと読み上げで伝える。
-struct MarkAllReadLabels: Equatable {
-    let count: Int
-    let participatingOnly: Bool
-    let isTruncated: Bool
-
-    private static let notParticipating =
-        "Also marks threads you are not participating in as read, up to the newest one shown here."
-    private static let olderThanShown =
-        "Also marks older unread threads that are not shown here as read (only the newest \(GitHubAPIClient.threadLimit) are fetched)."
-
-    /// 一覧に出ていない未読も既読にすることになるか
-    var includesUnlisted: Bool { participatingOnly || isTruncated }
-
-    var confirmation: String {
-        includesUnlisted ? "Mark all as read?" : "Mark \(count) as read?"
-    }
-
-    func help(confirming: Bool) -> String {
-        withNotes(confirming ? "Click again to mark all as read" : "Mark all as read")
-    }
-
-    func accessibilityLabel(confirming: Bool) -> String {
-        guard confirming else { return withNotes("Mark all as read") }
-        return withNotes(includesUnlisted ? "Confirm marking all as read" : "Confirm marking \(count) as read")
-    }
-
-    private func withNotes(_ base: String) -> String {
-        let notes = [participatingOnly ? Self.notParticipating : nil, isTruncated ? Self.olderThanShown : nil]
-            .compactMap { $0 }
-        return notes.isEmpty ? base : "\(base). \(notes.joined(separator: " "))"
-    }
-}
-
 /// 「5 min. ago」のような相対時刻。ポップオーバーを開いている間も 30 秒ごとに更新する。
 struct RelativeTimeText: View {
     let date: Date
@@ -190,18 +114,6 @@ struct RelativeTimeText: View {
                     .joined(separator: " · "))
         }
     }
-}
-
-#Preview("Mark all as read") {
-    VStack(alignment: .trailing, spacing: 12) {
-        MarkAllReadButton(count: 3, newest: .now, isEnabled: true) {}
-        MarkAllReadButton(count: 3, newest: .now, isEnabled: true, confirming: true) {}
-        MarkAllReadButton(count: 0, newest: nil, isEnabled: false) {}
-        MarkAllReadButton(count: 2, newest: .now, isEnabled: true, participatingOnly: true, confirming: true) {}
-        MarkAllReadButton(count: 500, newest: .now, isEnabled: true, isTruncated: true) {}
-        MarkAllReadButton(count: 500, newest: .now, isEnabled: true, isTruncated: true, confirming: true) {}
-    }
-    .padding()
 }
 
 #Preview("Thread row states") {

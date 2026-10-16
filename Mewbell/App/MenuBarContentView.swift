@@ -38,6 +38,7 @@ struct MenuBarContentView: View {
                         markGroupRead: { notifications.markRead($0, in: $1) },
                         markGroupDone: { notifications.markDone($0, in: $1) },
                         markAllRead: { notifications.markAllRead(in: $0) },
+                        markAllDone: { notifications.markAllDone(in: $0) },
                         openWebNotifications: { notifications.openWebNotifications(for: $0) }))
             } else {
                 GuidanceView(

@@ -12,6 +12,9 @@ struct AccountSectionView: View {
     let expansion: AccountExpansion
     let actions: ThreadListActions
 
+    /// 確認の表示にしている見出しのボタン。すべて既読とすべて Done を同時に確認の表示にしないよう、1 つの値で持つ
+    @State private var confirming: AccountHeadingAction?
+
     private var account: Account { status.account }
 
     var body: some View {
@@ -61,17 +64,40 @@ struct AccountSectionView: View {
                 title
             }
             Spacer(minLength: 0)
-            // トークンや取得の状態にかかわらず出す（止まっていても Web では通知を見られる）
-            OpenWebNotificationsButton(host: account.host) {
-                actions.openWebNotifications(account.id)
-            }
-            if status.tokenState == .ready, let feed, !feed.phase.isStopped {
-                MarkAllReadButton(
-                    count: feed.threads.count, newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead,
-                    participatingOnly: participatingOnly, isTruncated: feed.isTruncated
-                ) {
-                    actions.markAllRead(account.id)
+            // 並びと間隔は、リポジトリの見出しの「既読にする」「Done にする」に合わせる
+            HStack(spacing: 2) {
+                // トークンや取得の状態にかかわらず出す（止まっていても Web では通知を見られる）
+                OpenWebNotificationsButton(host: account.host) {
+                    actions.openWebNotifications(account.id)
                 }
+                if status.tokenState == .ready, let feed, !feed.phase.isStopped {
+                    MarkAllReadButton(
+                        confirming: confirmingBinding(.markAllRead), count: feed.threads.count,
+                        newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead,
+                        participatingOnly: participatingOnly, isTruncated: feed.isTruncated
+                    ) {
+                        actions.markAllRead(account.id)
+                    }
+                    MarkAllDoneButton(
+                        confirming: confirmingBinding(.markAllDone), threadIDs: feed.threads.map(\.id),
+                        isEnabled: !feed.threads.isEmpty
+                    ) {
+                        actions.markAllDone(account.id)
+                    }
+                }
+            }
+        }
+    }
+
+    /// 1 つのボタンの確認の状態。true にすると、もう一方のボタンの確認は解ける
+    private func confirmingBinding(_ action: AccountHeadingAction) -> Binding<Bool> {
+        Binding {
+            confirming == action
+        } set: { isConfirming in
+            if isConfirming {
+                confirming = action
+            } else if confirming == action {
+                confirming = nil
             }
         }
     }
@@ -91,7 +117,7 @@ struct AccountSectionView: View {
                     .capsuleBadge(.tint.opacity(0.15))
                     .help("The active account for this host in gh")
             }
-            OneLineText(text: account.hostLabel, truncation: .middle)
+            OneLineText(text: account.host, truncation: .middle)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             if participatingOnly {
@@ -207,4 +233,10 @@ struct AccountDisclosure: Equatable {
             }
         isCollapsed = showsThreads && isStoredCollapsed
     }
+}
+
+/// アカウントの見出しの、確認の表示にするボタン。
+private enum AccountHeadingAction {
+    case markAllRead
+    case markAllDone
 }

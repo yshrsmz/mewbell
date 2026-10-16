@@ -83,7 +83,7 @@ struct RepositoryGroupView: View {
     private var actionButtons: some View {
         HoverActionButtons(readLabel: labels.read, markRead: markRead) {
             ConfirmingButton(
-                confirming: $confirmingDone, icon: HoverActionButtons.icon("checkmark"),
+                confirming: $confirmingDone, icon: ActionIcon("checkmark"),
                 confirmation: labels.confirmation, help: labels.doneHelp(confirming: confirmingDone),
                 accessibilityLabel: labels.doneAccessibilityLabel(confirming: confirmingDone),
                 // Done はスレッドごとに効くので、件数や最新が同じでも、スレッドが入れ替わったら確認からやり直す

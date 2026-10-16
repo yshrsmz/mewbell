@@ -8,9 +8,9 @@ struct OpenWebNotificationsButton: View {
     var body: some View {
         let label = "Open notifications on \(host)"
         Button(action: action) {
-            Image(systemName: "arrow.up.forward.square")
+            ActionIcon("arrow.up.forward")
         }
-        .buttonStyle(HoverHighlightButtonStyle(outset: 3))
+        .buttonStyle(HoverHighlightButtonStyle())
         .help(label)
         .accessibilityLabel(label)
     }
