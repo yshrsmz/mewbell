@@ -8,6 +8,8 @@
 - 記号: すべて既読は既読の操作なのに、Done の `checkmark` に似た `checkmark.circle` を使っている。行とリポジトリの見出しの「既読にする」（`envelope.open`）と揃っていないうえ、Done に見える
 - 操作: 行とリポジトリの見出しには「既読にする」と「Done にする」があるが、アカウントの見出しには既読しかない。アカウントの通知を片付けるときに Done にする手段が無い。`add-repository-group-actions` では「アカウント単位の Done は足さない」を理由を書かずに Non-Goal にしていた
 
+- ホストの表示: 見出しのホスト名の後ろに、ホスト種別を ` — ` でつないで出している（`github.com — GitHub.com`）。github.com では同じ名前が 2 回続くように見え、幅が足りないと中央が省略されて `github.co…itHub.com` になる。ホスト種別はホスト名から分かるので、見出しには要らない
+
 見た目の一貫性とアクセシビリティ（小さい記号は見つけにくく、意味が操作と合わない記号は誤操作を招く）のために、アカウントの見出しのボタンを行とリポジトリの見出しのボタンと揃え、アカウント単位の Done を足す。
 
 マイルストーン: M4「設定と操作」の追補。`add-repository-group-actions` で入れたまとめた操作を、アカウントにも広げる。
@@ -21,6 +23,7 @@
 - すべて Done は、押したときにそのアカウントの一覧に出していたスレッドだけを、リポジトリのグループの Done と同じ方法（スレッドごとに `DELETE /notifications/threads/{id}` を 1 件ずつ順に送る）で Done にする。まとめて Done にする API は無いので、一覧に出ていない未読（「参加しているスレッドだけにする」で取得していないもの、500 件で打ち切って取得していないもの）は対象にしない
 - すべて Done は取り消せず複数のスレッドに効くので、すべて既読とリポジトリの Done と同じ 2 段階の確認（`Mark N as done?`、5 秒以内にもう一度押したときだけ実行）にする
 - 1 つのアカウントの見出しで確認の表示にするのは、すべて既読とすべて Done のどちらか 1 つだけにする
+- ポップオーバーのアカウントの見出しから、ホスト種別（GitHub.com / GHE Cloud / Enterprise Server）を外し、ホスト名だけを出す。設定ウィンドウの Accounts タブと Diagnostics のホスト種別は変えない（settings と diagnostics の spec が求めていて、幅にも余裕がある）
 
 ## Capabilities
 
@@ -30,14 +33,14 @@
 
 ### Modified Capabilities
 
-- `ui`: アカウントの見出しのボタンの記号と大きさの要件、すべて Done のボタンとその確認の表示の要件を足す。「見出しの押せる範囲の高さ」の、アカウントの見出しのボタンの大きさを変えないとしていた一文を改める。「ポップオーバーの押せる要素のホバーの反応」「ポップオーバーの押せる要素のホバーの塗り」「ポップオーバーの押せる要素のホバーの範囲」「ポップオーバーの文字の読みやすさ」に、すべて Done のボタンとその確認の文を足す
+- `ui`: アカウントの見出しのボタンの記号と大きさの要件、すべて Done のボタンとその確認の表示の要件を足す。「見出しの押せる範囲の高さ」の、アカウントの見出しのボタンの大きさを変えないとしていた一文を改める。「ポップオーバーの押せる要素のホバーの反応」「ポップオーバーの押せる要素のホバーの塗り」「ポップオーバーの押せる要素のホバーの範囲」「ポップオーバーの文字の読みやすさ」に、すべて Done のボタンとその確認の文を足す。「アカウント一覧の表示」「アカウント一覧の表示の通知の一覧」「ポップオーバーの文字の読みやすさ」「ポップオーバーの文字の読みやすさの文字色」「ポップオーバーの文字の読みやすさの幅と省略」から、見出しのホスト種別を外す
 - `polling`: アカウントのスレッドをまとめて Done にする要件を足す。対象の決め方を定め、スレッドごとの扱い・リクエストの順・途中で止まったときの扱いは、既存の「リポジトリのグループの既読化と Done」の各要件に従わせる
 
 `github-api` は変えない（既存の `DELETE /notifications/threads/{id}` をそのまま使う）。`notifications` の「通知の取り下げ」は、各スレッドが「スレッドの Done」を通るので、そのまま効く。
 
 ## Impact
 
-- コード: `Mewbell/UI/AccountSectionView.swift`（見出しのボタンの並び）、`Mewbell/UI/ThreadRow.swift`（`MarkAllReadButton`）、`Mewbell/UI/OpenWebNotificationsButton.swift`、`Mewbell/UI/NotificationListView.swift`（`ThreadListActions`）、`Mewbell/Polling/NotificationStore.swift`（すべて Done の入口）、`Mewbell/App/MenuBarContentView.swift`（つなぎ込み）、テスト
+- コード: `Mewbell/UI/AccountSectionView.swift`（見出しのボタンの並び、ホストの表示）、`Mewbell/UI/ThreadRow.swift`（`MarkAllReadButton`）、`Mewbell/UI/OpenWebNotificationsButton.swift`、`Mewbell/UI/NotificationListView.swift`（`ThreadListActions`）、`Mewbell/Polling/NotificationStore.swift`（すべて Done の入口）、`Mewbell/App/MenuBarContentView.swift`（つなぎ込み）、テスト
 - トークン: 触れる。送るリクエストの種類は増えないが、1 回の操作で送る数が最大で一覧の件数（500 件）まで増える。トークンの取得・保持の仕方は変えず、今までどおりメモリ上の actor にだけ持ち、永続化しない
 - ネットワーク: 触れる。新しい経路は作らず、既存の `AccountPoller.perform(_:)` と `GitHubAPIClient` の Done のメソッドを通す（オリジン検査・リダイレクトの拒否・キャッシュなしはそのまま掛かる）
 - URL を開く処理: 触れない（Web の通知一覧のボタンは記号と大きさを変えるだけで、開く URL と検証は変えない）

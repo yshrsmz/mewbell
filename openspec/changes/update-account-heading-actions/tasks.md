@@ -10,7 +10,8 @@
 - [ ] 2.2 `ConfirmingButton` の `outset` の引数を消す（design D2）
 - [ ] 2.3 同じファイルに `MarkAllDoneLabels`（`Mark all as done`、`Mark N as done?`、確認中かどうかで変わるツールチップと読み上げ）と `MarkAllDoneButton`（`ActionIcon("checkmark")`、`target` はスレッド ID の並び）を足す（design D4）。`MarkAllDoneLabelsTests` を足す
 - [ ] 2.4 `OpenWebNotificationsButton` の記号を `ActionIcon("arrow.up.forward")` にし、`HoverHighlightButtonStyle()` にする（design D2）
-- [ ] 2.5 `AccountSectionView` に `@State private var confirming: AccountHeadingAction?` を置き、見出しの右端に Web の通知一覧・すべて既読・すべて Done を `HStack(spacing: 2)` で並べる。すべて Done は、すべて既読を出す条件で出し、一覧が 1 件以上のときだけ押せるようにする（design D2・D3。spec「すべて Done のボタン」「アカウントの見出しの確認の表示」）。`ThreadRow.swift` のプレビューで使っていた `MarkAllReadButton` の並びを、新しいファイルのプレビューに移し、すべて Done の各状態を足す
+- [ ] 2.5 `AccountSectionView.title` のホストの表示を `account.host` にし、`Account.hostLabel` の doc コメントを設定画面だけのものに直す（design D7）。設定ウィンドウの Accounts タブの表示が変わらないことは 4.6 で確かめる
+- [ ] 2.6 `AccountSectionView` に `@State private var confirming: AccountHeadingAction?` を置き、見出しの右端に Web の通知一覧・すべて既読・すべて Done を `HStack(spacing: 2)` で並べる。すべて Done は、すべて既読を出す条件で出し、一覧が 1 件以上のときだけ押せるようにする（design D2・D3。spec「すべて Done のボタン」「アカウントの見出しの確認の表示」）。`ThreadRow.swift` のプレビューで使っていた `MarkAllReadButton` の並びを、新しいファイルのプレビューに移し、すべて Done の各状態を足す
 
 ## 3. すべて Done の経路
 
@@ -24,6 +25,7 @@
 - [ ] 4.3 見出しのボタンの手前の空いたところにマウスを載せると、山形から Web の通知一覧のボタンの手前まで塗りが出て、押すと折りたたまれ、どのボタンも確認の表示にならないことを確かめる。長いユーザー名のアカウントで確認の表示にしたとき、ホスト名から省略され、確認の文が省略されないことを確かめる
 - [ ] 4.4 VoiceOver で、アカウントの見出しの 3 つのボタンが読まれ、すべて Done のラベルと確認中のラベルが読まれることを確かめる
 - [ ] 4.5 スレッドの行とリポジトリの見出しのボタンの見た目と、すべて既読の 2 段階の確認が `main` と同じに動くことを確かめる（1.1・2.1 の移動の確認）
+- [ ] 4.6 github.com と GHE Cloud（か GHES）のアカウントの見出しに、ホスト名だけが出て、ホスト種別が出ないことを確かめる。設定ウィンドウの Accounts タブには、今までどおりホスト名とホスト種別が出ることを確かめる
 
 ## 5. 仕上げ
 

@@ -78,6 +78,15 @@ View が表示している一覧は `feeds` そのもの（どちらも `@MainAc
 
 `AccountPoller.perform(_:)` は、配列の順に 1 件ずつ送り、止まったとき・トークンが無いとき・認証エラーとレート制限で残りを送らず、失敗を最後の 1 つで記録する。これは spec「アカウントのすべて Done のスレッドごとの扱い」が求める振る舞いそのものなので、ポーラーに新しいメソッドは足さない。配列の順は D5 で並べ直した順（更新日時が新しい順）になる。
 
+### D7. ポップオーバーの見出しは `account.host` を出し、`hostLabel` は設定ウィンドウだけが使う（A4）
+
+`AccountSectionView.title` の `OneLineText(text: account.hostLabel, truncation: .middle)` を `account.host` にする。省略のしかた（中央を省略し、省略したときだけツールチップで全体を出す）と、薄い色・11pt は変えない。`Account.hostLabel`（`host — 種別`）は `SettingsView` の Accounts タブが使い続けるので残し、doc コメントの「見出しと設定画面」を「設定画面」に直す。
+
+採らなかった案:
+
+- github.com のときだけホスト種別を省く: GHE Cloud と GHES もホスト名で種類が分かり（`*.ghe.com` は GHE Cloud）、見出しの幅は 3 つ目のボタンでさらに狭くなるので、どのホストでも省く
+- 設定ウィンドウからも省く: settings spec が求めていて、幅にも余裕がある。ポップオーバーの見出しの問題（幅と、同じ名前が続く見え方）は設定ウィンドウには無い
+
 ## actor と @MainActor の境界
 
 - View（`AccountSectionView`、各ボタン）と `NotificationStore` は `@MainActor`。確認の状態、一覧から外す処理、`threadChanges.threadRemoved` はメインスレッドで動く
