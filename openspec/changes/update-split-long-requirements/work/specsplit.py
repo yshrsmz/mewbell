@@ -7,16 +7,26 @@ TARGET_DIR is work/target in this change.
 usage:
   python3 -I specsplit.py delta  BEFORE_DIR TARGET_DIR OUT_DIR   # write delta specs
   python3 -I specsplit.py check  BEFORE_DIR TARGET_DIR            # preservation check
+                                         # reads reviewed.txt next to this script
   python3 -I specsplit.py verify-archive BEFORE_DIR TARGET_DIR ARCHIVED_DIR
                                          # archive result == target + kept scenarios
   python3 -I specsplit.py same   A_DIR B_DIR                      # same requirement set (order ignored)
 """
+import difflib
 import os
 import re
 import sys
 
 CAPS = "accounts diagnostics distribution gh-cli github-api notifications polling settings ui".split()
-NORM = re.compile(r"\b(MUST|SHALL|SHOULD)\b")
+NORM = re.compile(r"\b(MUST|SHALL|SHOULD|MAY)\b")
+# a requirement body needs SHALL or MUST (OpenSpec); SHOULD or MAY alone is not enough
+SHALL_MUST = re.compile(r"\b(MUST|SHALL)\b")
+# a bullet or numbered item: it takes the normative force of the sentence that introduces it (design D1)
+ITEM = re.compile(r"^(?:[-*]|\d+\.)\s+")
+# reviewed.txt: one sentence per line, as it reads after the split, checked by eye (design D1, D2)
+REVIEWED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reviewed.txt")
+# a reviewed sentence explains a missing one when it covers this share of its characters
+COVERAGE = 0.85
 QUOTED = re.compile(r"「[^「」]*」")
 
 
@@ -82,6 +92,31 @@ def sentences(lines):
     return out
 
 
+def item_sentences(lines):
+    """Sentences of the bullet and numbered items, without the item marker."""
+    return sentences(ITEM.sub("", l) for l in lines if ITEM.match(l))
+
+
+def load_reviewed():
+    if not os.path.exists(REVIEWED):
+        return []
+    lines = open(REVIEWED, encoding="utf-8").read().split("\n")
+    return [l.strip() for l in lines if l.strip()]
+
+
+def coverage(original, after):
+    m = difflib.SequenceMatcher(None, original, after, autojunk=False)
+    return sum(b.size for b in m.get_matching_blocks()) / len(original)
+
+
+def explain(s, reviewed):
+    """The reviewed sentence that best covers `s`, or None."""
+    best = max(reviewed, key=lambda r: coverage(s, r), default=None)
+    if best is not None and coverage(s, best) >= COVERAGE:
+        return best
+    return None
+
+
 def load(d, cap):
     return parse(os.path.join(d, cap, "spec.md"))
 
@@ -138,6 +173,9 @@ def cmd_delta(before, target, outdir):
 
 def cmd_check(before, target):
     problems = 0
+    reviewed = load_reviewed()
+    used = set()
+    found = set()
     for cap in CAPS:
         _, b, _ = load(before, cap)
         _, t, _ = load(target, cap)
@@ -149,6 +187,19 @@ def cmd_check(before, target):
         tall = "\n".join(r for _, r in t)
         bmap = dict(b)
         ball = "\n".join(bmap.values())
+        # only the reviewed sentences that are in this capability's bodies can explain a change in it
+        creviewed = [r for r in reviewed if r in tbodies]
+        found.update(creviewed)
+
+        def missing(label, s):
+            r = explain(s, creviewed)
+            if r is None:
+                print(f"[{label}] {cap}「{name}」: {s}")
+                return 1
+            used.add(r)
+            print(f"[INFO reviewed] {cap}「{name}」: {s}\n    -> {r}")
+            return 0
+
         for name, raw in b:
             body, scen = body_and_scenarios(raw)
             for s in sentences(body):
@@ -158,10 +209,17 @@ def cmd_check(before, target):
                     if mask_refs(s) in tbodies_masked:
                         print(f"[INFO reference renamed] {cap}「{name}」: {s}")
                     else:
-                        problems += 1
-                        print(f"[NORM MISSING] {cap}「{name}」: {s}")
+                        problems += missing("NORM MISSING", s)
                 elif s not in tall:
                     print(f"[INFO moved/changed] {cap}「{name}」: {s}")
+            # an item without a MUST of its own is bound by its introducing sentence: it stays in a body
+            for s in item_sentences(body):
+                if NORM.search(s) or s in tbodies:
+                    continue
+                if mask_refs(s) in tbodies_masked:
+                    print(f"[INFO reference renamed] {cap}「{name}」: {s}")
+                else:
+                    problems += missing("NORM-BOUND MISSING", s)
             for sc in scen:
                 if sc not in tscen:
                     head = sc.split("\n")[0]
@@ -177,7 +235,7 @@ def cmd_check(before, target):
                 print(f"[TOO LONG] {cap}「{name}」: {len(text)}")
             elif len(text) > 450:
                 print(f"[INFO >450] {cap}「{name}」: {len(text)}")
-            if not NORM.search(text):
+            if not SHALL_MUST.search(text):
                 problems += 1
                 print(f"[NO SHALL/MUST] {cap}「{name}」")
             if not scen:
@@ -191,6 +249,13 @@ def cmd_check(before, target):
             for sc in scen:
                 if sc not in ball:
                     print(f"[INFO new scenario] {cap}「{name}」: {sc.splitlines()[0]}")
+    for r in reviewed:
+        if r not in found:
+            problems += 1
+            print(f"[REVIEWED NOT FOUND] not in any requirement body: {r}")
+        elif r not in used:
+            problems += 1
+            print(f"[REVIEWED UNUSED] explains no missing sentence: {r}")
     print(f"problems: {problems}")
     return problems
 

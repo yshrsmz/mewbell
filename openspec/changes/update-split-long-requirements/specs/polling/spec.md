@@ -255,6 +255,23 @@ GitHub は `If-Modified-Since` を付けたリクエストに、`200` のとき�
 - **WHEN** ユーザーが `dave` の「参加しているスレッドだけにする」を切り替える
 - **THEN** `dave` の知らせる失敗と最後の操作の失敗はどちらも消える
 
+### Requirement: スレッドのイベントの取得のリリースのタグ
+
+種類が Release でリリースの ID を持つスレッド（`subject.url` が API ベース URL と同じオリジンで、パスが API ベース URL のパスに続く `repos/<owner>/<name>/releases/<1〜20 桁の数字>` で、`<owner>/<name>` がスレッドのリポジトリと一致するもの）については、イベントと状態の代わりにリリースのタグ（github-api「リリースのタグの取得のリクエスト」）を取らなければならない（MUST）。
+
+#### Scenario: 新着の Release のタグを取ってから知らせる
+
+- **GIVEN** `github.com/alice` の前の取得の一覧にスレッド `555` が無かった
+- **WHEN** 次の取得で、種類が Release で `subject.url` が `https://api.github.com/repos/octo/app/releases/413167889` のスレッド `555` が返る
+- **THEN** `GET https://api.github.com/repos/octo/app/releases/413167889` が `alice` のトークンで送られる
+- **AND** `555` を含む一覧は、`555` にリリースのタグを付けた状態で初めて知らされる
+
+#### Scenario: リリースの ID を持たない Release
+
+- **GIVEN** `github.com/alice` の種類が Release のスレッドの `subject.url` が無いか、`https://api.github.com/repos/other/repo/releases/1` のようにスレッドのリポジトリと一致しない
+- **WHEN** Mewbell がイベントを取るスレッドを選ぶ
+- **THEN** そのスレッドにはリクエストを送らない
+
 ### Requirement: スレッドのイベントの取得の run の ID
 
 種類が `WorkflowRun` か `CheckSuite` のスレッドについては、イベントと状態の代わりに、そのスレッドのワークフローの実行（run）の ID（github-api「ワークフローの実行の検索のリクエスト」）を取らなければならない（MUST）。
@@ -274,7 +291,7 @@ GitHub は `If-Modified-Since` を付けたリクエストに、`200` のとき�
 
 ### Requirement: スレッドのイベントの取得の記録
 
-以下この要件とこれに続く要件の「イベント」は、イベントと状態の組と、リリースのタグと、run の ID を指す（イベントが「無い」でも状態は分かることがある）。覚えたイベントは、アプリの終了で捨て、ディスクや設定に書いてはならない（MUST NOT）。一覧のスレッドには、ID と `updated_at` がどちらも一致する覚えたイベントだけを付けなければならない（MUST）。`updated_at` が変わったスレッドのイベントは取り直さなければならない（MUST）。一覧から消えたスレッドの分は捨てなければならない（MUST）。アカウントが止まった（スコープ不足・認証エラー）ときは、すべて捨てなければならない（MUST）。
+覚えたイベントは、アプリの終了で捨て、ディスクや設定に書いてはならない（MUST NOT）。一覧のスレッドには、ID と `updated_at` がどちらも一致する覚えたイベントだけを付けなければならない（MUST）。`updated_at` が変わったスレッドのイベントは取り直さなければならない（MUST）。一覧から消えたスレッドの分は捨てなければならない（MUST）。アカウントが止まった（スコープ不足・認証エラー）ときは、すべて捨てなければならない（MUST）。
 
 新着の判定に使う「前の一覧」と、捨てずに残す記録は、既読・Done・すべて既読で隠したスレッドを含む、API が返した一覧にしなければならない（MUST）（既読にできずに一覧に戻ったスレッドを、新着として取り直さないため）。
 
@@ -310,6 +327,8 @@ GitHub は `If-Modified-Since` を付けたリクエストに、`200` のとき�
 - **AND** `123` の `updated_at` が進んだら、また取り直す
 
 ### Requirement: スレッドのイベントの取得の順
+
+「スレッドのイベントの取得の対象」の取得は、次の順に行わなければならない（MUST）。
 
 1. 通知の取得が `200` で終わり、その前にもこのポーリングで一覧を取得できていたとき: 前の一覧に無かったスレッドと、前の一覧より `updated_at` が新しくなったスレッド（新着）のうち、更新日時が新しい順に最大 10 件のイベントを取ってから、その一覧を取得の状態として知らせる。この取得に 20 秒より長くかけてはならず（MUST NOT）、終わらなかったスレッドは一時的な失敗として扱う
 2. 取得の状態を知らせた後（`200` でも `304` でも）、次の取得を待ち始める前に: まだ待っているスレッドのうち、更新日時が新しい順に最大 30 件のイベントを取り、取れたものを付けた一覧を知らせ直す。この取得にも 20 秒より長くかけてはならず（MUST NOT）、終わらなかったスレッドは一時的な失敗として扱う。同じ回の 1. で取ったスレッドは、失敗していても取り直してはならない（MUST NOT）
@@ -824,22 +843,15 @@ Mewbell はアカウントごとに、通知の取得について次のいずれ
 
 ### Requirement: スレッドのイベントの取得
 
-Mewbell はアカウントごとに、一覧のスレッドのイベント（github-api「スレッドのイベントの決定」）と件名の状態（github-api「スレッドの状態の決定」）を取得し、スレッドの ID と `updated_at` の組ごとにメモリにだけ覚えなければならない（MUST）。種類が Release でリリースの ID を持つスレッド（`subject.url` が API ベース URL と同じオリジンで、パスが API ベース URL のパスに続く `repos/<owner>/<name>/releases/<1〜20 桁の数字>` で、`<owner>/<name>` がスレッドのリポジトリと一致するもの）については、イベントと状態の代わりにリリースのタグ（github-api「リリースのタグの取得のリクエスト」）を取らなければならない（MUST）。
+Mewbell はアカウントごとに、一覧のスレッドのイベント（github-api「スレッドのイベントの決定」）と件名の状態（github-api「スレッドの状態の決定」）を取得し、スレッドの ID と `updated_at` の組ごとにメモリにだけ覚えなければならない（MUST）。「スレッドのイベントの取得」で始まる要件の「イベント」は、イベントと状態の組と、リリースのタグと、run の ID を指す（イベントが「無い」でも状態は分かることがある）。
 
 1 つのアカウントで同時に取るスレッドは 4 件までにしなければならない（MUST）。
 
-#### Scenario: 新着の Release のタグを取ってから知らせる
+#### Scenario: 同時に取るスレッドは 4 件まで
 
-- **GIVEN** `github.com/alice` の前の取得の一覧にスレッド `555` が無かった
-- **WHEN** 次の取得で、種類が Release で `subject.url` が `https://api.github.com/repos/octo/app/releases/413167889` のスレッド `555` が返る
-- **THEN** `GET https://api.github.com/repos/octo/app/releases/413167889` が `alice` のトークンで送られる
-- **AND** `555` を含む一覧は、`555` にリリースのタグを付けた状態で初めて知らされる
-
-#### Scenario: リリースの ID を持たない Release
-
-- **GIVEN** `github.com/alice` の種類が Release のスレッドの `subject.url` が無いか、`https://api.github.com/repos/other/repo/releases/1` のようにスレッドのリポジトリと一致しない
-- **WHEN** Mewbell がイベントを取るスレッドを選ぶ
-- **THEN** そのスレッドにはリクエストを送らない
+- **GIVEN** `github.com/alice` の一覧に、イベントを取るスレッドが 6 件ある
+- **WHEN** Mewbell がそれらのイベントを取る
+- **THEN** 同時にイベントを取っているスレッドは、どの時点でも 4 件を超えない
 
 #### Scenario: 新着のイベントを取ってから知らせる
 
@@ -903,6 +915,19 @@ Mewbell はアカウントごとに、一覧のスレッドのイベント（git
 - **GIVEN** `github.com/alice` のスレッドのイベントを覚えている
 - **WHEN** `alice` が「認証エラー」で止まる
 - **THEN** 覚えていたイベントはすべて捨てられる
+
+#### Scenario: 新着の Release のタグを取ってから知らせる
+
+- **GIVEN** `github.com/alice` の前の取得の一覧にスレッド `555` が無かった
+- **WHEN** 次の取得で、種類が Release で `subject.url` が `https://api.github.com/repos/octo/app/releases/413167889` のスレッド `555` が返る
+- **THEN** `GET https://api.github.com/repos/octo/app/releases/413167889` が `alice` のトークンで送られる
+- **AND** `555` を含む一覧は、`555` にリリースのタグを付けた状態で初めて知らされる
+
+#### Scenario: リリースの ID を持たない Release
+
+- **GIVEN** `github.com/alice` の種類が Release のスレッドの `subject.url` が無いか、`https://api.github.com/repos/other/repo/releases/1` のようにスレッドのリポジトリと一致しない
+- **WHEN** Mewbell がイベントを取るスレッドを選ぶ
+- **THEN** そのスレッドにはリクエストを送らない
 
 #### Scenario: 新着の承認リクエストの run を取ってから知らせる
 

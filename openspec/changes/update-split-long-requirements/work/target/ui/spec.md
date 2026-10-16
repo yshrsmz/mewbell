@@ -312,6 +312,8 @@ Mewbell はユーザーごとに同時に 1 つだけ動かなければならな
 
 ポップオーバーの一覧でスレッドをクリックすると、Mewbell はそのスレッドの Web ページを既定のブラウザで開き、続けてそのスレッドを既読にしなければならない（SHALL。polling「スレッドの既読化」）。
 
+番号と run の ID は 1〜20 桁の数字だけを受け付けなければならない（MUST）。
+
 開く前に、組み立てた URL のスキームが `https` で、ホストがアカウントのホストと一致することを確かめ、一致しなければ開いてはならない（MUST NOT）。開かなかったときは、既読にもしてはならない（MUST NOT）。
 
 #### Scenario: Pull request を開く
@@ -325,10 +327,8 @@ Mewbell はユーザーごとに同時に 1 つだけ動かなければならな
 
 開く URL は、API のレスポンスに含まれる URL や文字列をそのまま使わず、アカウントの Web ベース URL、リポジトリの `owner/name`、`subject.url` のパス、覚えたリリースのタグと run の ID（polling「スレッドのイベントの取得」）、件名から次のように組み立てなければならない（MUST）。
 
-- `subject.url` が API ベース URL と同じオリジンで、パスが API ベース URL のパスに続く `repos/<owner>/<name>/pulls/<番号>` のとき: `<Web ベース>/<owner>/<name>/pull/<番号>`
-- 同じく `.../issues/<番号>` のとき: `<Web ベース>/<owner>/<name>/issues/<番号>`
-
-番号と run の ID は 1〜20 桁の数字だけを受け付けなければならない（MUST）。
+- 種類が Release でも Discussion でもなく、`subject.url` が API ベース URL と同じオリジンで、パスが API ベース URL のパスに続く `repos/<owner>/<name>/pulls/<番号>` のとき: `<Web ベース>/<owner>/<name>/pull/<番号>`
+- 種類が Release でも Discussion でもなく、同じく `.../issues/<番号>` のとき: `<Web ベース>/<owner>/<name>/issues/<番号>`
 
 #### Scenario: GHES の Issue を開く
 
@@ -340,7 +340,7 @@ Mewbell はユーザーごとに同時に 1 つだけ動かなければならな
 
 開く URL は、API のレスポンスに含まれる URL や文字列をそのまま使わず、アカウントの Web ベース URL、リポジトリの `owner/name`、`subject.url` のパス、覚えたリリースのタグと run の ID（polling「スレッドのイベントの取得」）、件名から次のように組み立てなければならない（MUST）。
 
-- 「通知のスレッドを開く URL の Pull request と Issue」と同じく `.../commits/<16 進の SHA>` のとき: `<Web ベース>/<owner>/<name>/commit/<SHA>`
+- 種類が Release でも Discussion でもなく、「通知のスレッドを開く URL の Pull request と Issue」と同じく `.../commits/<16 進の SHA>` のとき: `<Web ベース>/<owner>/<name>/commit/<SHA>`
 - 上の項目にも、「通知のスレッドを開く URL の」で始まるほかの要件にも当たらないとき（`subject.url` が無い、形が合わない、`subject.url` の `<owner>/<name>` がスレッドのリポジトリと一致しない、などを含む）: `<Web ベース>/<owner>/<name>`
 
 #### Scenario: subject.url が別のホストを指している
@@ -441,7 +441,7 @@ Mewbell はユーザーごとに同時に 1 つだけ動かなければならな
 
 ### Requirement: 通知のスレッドを開く URL の CheckSuite の絞り込み
 
-「通知のスレッドを開く URL の Actions の一覧」の `CheckSuite` の絞り込みは、ワークフロー名が `"` を含まなければ `workflow:"<ワークフロー名>"`、結果が `failed` か `failed at startup` なら `is:failure`、`cancelled` なら `is:cancelled`、`skipped` なら `is:skipped`、`succeeded` なら `is:success`、ブランチが `"` も空白も含まなければ `branch:<ブランチ>` を、この順に空白でつなげたもの。件名が読めなければ `query` を付けない
+「通知のスレッドを開く URL の Actions の一覧」の `CheckSuite` の絞り込みは、ワークフロー名が `"` を含まなければ `workflow:"<ワークフロー名>"`、結果が `failed` か `failed at startup` なら `is:failure`、`cancelled` なら `is:cancelled`、`skipped` なら `is:skipped`、`succeeded` なら `is:success`、ブランチが `"` も空白も含まなければ `branch:<ブランチ>` を、この順に空白でつなげたものにしなければならない（MUST）。件名が読めなければ `query` を付けてはならない（MUST NOT）。
 
 `query` の値は URL のクエリの値としてエスケープし、`+` も `%2B` にエスケープしなければならない（MUST）。
 
@@ -954,7 +954,7 @@ macOS の通知が許可されていない（拒否された、またはオフ�
 
 ### Requirement: スレッドの行のイベントの表示の中身
 
-イベントの表示は、github-api「スレッドのイベントの候補のコメントとレビュー」「スレッドのイベントの候補の状態の変化」「スレッドのイベントの候補のそのほか」のイベント名に、実行者があれば ` by <ログイン名>` を付けたものにしなければならない（SHALL）（例: `Closed by alice`、`Approved by bob`、`Pushed commits`）。表示してよいのは、決まったイベント名と検証済みのログイン名だけで、Timeline の `event` の値やコメントの本文をそのまま出してはならない（MUST NOT）。
+イベントの表示は、github-api「スレッドのイベントの決定の候補のコメントとレビュー」「スレッドのイベントの決定の候補の状態の変化」「スレッドのイベントの決定の候補のそのほか」のイベント名に、実行者があれば ` by <ログイン名>` を付けたものにしなければならない（SHALL）（例: `Closed by alice`、`Approved by bob`、`Pushed commits`）。表示してよいのは、決まったイベント名と検証済みのログイン名だけで、Timeline の `event` の値やコメントの本文をそのまま出してはならない（MUST NOT）。
 
 #### Scenario: 実行者の無いイベント
 
