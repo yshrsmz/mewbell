@@ -27,13 +27,13 @@ struct ThreadIcon: Equatable {
     /// 状態ごとのアイコン。種類に合わない状態なら nil（種類のアイコンを出す）。
     private static func stateIcon(kind: SubjectKind, state: SubjectState) -> StateIcon? {
         switch (kind, state) {
-        case (.pullRequest, .open): StateIcon(symbol: "arrow.triangle.pull", color: .green, stateName: "open")
+        case (.pullRequest, .open): StateIcon(symbol: "arrow.triangle.pull", color: .stateOpen, stateName: "open")
         case (.pullRequest, .draft): StateIcon(symbol: "circle.dashed", color: nil, stateName: "draft")
-        case (.pullRequest, .merged): StateIcon(symbol: "arrow.triangle.merge", color: .purple, stateName: "merged")
-        case (.pullRequest, .closed): StateIcon(symbol: "xmark.circle", color: .red, stateName: "closed")
-        case (.issue, .open): StateIcon(symbol: "smallcircle.filled.circle", color: .green, stateName: "open")
+        case (.pullRequest, .merged): StateIcon(symbol: "arrow.triangle.merge", color: .stateDone, stateName: "merged")
+        case (.pullRequest, .closed): StateIcon(symbol: "xmark.circle", color: .stateClosed, stateName: "closed")
+        case (.issue, .open): StateIcon(symbol: "smallcircle.filled.circle", color: .stateOpen, stateName: "open")
         case (.issue, .closedCompleted):
-            StateIcon(symbol: "checkmark.circle", color: .purple, stateName: "closed as completed")
+            StateIcon(symbol: "checkmark.circle", color: .stateDone, stateName: "closed as completed")
         case (.issue, .closedNotPlanned):
             StateIcon(symbol: "slash.circle", color: nil, stateName: "closed as not planned")
         default: nil

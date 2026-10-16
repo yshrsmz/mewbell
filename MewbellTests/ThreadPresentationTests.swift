@@ -59,39 +59,6 @@ struct ThreadEventTextTests {
     }
 }
 
-struct ThreadIconTests {
-    @Test func distinguishesStatesByShape() {
-        let pulls = [SubjectState.open, .draft, .merged, .closed].map { ThreadIcon(kind: .pullRequest, state: $0) }
-        #expect(Set(pulls.map(\.symbol)).count == pulls.count)
-        let issues = [SubjectState.open, .closedCompleted, .closedNotPlanned].map {
-            ThreadIcon(kind: .issue, state: $0)
-        }
-        #expect(Set(issues.map(\.symbol)).count == issues.count)
-    }
-
-    @Test func labelsTheKindAndState() {
-        #expect(ThreadIcon(kind: .issue, state: .closedNotPlanned).label == "Issue, closed as not planned")
-    }
-
-    @Test(arguments: [(SubjectKind.pullRequest, "Pull request"), (.issue, "Issue"), (.workflowRun, "Workflow run")])
-    func showsOnlyTheKindWithoutAState(_ kind: SubjectKind, _ name: String) {
-        let unknown = ThreadIcon(kind: kind, state: nil)
-        #expect(unknown.color == nil)
-        #expect(unknown.label == name)
-    }
-
-    /// 状態が分からなくても、記号で Pull request と Issue を見分けられる
-    @Test func keepsTheKindsApartWithoutAState() {
-        #expect(ThreadIcon(kind: .pullRequest, state: nil).symbol != ThreadIcon(kind: .issue, state: nil).symbol)
-    }
-
-    @Test func fallsBackToTheKindWithoutAMatchingState() {
-        // 種類に合わない状態は、状態が無いときと同じ
-        #expect(ThreadIcon(kind: .release, state: .open) == ThreadIcon(kind: .release, state: nil))
-        #expect(ThreadIcon(kind: .issue, state: .merged) == ThreadIcon(kind: .issue, state: nil))
-    }
-}
-
 struct TokenStateIconTests {
     /// 状態ごとの記号・色・名前。記号と色は変えず、「止まっている」と「トークンを取れない」は名前だけで読み分ける。
     /// 記号が nil なのは取得中だけ（`ProgressView` を出す）

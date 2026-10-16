@@ -24,6 +24,6 @@
 ## Impact
 
 - マイルストーン: M4（設定と操作）以降に足した一覧の見た目の改善。特定のマイルストーンには属さない。
-- 変更するもの: `Mewbell/UI/ThreadIcon.swift`、`Mewbell/Assets.xcassets`（色セットを 3 つ足す）、`MewbellTests/ThreadPresentationTests.swift`。プロジェクトはフォルダ単位でファイルを取り込んでいるので、`project.xcproj` は変えない見込み。
+- 変更するもの: `Mewbell/UI/ThreadIcon.swift`、`Mewbell/Assets.xcassets`（色セットを 3 つ足す）、`MewbellTests/ThreadPresentationTests.swift`、`MewbellTests/ThreadIconTests.swift`（新規。`ThreadIconTests` を移し、色の値のテストを足すと前のファイルが行数の上限を超えるため）。プロジェクトはフォルダ単位でファイルを取り込んでいるので、`project.xcproj` は変えない見込み。
 - 外部依存は足さない。色の値は Primer（`@primer/primitives` 11.10.0）の公開の値を書き写すだけで、パッケージは取り込まない。
 - トークン・gh サブプロセス・ネットワーク・URL を開く処理には触れない（表示の色だけの変更）。
