@@ -12,7 +12,7 @@
   - `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` で全テストを通す。
   - `MEWBELL_WARNINGS_AS_ERRORS=YES` で、Debug と Release のビルドを通す。
   - `bash scripts/lint.sh` と `pnpm exec openspec validate --all --strict` を通す。
-- [ ] 2.2 `bash scripts/run.sh` で起動し、手元で確かめる。macOS の通知が出ているスレッドを一覧から既読にすると、その通知が通知センターから消えること。通知が出ている複数のスレッドのあるリポジトリのグループを Done にすると、それらの通知がまとめて消え、ほかのリポジトリの通知は残ること。
+- [x] 2.2 `bash scripts/run.sh` で起動し、手元で確かめる。macOS の通知が出ているスレッドを一覧から既読にすると、その通知が通知センターから消えること。通知が出ている複数のスレッドのあるリポジトリのグループを Done にすると、それらの通知がまとめて消え、ほかのリポジトリの通知は残ること。
 
 ## 3. レビュー
 
