@@ -67,12 +67,6 @@ struct AccountHeadingView: View {
                     .disabled(!canMarkAll)
             }
         }
-        // 押せなくなったら確認を解く（ボタンが消えると、5 秒で戻す処理も動かず、ホバーのボタンが出たままになる）
-        .onChange(of: canMarkAll) { _, canMarkAll in
-            if !canMarkAll {
-                confirming = nil
-            }
-        }
     }
 
     /// すべて既読とすべて Done を押せるか
@@ -118,7 +112,7 @@ struct AccountHeadingView: View {
     /// `label`（確認の表示のボタンの読み上げ）で知らせる
     private func announceConfirming(_ action: AccountHeadingAction, label: String) {
         guard canMarkAll else { return }
-        confirming = action
+        startConfirming(action)
         AccessibilityNotification.Announcement(label).post()
     }
 
