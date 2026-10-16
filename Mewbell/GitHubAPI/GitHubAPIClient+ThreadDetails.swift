@@ -82,7 +82,7 @@ extension GitHubAPIClient {
                 event: ThreadEventResolver.event(issue: issue, timeline: timeline, updatedAt: thread.updatedAt)))
     }
 
-    /// リリースのタグを取る（github-api「リリースのタグの取得のリクエスト」「リリースのタグの取得の tag_name」）。
+    /// リリースのタグを取る（github-api の「リリースのタグの取得の」で始まる要件）。
     /// 読むのは `tag_name` だけで、検証を通らなければタグは「無い」。
     private func fetchReleaseTag(
         _ releaseID: String, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken

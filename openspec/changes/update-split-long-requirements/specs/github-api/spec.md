@@ -359,21 +359,20 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。1 つのスレッドについて送るリクエストは最大 6 回にしなければならない（MUST。「ワークフローの実行の検索の通知より前に作られた run」のリクエストは「ワークフローの実行の検索の承認できる run」の `pending_deployments` と同じ回には送らない）。
 
 1. `GET <API ベース URL>/repos/{owner}/{name}/actions/runs?status=waiting&per_page=6` で、承認を待っている run を取る
-2. 1 件も無ければ、「ワークフローの実行の検索の通知より前に作られた run」で run を決める
+2. 1 件も無ければ、一覧の run をすべて見られたとき（`total_count` が 0）は「ワークフローの実行の検索の通知より前に作られた run」で run を決め、それ以外は run は「無い」
 
-#### Scenario: 承認を待っている 1 件の run を承認できない
+#### Scenario: 承認された後の通知
 
-- **GIVEN** 承認を待っている run が `103` の 1 件だけで、その `pending_deployments` が `current_user_can_approve: false` の待ちだけを返す
-- **WHEN** Mewbell がレスポンスを受け取る
-- **THEN** そのスレッドの run は「無い」になる
+- **GIVEN** `acme.ghe.com/dave` の種類が `WorkflowRun` のスレッドのリポジトリが `team/infra`、`updated_at` が 07:16:58Z
+- **AND** 承認を待っている run は 0 件
+- **WHEN** `GET https://api.acme.ghe.com/repos/team/infra/actions/runs?created=%3C%3D2026-10-15T07:16:58Z&per_page=30` が、`run_started_at` 07:16:53Z・`status: completed`・`updated_at` 07:22:14Z の run `14190806` と、`run_started_at` 07:15:49Z・`status: completed`・`updated_at` 07:16:27Z の run `14190661` を返す
+- **THEN** そのスレッドの run は `14190806` になる
 
 ### Requirement: ワークフローの実行の検索の承認できる run
 
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
 
-- 承認を待っている run が 1〜5 件なら、それぞれの `GET <API ベース URL>/repos/{owner}/{name}/actions/runs/{run の ID}/pending_deployments` を取り、`current_user_can_approve` が true の待ちを 1 つでも持つ run のうち、`updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内で、差が最も小さいものにする。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」
-
-1 件のときも `pending_deployments` で確かめ、時刻も照らさなければならない（MUST）。通知の run がほかの人に承認された後に、ユーザーが承認できない別の run や、後から待ち始めた別の run だけが待っていることがあるため。
+- 承認を待っている run が 1〜5 件なら（「ワークフローの実行の検索の通知より前に作られた run」に当たらないとき）、それぞれの `GET <API ベース URL>/repos/{owner}/{name}/actions/runs/{run の ID}/pending_deployments` を取り、`current_user_can_approve` が true の待ちを 1 つでも持つ run のうち、`updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内で、差が最も小さいものにする。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」
 
 #### Scenario: 承認を待っている run が複数
 
@@ -399,11 +398,21 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 - **WHEN** Mewbell がレスポンスを受け取る
 - **THEN** そのスレッドの run は「無い」になる
 
+### Requirement: ワークフローの実行の検索の承認を待っている run が 1 件のとき
+
+承認を待っている run が 1 件のときも（「ワークフローの実行の検索の通知より前に作られた run」に当たらないとき）、`pending_deployments` で確かめ、時刻も照らさなければならない（MUST）。通知の run がほかの人に承認された後に、ユーザーが承認できない別の run や、後から待ち始めた別の run だけが待っていることがあるため。
+
+#### Scenario: 承認を待っている 1 件の run を承認できない
+
+- **GIVEN** 承認を待っている run が `103` の 1 件だけで、その `pending_deployments` が `current_user_can_approve: false` の待ちだけを返す
+- **WHEN** Mewbell がレスポンスを受け取る
+- **THEN** そのスレッドの run は「無い」になる
+
 ### Requirement: ワークフローの実行の検索の承認を待っている run が多いとき
 
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
 
-- 承認を待っている run が 6 件以上（`total_count` が 6 以上のときを含む）なら、run は「無い」
+- 承認を待っている run が 6 件以上（`total_count` が 6 以上のときを含む）なら（「ワークフローの実行の検索の通知より前に作られた run」に当たらないとき）、run は「無い」
 
 #### Scenario: 承認を待っている run が多い
 
@@ -429,12 +438,11 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 
 `<スレッドの updated_at>` は UTC の `YYYY-MM-DDTHH:MM:SSZ` の形で書き、`<=` とあわせてクエリの値としてエスケープする。
 
-#### Scenario: 承認された後の通知
+#### Scenario: 通知より前に作られた run の一覧の日時
 
-- **GIVEN** `acme.ghe.com/dave` の種類が `WorkflowRun` のスレッドのリポジトリが `team/infra`、`updated_at` が 07:16:58Z
-- **AND** 承認を待っている run は 0 件
-- **WHEN** `GET https://api.acme.ghe.com/repos/team/infra/actions/runs?created=%3C%3D2026-10-15T07:16:58Z&per_page=30` が、`run_started_at` 07:16:53Z・`status: completed`・`updated_at` 07:22:14Z の run `14190806` と、`run_started_at` 07:15:49Z・`status: completed`・`updated_at` 07:16:27Z の run `14190661` を返す
-- **THEN** そのスレッドの run は `14190806` になる
+- **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 2026-10-15T07:16:58Z
+- **WHEN** Mewbell が通知より前に作られた run の一覧を取る
+- **THEN** リクエストのクエリの `created` は `%3C%3D2026-10-15T07:16:58Z` になる
 
 ### Requirement: ワークフローの実行の検索の通知の時刻を挟む run
 

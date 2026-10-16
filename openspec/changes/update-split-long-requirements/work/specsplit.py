@@ -33,8 +33,10 @@ CLARIFIED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "clarified.
 # refs-reviewed.txt: <file>\t<cap>「<name>」\t<count>\t<reason>, references checked by eye that still point correctly
 # (design D2). <count> is how many times the reference occurs in the file; a new occurrence is listed for review again.
 REFS_REVIEWED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "refs-reviewed.txt")
-REF_DIRS = ["Mewbell", "MewbellTests", "docs", "scripts", ".claude"]
-REF_EXTS = (".swift", ".md", ".sh")
+REF_DIRS = ["Mewbell", "MewbellTests", "docs", "scripts", ".claude", ".github"]
+REF_EXTS = (".swift", ".md", ".sh", ".yml", ".yaml")
+# besides REF_DIRS: the OpenSpec config and the Markdown files at the root (not the local *.local.md)
+REF_FILES = ["openspec/config.yaml"]
 COMMENT = re.compile(r"^\s*//+\s?")
 # a reviewed sentence explains a missing one when it covers this share of its characters
 COVERAGE = 0.85
@@ -389,6 +391,8 @@ def logical_lines(path):
 def ref_files(target):
     for cap in CAPS:
         yield os.path.relpath(os.path.join(target, cap, "spec.md")), cap
+    for f in REF_FILES + sorted(f for f in os.listdir(".") if f.endswith(".md") and not f.endswith(".local.md")):
+        yield f, None
     for d in REF_DIRS:
         for root, _, files in os.walk(d):
             for f in sorted(files):
@@ -399,7 +403,7 @@ def ref_files(target):
 def cmd_refs(before, target):
     """List references to a split requirement whose children do not all start with its name."""
     groups = split_groups(before, target)
-    allowed, seen = {}, {}
+    allowed, seen, bad = {}, {}, 0
     if os.path.exists(REFS_REVIEWED):
         for line in open(REFS_REVIEWED, encoding="utf-8").read().split("\n"):
             if line.strip():
@@ -419,11 +423,14 @@ def cmd_refs(before, target):
                     if seen[key] <= allowed.get(key, 0):
                         print(f"[INFO ref reviewed] {path}:{no} {key[1]}")
                     else:
+                        bad += 1
                         print(f"[REF TO REVIEW] {path}:{no} {key[1]} -> {children}\n    {context}")
     for (f, ref), count in allowed.items():
         if seen.get((f, ref), 0) != count:
+            bad += 1
             print(f"[REF REVIEWED COUNT] {f}\t{ref}: reviewed {count}, found {seen.get((f, ref), 0)}")
-    return 0
+    print(f"to review: {bad}")
+    return 1 if bad else 0
 
 
 if __name__ == "__main__":

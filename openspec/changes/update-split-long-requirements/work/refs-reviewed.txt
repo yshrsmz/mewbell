@@ -7,6 +7,5 @@ openspec/changes/update-split-long-requirements/work/target/polling/spec.md	acco
 openspec/changes/update-split-long-requirements/work/target/polling/spec.md	notifications「通知の取り下げ」	1	既読・Done にしたスレッドの通知の取り下げは「通知の取り下げ」に残っている。「アカウントの状態が変わったときの通知の取り下げ」はアカウントの状態のとき
 openspec/changes/update-split-long-requirements/work/target/polling/spec.md	polling「操作の失敗の記録」	1	「知らせる失敗と最後の操作の失敗」を並べている
 openspec/changes/update-split-long-requirements/work/target/settings/spec.md	gh-cli「hosts.yml の場所と読み取り」	1	設定ディレクトリを決める順は「hosts.yml の場所と読み取り」に残っている
-Mewbell/GitHubAPI/GitHubAPIClient+ThreadDetails.swift	github-api「リリースのタグの取得のリクエスト」	1	「リリースのタグの取得の tag_name」を並べている。状態コードの扱いは共通の get にある
 MewbellTests/ThreadDetailsRequestTests+Release.swift	github-api「リリースのタグの取得のリクエスト」	1	分けた 3 つの要件をすべて並べている
 docs/architecture.md	ui「ポップオーバーの押せる要素のホバーの反応」	1	「…のホバーの塗り」「…のホバーの範囲」を並べている

@@ -442,7 +442,7 @@ Mewbell はユーザーごとに同時に 1 つだけ動かなければならな
 
 開く URL は、API のレスポンスに含まれる URL や文字列をそのまま使わず、アカウントの Web ベース URL、リポジトリの `owner/name`、`subject.url` のパス、覚えたリリースのタグと run の ID（polling「スレッドのイベントの取得」）、件名から次のように組み立てなければならない（MUST）。
 
-- 種類が `CheckSuite` で（`subject.url` が「通知のスレッドを開く URL の Pull request と Issue」「通知のスレッドを開く URL の Commit とそのほか」の Pull request・Issue・Commit に当たらないとき）、run の ID を覚えていないとき: `<Web ベース>/<owner>/<name>/actions` に、件名（github-api「ワークフローの実行の検索の CheckSuite の件名」の形）から作った絞り込みを `query` に付けたもの。
+- 種類が `CheckSuite` で（`subject.url` が「通知のスレッドを開く URL の Pull request と Issue」「通知のスレッドを開く URL の Commit とそのほか」の Pull request・Issue・Commit に当たらないとき）、run の ID を覚えていないとき: `<Web ベース>/<owner>/<name>/actions` に、件名（github-api「ワークフローの実行の検索の CheckSuite の件名」の形）から作った絞り込みを `query` に付けたもの（件名を読めないときは「通知のスレッドを開く URL の CheckSuite の絞り込み」に従う）。
 
 #### Scenario: 件名を読めない CheckSuite を開く
 
