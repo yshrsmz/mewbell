@@ -71,7 +71,7 @@ OpenSpec は、`MODIFIED` で今の main spec にあるシナリオを減らす�
 分ける前の main spec と分けた後の main spec を比べる確認を、作業用のスクリプトで行う。目標の spec（`work/target/<capability>/spec.md`）とスクリプト（`work/specsplit.py`）は、apply を別のセッションでも続けられるように change の `work/` に置き、tasks 3.2 で main specs を目標の spec に置き換えた後に消す（この change の後には使わないため）。分ける前の main spec は、`git show 2d64cb0:openspec/specs/<capability>/spec.md` で取り出す。delta spec（`specs/`）は `specsplit.py delta` で目標の spec から作ったもので、手で直さない。直すときは目標の spec を直して作り直す。
 
 - 分ける前の要件の本文の、規範の文（`。` と改行で区切り、MUST / SHALL / SHOULD / MAY を含むもの）と、箇条書き・番号付きの項目の文（MUST の語が無くても導入の文の規範を受けるもの）が、分けた後のどれかの要件の本文に一字一句そのまま現れる。D1・D2 が許す置き換え（指示語を名前にした、前提の句を補った、参照の名前を直した、順の句を足した、など）をした文は、目で確かめた後の文を `work/reviewed.txt` に入れ、確認では問題に数えない
-- 分ける前のシナリオ（見出しと中身）が、分けた後のどれかの要件の下にそのまま現れる。中身に行を足したシナリオは一覧にして目で確かめる
+- 分ける前のシナリオ（見出しと中身）が、分けた後のどれかの要件の下に、同じ個数だけそのまま現れる。中身を変えたシナリオは問題に数え、`work/reviewed.txt` のように目で確かめて外す仕組みは持たない（シナリオは変えないので、変えていたら目標の spec を直す）
 - 分ける前の本文の規範ではない文が、分けた後の本文かシナリオに現れる。現れないもの（シナリオへ形を変えて移したもの、D1 で補った句）は一覧にして目で確かめる
 - 1.14.1 の `openspec validate --specs --strict` が、分けた後の main specs で通る（PR #56 の worktree の 1.14.1 の実行ファイルで回す）
 

@@ -16,6 +16,7 @@ import difflib
 import os
 import re
 import sys
+from collections import Counter
 
 CAPS = "accounts diagnostics distribution gh-cli github-api notifications polling settings ui".split()
 NORM = re.compile(r"\b(MUST|SHALL|SHOULD|MAY)\b")
@@ -27,7 +28,10 @@ ITEM = re.compile(r"^(?:[-*]|\d+\.)\s+")
 REVIEWED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reviewed.txt")
 # a reviewed sentence explains a missing one when it covers this share of its characters
 COVERAGE = 0.85
-QUOTED = re.compile(r"「[^「」]*」")
+# a reference: 「name」, optionally prefixed by a capability (polling「name」)
+REF = re.compile(r"(?:(?<![A-Za-z0-9-])(" + "|".join(map(re.escape, CAPS)) + r"))?「([^「」]*)」")
+# a 。 inside these brackets does not end a sentence
+OPEN, CLOSE = "（「", "）」"
 
 
 def parse(path):
@@ -85,11 +89,17 @@ def body_and_scenarios(raw):
 def sentences(lines):
     out = []
     for l in lines:
-        for s in re.split(r"(?<=。)", l):
-            s = s.strip()
-            if s:
-                out.append(s)
-    return out
+        depth, start = 0, 0
+        for i, c in enumerate(l):
+            if c in OPEN:
+                depth += 1
+            elif c in CLOSE:
+                depth = max(depth - 1, 0)
+            elif c == "。" and depth == 0:
+                out.append(l[start : i + 1])
+                start = i + 1
+        out.append(l[start:])
+    return [s.strip() for s in out if s.strip()]
 
 
 def item_sentences(lines):
@@ -121,9 +131,24 @@ def load(d, cap):
     return parse(os.path.join(d, cap, "spec.md"))
 
 
-def mask_refs(text):
-    """Replace 「...」 references so a renamed reference (design D2) still matches."""
-    return QUOTED.sub("「」", text)
+def mask_refs(text, cap, names):
+    """Replace references to requirement names so a renamed reference (design D2) still matches.
+
+    names: capability -> the requirement names before and after the split."""
+
+    def sub(m):
+        return "「」" if m.group(2) in names[m.group(1) or cap] else m.group(0)
+
+    return REF.sub(sub, text)
+
+
+def compare_head_tail(label, x, y):
+    """The parts outside the requirements (title, Purpose, after the last requirement) are equal."""
+    (hx, _, tx), (hy, _, ty) = x, y
+    if "\n".join(hx).strip() != "\n".join(hy).strip() or "\n".join(tx).strip() != "\n".join(ty).strip():
+        print(f"{label}: head/tail differs")
+        return 1
+    return 0
 
 
 def expected(name, tm, bm):
@@ -176,13 +201,15 @@ def cmd_check(before, target):
     reviewed = load_reviewed()
     used = set()
     found = set()
+    specs = {cap: (load(before, cap)[1], load(target, cap)[1]) for cap in CAPS}
+    names = {cap: {n for n, _ in b + t} for cap, (b, t) in specs.items()}
     for cap in CAPS:
-        _, b, _ = load(before, cap)
-        _, t, _ = load(target, cap)
+        b, t = specs[cap]
         tparsed = [(n, *body_and_scenarios(r)) for n, r in t]
         tbodies = "\n".join("\n".join(body) for _, body, _ in tparsed)
-        tbodies_masked = mask_refs(tbodies)
-        tscen = {s for _, _, scen in tparsed for s in scen}
+        tbodies_masked = mask_refs(tbodies, cap, names)
+        # a scenario is kept only as often as it was there before; one of two same headings can be lost
+        tscen = Counter(s for _, _, scen in tparsed for s in scen)
         theads = {s.split("\n")[0] for s in tscen}
         tall = "\n".join(r for _, r in t)
         bmap = dict(b)
@@ -206,7 +233,7 @@ def cmd_check(before, target):
                 if NORM.search(s):
                     if s in tbodies:
                         continue
-                    if mask_refs(s) in tbodies_masked:
+                    if mask_refs(s, cap, names) in tbodies_masked:
                         print(f"[INFO reference renamed] {cap}「{name}」: {s}")
                     else:
                         problems += missing("NORM MISSING", s)
@@ -216,18 +243,19 @@ def cmd_check(before, target):
             for s in item_sentences(body):
                 if NORM.search(s) or s in tbodies:
                     continue
-                if mask_refs(s) in tbodies_masked:
+                if mask_refs(s, cap, names) in tbodies_masked:
                     print(f"[INFO reference renamed] {cap}「{name}」: {s}")
                 else:
                     problems += missing("NORM-BOUND MISSING", s)
+            # scenarios are not changed (design D1): an edited one is a problem, with no reviewed list
             for sc in scen:
-                if sc not in tscen:
-                    head = sc.split("\n")[0]
-                    if head in theads:
-                        print(f"[INFO scenario edited] {cap}「{name}」: {head}")
-                    else:
-                        problems += 1
-                        print(f"[SCENARIO MISSING] {cap}「{name}」: {head}")
+                if tscen[sc] > 0:
+                    tscen[sc] -= 1
+                    continue
+                problems += 1
+                head = sc.split("\n")[0]
+                label = "SCENARIO EDITED" if head in theads else "SCENARIO MISSING"
+                print(f"[{label}] {cap}「{name}」: {head}")
         for name, body, scen in tparsed:
             text = "\n".join(body)
             if len(text) > 500:
@@ -261,12 +289,12 @@ def cmd_check(before, target):
 
 
 def cmd_verify_archive(before, target, archived):
-    """archived == target, except MODIFIED requirements keep the scenarios moved away."""
+    """archived == target (outside the requirements too), except MODIFIED requirements keep the scenarios moved away."""
     bad = 0
     for cap in CAPS:
-        _, a, _ = load(archived, cap)
-        _, t, _ = load(target, cap)
-        _, b, _ = load(before, cap)
+        pa, pt = load(archived, cap), load(target, cap)
+        bad += compare_head_tail(cap, pa, pt)
+        a, t, b = pa[1], pt[1], load(before, cap)[1]
         tm, bm = dict(t), dict(b)
         if sorted(n for n, _ in a) != sorted(tm):
             bad += 1
@@ -283,17 +311,15 @@ def cmd_verify_archive(before, target, archived):
 def cmd_same(a, bdir):
     bad = 0
     for cap in CAPS:
-        ha, xa, ta = load(a, cap)
-        hb, xb, tb = load(bdir, cap)
+        pa, pb = load(a, cap), load(bdir, cap)
+        bad += compare_head_tail(cap, pa, pb)
+        xa, xb = pa[1], pb[1]
         if sorted(xa) != sorted(xb):
             bad += 1
             na, nb = dict(xa), dict(xb)
             for n in set(na) | set(nb):
                 if na.get(n) != nb.get(n):
                     print(f"{cap}: differs「{n}」")
-        if "\n".join(ha).strip() != "\n".join(hb).strip() or "\n".join(ta).strip() != "\n".join(tb).strip():
-            bad += 1
-            print(f"{cap}: head/tail differs")
     print(f"differences: {bad}")
     return bad
 

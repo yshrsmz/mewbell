@@ -361,8 +361,6 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 1. `GET <API ベース URL>/repos/{owner}/{name}/actions/runs?status=waiting&per_page=6` で、承認を待っている run を取る
 2. 1 件も無ければ、run は「無い」
 
-1 件のときも `pending_deployments` で確かめ、時刻も照らさなければならない（MUST）。通知の run がほかの人に承認された後に、ユーザーが承認できない別の run や、後から待ち始めた別の run だけが待っていることがあるため。
-
 #### Scenario: 承認を待っている 1 件の run を承認できない
 
 - **GIVEN** 承認を待っている run が `103` の 1 件だけで、その `pending_deployments` が `current_user_can_approve: false` の待ちだけを返す
@@ -374,7 +372,7 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
 
 3. 1〜5 件なら、それぞれの `GET <API ベース URL>/repos/{owner}/{name}/actions/runs/{run の ID}/pending_deployments` を取り、`current_user_can_approve` が true の待ちを 1 つでも持つ run のうち、`updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内で、差が最も小さいものにする。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」
-4. 6 件以上（`total_count` が 6 以上のときを含む）なら、run は「無い」
+1 件のときも `pending_deployments` で確かめ、時刻も照らさなければならない（MUST）。通知の run がほかの人に承認された後に、ユーザーが承認できない別の run や、後から待ち始めた別の run だけが待っていることがあるため。
 
 #### Scenario: 承認を待っている run が複数
 
@@ -400,6 +398,12 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 - **WHEN** Mewbell がレスポンスを受け取る
 - **THEN** そのスレッドの run は「無い」になる
 
+### Requirement: ワークフローの実行の検索の承認を待っている run が多いとき
+
+種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
+
+4. 6 件以上（`total_count` が 6 以上のときを含む）なら、run は「無い」
+
 #### Scenario: 承認を待っている run が多い
 
 - **GIVEN** `GET /repos/octo/app/actions/runs?status=waiting&per_page=6` が `total_count: 8` を返す
@@ -410,7 +414,19 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
 
-5. 「ワークフローの実行の検索の承認を待っている run の一覧」の一覧の run をすべて見られて（`total_count` が一覧の件数以下）、そのどれも `updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内でないとき（0 件を含む。通知の run はもう承認を待っていない）と、「ワークフローの実行の検索の承認を待っている run の一覧」の一覧が「無い」（`404` など）になったときは、「ワークフローの実行の検索の承認できる run」の代わりに、`GET <API ベース URL>/repos/{owner}/{name}/actions/runs?created=<=<スレッドの updated_at>&per_page=30` で、通知より前に作られた run を取る。
+5. 「ワークフローの実行の検索の承認を待っている run の一覧」の一覧の run をすべて見られて（`total_count` が一覧の件数以下）、そのどれも `updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内でないとき（0 件を含む。通知の run はもう承認を待っていない）と、「ワークフローの実行の検索の承認を待っている run の一覧」の一覧が「無い」（`404` など）になったときは、「ワークフローの実行の検索の承認できる run」「ワークフローの実行の検索の承認を待っている run が多いとき」の代わりに、`GET <API ベース URL>/repos/{owner}/{name}/actions/runs?created=<=<スレッドの updated_at>&per_page=30` で、通知より前に作られた run を取る。
+
+#### Scenario: 通知から離れた時刻に待ち始めた run だけが承認を待っている
+
+- **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run は 15:00 に待ち始めた `201` の 1 件だけ
+- **WHEN** 通知より前に作られた run の一覧が、`run_started_at` 11:59:55・`status: completed`・`updated_at` 12:05:16 の run `14190806` を返す
+- **THEN** `201` の `pending_deployments` のリクエストは送られず、そのスレッドの run は `14190806` になる
+
+### Requirement: ワークフローの実行の検索の日時の書き方
+
+種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
+
+`<スレッドの updated_at>` は UTC の `YYYY-MM-DDTHH:MM:SSZ` の形で書き、`<=` とあわせてクエリの値としてエスケープする。
 
 #### Scenario: 承認された後の通知
 
@@ -419,17 +435,11 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 - **WHEN** `GET https://api.acme.ghe.com/repos/team/infra/actions/runs?created=%3C%3D2026-10-15T07:16:58Z&per_page=30` が、`run_started_at` 07:16:53Z・`status: completed`・`updated_at` 07:22:14Z の run `14190806` と、`run_started_at` 07:15:49Z・`status: completed`・`updated_at` 07:16:27Z の run `14190661` を返す
 - **THEN** そのスレッドの run は `14190806` になる
 
-#### Scenario: 通知から離れた時刻に待ち始めた run だけが承認を待っている
-
-- **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run は 15:00 に待ち始めた `201` の 1 件だけ
-- **WHEN** 通知より前に作られた run の一覧が、`run_started_at` 11:59:55・`status: completed`・`updated_at` 12:05:16 の run `14190806` を返す
-- **THEN** `201` の `pending_deployments` のリクエストは送られず、そのスレッドの run は `14190806` になる
-
 ### Requirement: ワークフローの実行の検索の通知の時刻を挟む run
 
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
 
-`<スレッドの updated_at>` は UTC の `YYYY-MM-DDTHH:MM:SSZ` の形で書き、`<=` とあわせてクエリの値としてエスケープする。「ワークフローの実行の検索の通知より前に作られた run」で取った run のうち、`status` が `waiting` でなく（「ワークフローの実行の検索の承認を待っている run の一覧」の後に承認を待ち始めた run は数えない）、`run_started_at` がスレッドの `updated_at` 以前で、終わっていない（`status` が `completed` でない）か、`updated_at` がスレッドの `updated_at` 以降のもの（通知の時刻を挟む run）が 1 件だけなら、その run にする。0 件か 2 件以上なら、run は「無い」。
+「ワークフローの実行の検索の通知より前に作られた run」で取った run のうち、`status` が `waiting` でなく（「ワークフローの実行の検索の承認を待っている run の一覧」の後に承認を待ち始めた run は数えない）、`run_started_at` がスレッドの `updated_at` 以前で、終わっていない（`status` が `completed` でない）か、`updated_at` がスレッドの `updated_at` 以降のもの（通知の時刻を挟む run）が 1 件だけなら、その run にする。0 件か 2 件以上なら、run は「無い」。
 
 #### Scenario: 通知の時刻を挟む run が複数ある
 
@@ -445,13 +455,17 @@ Timeline の 1 ページ目の `Link` ヘッダーに `rel="last"` があり、�
 
 ### Requirement: ワークフローの実行の検索の通知より前に作られた run を探さないとき
 
-通知の前後 10 分以内に承認を待ち始めた run があるとき（「ワークフローの実行の検索の承認できる run」で決める）と、「ワークフローの実行の検索の承認を待っている run の一覧」の一覧の run をすべては見られないときは、通知の run がまだ待っているかもしれないので、「ワークフローの実行の検索の通知より前に作られた run」のリクエストを送ってはならない（MUST NOT）。「ワークフローの実行の検索の通知より前に作られた run」のリクエストは、Mewbell がスレッドを初めて見たときに通知の run がもう承認されていた（Mewbell が起動していなかった間に届いた、一覧に出る前に Web で承認されたなど）ときのためにある。「ワークフローの実行の検索の承認を待っている run の一覧」と「ワークフローの実行の検索の承認できる run」が一時的な失敗・認証の失敗・レート制限になったときは、「ワークフローの実行の検索の通知より前に作られた run」のリクエストを送ってはならない（MUST NOT）。
+通知の前後 10 分以内に承認を待ち始めた run があるとき（「ワークフローの実行の検索の承認できる run」「ワークフローの実行の検索の承認を待っている run が多いとき」で決める）と、「ワークフローの実行の検索の承認を待っている run の一覧」の一覧の run をすべては見られないときは、通知の run がまだ待っているかもしれないので、「ワークフローの実行の検索の通知より前に作られた run」のリクエストを送ってはならない（MUST NOT）。「ワークフローの実行の検索の通知より前に作られた run」のリクエストは、Mewbell がスレッドを初めて見たときに通知の run がもう承認されていた（Mewbell が起動していなかった間に届いた、一覧に出る前に Web で承認されたなど）ときのためにある。
 
 #### Scenario: 承認を待っている run があるのに決まらない
 
 - **GIVEN** 種類が `WorkflowRun` のスレッドの `updated_at` が 12:00 で、承認を待っている run は 11:59 に待ち始めた `103` の 1 件だけで、その `pending_deployments` が `current_user_can_approve: false` の待ちだけを返す
 - **WHEN** Mewbell がレスポンスを受け取る
 - **THEN** 通知より前に作られた run の一覧のリクエストは送られず、そのスレッドの run は「無い」になる
+
+### Requirement: ワークフローの実行の検索の承認を待っている run を取れなかったとき
+
+「ワークフローの実行の検索の承認を待っている run の一覧」「ワークフローの実行の検索の承認できる run」「ワークフローの実行の検索の承認を待っている run が多いとき」が一時的な失敗・認証の失敗・レート制限になったときは、「ワークフローの実行の検索の通知より前に作られた run」のリクエストを送ってはならない（MUST NOT）。
 
 #### Scenario: 承認を待っている run の一覧が一時的に失敗した
 

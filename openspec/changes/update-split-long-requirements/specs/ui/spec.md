@@ -201,7 +201,7 @@
 
 開く URL は、API のレスポンスに含まれる URL や文字列をそのまま使わず、アカウントの Web ベース URL、リポジトリの `owner/name`、`subject.url` のパス、覚えたリリースのタグと run の ID（polling「スレッドのイベントの取得」）、件名から次のように組み立てなければならない（MUST）。
 
-- 種類が `WorkflowRun` か `CheckSuite` で（`subject.url` が「通知のスレッドを開く URL の Pull request と Issue」「通知のスレッドを開く URL の Commit とそのほか」の Pull request・Issue・Commit に当たらないとき。「通知のスレッドを開く URL の Actions の一覧」の 2 つも同じ）、そのスレッドの run の ID を覚えているとき: `<Web ベース>/<owner>/<name>/actions/runs/<run の ID>`
+- 種類が `WorkflowRun` か `CheckSuite` で（`subject.url` が「通知のスレッドを開く URL の Pull request と Issue」「通知のスレッドを開く URL の Commit とそのほか」の Pull request・Issue・Commit に当たらないとき）、そのスレッドの run の ID を覚えているとき: `<Web ベース>/<owner>/<name>/actions/runs/<run の ID>`
 
 #### Scenario: 承認リクエストの run を開く
 
@@ -215,12 +215,11 @@
 - **WHEN** ユーザーがそのスレッドをクリックする
 - **THEN** 既定のブラウザで `https://github.com/octo/app/actions/runs/201` が開く
 
-### Requirement: 通知のスレッドを開く URL の Actions の一覧
+### Requirement: 通知のスレッドを開く URL の WorkflowRun の一覧
 
 開く URL は、API のレスポンスに含まれる URL や文字列をそのまま使わず、アカウントの Web ベース URL、リポジトリの `owner/name`、`subject.url` のパス、覚えたリリースのタグと run の ID（polling「スレッドのイベントの取得」）、件名から次のように組み立てなければならない（MUST）。
 
-- 種類が `WorkflowRun` で、run の ID を覚えていないとき（取る前、取れなかった、決まらなかったなど）: `<Web ベース>/<owner>/<name>/actions?query=is:waiting`
-- 種類が `CheckSuite` で、run の ID を覚えていないとき: `<Web ベース>/<owner>/<name>/actions` に、件名（github-api「ワークフローの実行の検索の CheckSuite の件名」の形）から作った絞り込みを `query` に付けたもの。
+- 種類が `WorkflowRun` で（`subject.url` が「通知のスレッドを開く URL の Pull request と Issue」「通知のスレッドを開く URL の Commit とそのほか」の Pull request・Issue・Commit に当たらないとき）、run の ID を覚えていないとき（取る前、取れなかった、決まらなかったなど）: `<Web ベース>/<owner>/<name>/actions?query=is:waiting`
 
 #### Scenario: run が決まらない承認リクエストを開く
 
@@ -228,9 +227,21 @@
 - **WHEN** ユーザーがそのスレッドをクリックする
 - **THEN** run を探すのを待たずに、既定のブラウザで `https://github.com/octo/app/actions?query=is:waiting` が開く
 
+### Requirement: 通知のスレッドを開く URL の CheckSuite の一覧
+
+開く URL は、API のレスポンスに含まれる URL や文字列をそのまま使わず、アカウントの Web ベース URL、リポジトリの `owner/name`、`subject.url` のパス、覚えたリリースのタグと run の ID（polling「スレッドのイベントの取得」）、件名から次のように組み立てなければならない（MUST）。
+
+- 種類が `CheckSuite` で（`subject.url` が「通知のスレッドを開く URL の Pull request と Issue」「通知のスレッドを開く URL の Commit とそのほか」の Pull request・Issue・Commit に当たらないとき）、run の ID を覚えていないとき: `<Web ベース>/<owner>/<name>/actions` に、件名（github-api「ワークフローの実行の検索の CheckSuite の件名」の形）から作った絞り込みを `query` に付けたもの。
+
+#### Scenario: 件名を読めない CheckSuite を開く
+
+- **GIVEN** `github.com/alice` の種類が `CheckSuite` のスレッドのリポジトリが `octo/app`、件名が `Something happened` で、その run の ID を覚えていない
+- **WHEN** ユーザーがそのスレッドをクリックする
+- **THEN** 既定のブラウザで `https://github.com/octo/app/actions` が開く
+
 ### Requirement: 通知のスレッドを開く URL の CheckSuite の絞り込み
 
-「通知のスレッドを開く URL の Actions の一覧」の `CheckSuite` の絞り込みは、ワークフロー名が `"` を含まなければ `workflow:"<ワークフロー名>"`、結果が `failed` か `failed at startup` なら `is:failure`、`cancelled` なら `is:cancelled`、`skipped` なら `is:skipped`、`succeeded` なら `is:success`、ブランチが `"` も空白も含まなければ `branch:<ブランチ>` を、この順に空白でつなげたものにしなければならない（MUST）。件名が読めなければ `query` を付けてはならない（MUST NOT）。
+「通知のスレッドを開く URL の CheckSuite の一覧」の `CheckSuite` の絞り込みは、ワークフロー名が `"` を含まなければ `workflow:"<ワークフロー名>"`、結果が `failed` か `failed at startup` なら `is:failure`、`cancelled` なら `is:cancelled`、`skipped` なら `is:skipped`、`succeeded` なら `is:success`、ブランチが `"` も空白も含まなければ `branch:<ブランチ>` を、この順に空白でつなげたものにしなければならない（MUST）。件名が読めなければ `query` を付けてはならない（MUST NOT）。
 
 `query` の値は URL のクエリの値としてエスケープし、`+` も `%2B` にエスケープしなければならない（MUST）。
 
@@ -239,12 +250,6 @@
 - **GIVEN** `github.com/alice` の種類が `CheckSuite` のスレッドのリポジトリが `octo/app`、件名が `Build and test workflow run, Attempt #2 failed for feat/a+b branch` で、その run の ID を覚えていない
 - **WHEN** ユーザーがそのスレッドをクリックする
 - **THEN** 既定のブラウザで `https://github.com/octo/app/actions?query=workflow:%22Build%20and%20test%22%20is:failure%20branch:feat/a%2Bb` が開く
-
-#### Scenario: 件名を読めない CheckSuite を開く
-
-- **GIVEN** `github.com/alice` の種類が `CheckSuite` のスレッドのリポジトリが `octo/app`、件名が `Something happened` で、その run の ID を覚えていない
-- **WHEN** ユーザーがそのスレッドをクリックする
-- **THEN** 既定のブラウザで `https://github.com/octo/app/actions` が開く
 
 ### Requirement: 未読バッジの色
 
@@ -440,7 +445,7 @@
 
 ### Requirement: ポップオーバーの文字の読みやすさのアイコン
 
-ポップオーバーのアイコンのうち書体で大きさが決まるもの（種類のアイコン、見出しの山形、トークンの状態、参加のみの印、ベル、ボタンのアイコンなど）は、11pt より小さい書体で描いてはならない（MUST NOT）。取得中の印（`ProgressView`）は、この決まりに含めない。アイコンの色は文字の色の決まりに含めない（種類のアイコン・山形・参加のみの印・ベルは薄い色、トークンの状態と警告は状態を表すシステムの色を使ってよい）。スレッドの行の種類のアイコン、見出しの山形、アカウントの見出しのトークンの状態のアイコンは、同じ幅の列（アイコンの列）の中央に置く。列に置く記号は書体で決まる大きさのまま描き、縮めて列に収めてはならない（MUST NOT）。記号は、倍率 1 と 2 のどちらの画面でも、マウスを載せているときも、欠けずに出なければならない（SHALL）。
+ポップオーバーのアイコンのうち書体で大きさが決まるもの（種類のアイコン、見出しの山形、トークンの状態、参加のみの印、ベル、ボタンのアイコンなど）は、11pt より小さい書体で描いてはならない（MUST NOT）。取得中の印（`ProgressView`）は、この決まりに含めない。アイコンの色は「ポップオーバーの文字の読みやすさの文字色」「ポップオーバーの文字の読みやすさの色の指定と背景」の文字の色の決まりに含めない（種類のアイコン・山形・参加のみの印・ベルは薄い色、トークンの状態と警告は状態を表すシステムの色を使ってよい）。スレッドの行の種類のアイコン、見出しの山形、アカウントの見出しのトークンの状態のアイコンは、同じ幅の列（アイコンの列）の中央に置く。列に置く記号は書体で決まる大きさのまま描き、縮めて列に収めてはならない（MUST NOT）。記号は、倍率 1 と 2 のどちらの画面でも、マウスを載せているときも、欠けずに出なければならない（SHALL）。
 
 #### Scenario: Discussion の種類のアイコン
 
@@ -539,7 +544,7 @@ open・closed・done の色を付ける状態のアイコンに、システム�
 
 ### Requirement: スレッドの行の状態のアイコンの状態が分からないとき
 
-状態が「分からない」か付いていないとき、またはスレッドの種類に合わない状態が付いているときは、状態として扱わず、種類だけを表すアイコンを薄い色で出さなければならない（SHALL）。このアイコンは、その種類の状態のアイコン（例: 開いている Pull request の緑のアイコン）と記号の形が同じで色だけが違ってもよい。形と色の両方で区別する決まりは、状態どうしにだけ適用する。状態が分からないことを示すために、種類を表す記号の代わりに種類によらない記号（例: 疑問符）を使ってはならず（MUST NOT）、状態が分からない Pull request と Issue は記号で見分けられなければならない（SHALL）。VoiceOver では、種類だけ（例: 「Pull request」）として読ませなければならない（SHALL）。
+状態が「分からない」か付いていないとき、またはスレッドの種類に合わない状態が付いているときは、状態として扱わず、種類だけを表すアイコンを薄い色で出さなければならない（SHALL）。このアイコンは、その種類の状態のアイコン（例: 開いている Pull request の緑のアイコン）と記号の形が同じで色だけが違ってもよい。形と色の両方で区別する「スレッドの行の状態のアイコン」の決まりは、状態どうしにだけ適用する。状態が分からないことを示すために、種類を表す記号の代わりに種類によらない記号（例: 疑問符）を使ってはならず（MUST NOT）、状態が分からない Pull request と Issue は記号で見分けられなければならない（SHALL）。VoiceOver では、種類だけ（例: 「Pull request」）として読ませなければならない（SHALL）。
 
 #### Scenario: 状態が分からない
 
