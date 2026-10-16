@@ -25,5 +25,5 @@
 
 - [x] 5.1 別コンテキストの opus サブエージェント（`general-purpose`）で `simplify` を実行し、入った変更を確かめる
 - [x] 5.2 別の opus サブエージェントで `code-review` を effort `medium` で実行し、指摘ごとに直す・直さない（理由）を決めて対応する。規範の文の変更を含む修正が多いときは、もう一度 `code-review` を新しいサブエージェントで回す
-- [ ] 5.3 PR 本文の Test plan に、simplify と code-review をサブエージェントで実行したこと、指摘の件数と対応を書く
+- [x] 5.3 PR 本文の Test plan に、simplify と code-review をサブエージェントで実行したこと、指摘の件数と対応を書く
 - [ ] 5.4 この PR を merge した後、PR #56 を rebase させ（Renovate の rebase のチェックボックス）、CI の `lint` が通ってから merge する
