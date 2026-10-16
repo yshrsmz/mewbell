@@ -19,10 +19,10 @@
 - アカウントの見出しのボタンと、行・リポジトリの見出しのボタンの記号の枠を 1 つの部品にする（同じ大きさを 2 か所で書かない）
 - すべて Done を、リポジトリのグループの Done と同じ経路（`NotificationStore.perform` → `AccountPoller.perform`）に載せる
 - アカウントの見出しの確認の状態を 1 か所に持ち、すべて既読とすべて Done が同時に確認の表示にならないようにする
+- 見出しにホバーのボタンを重ねる仕組み（出さないときに隠す、幅を測って中身を手前で省略する）を、リポジトリの見出しとアカウントの見出しで 1 つにする
 
 **Non-Goals:**
 
-- アカウントの見出しにコンテキストメニューと VoiceOver のアクションを足すこと。アカウントの見出しのボタンは常に出ているので、VoiceOver でもボタンとして届く（リポジトリの見出しにアクションを付けたのは、ボタンがホバーの間だけ出るため）
 - すべて既読の振る舞い（`PUT /notifications`、押せる条件、確認の文）は変えない
 - ポーラーの `perform` と、リクエストの送り方は変えない
 - 歯車と再読み込みのボタン（16pt の枠と余白 4）の大きさは変えない
@@ -33,16 +33,16 @@
 
 `HoverActionButtons.icon(_:)` と `iconSize` を、`ListLayout.swift` の `ActionIcon`（`systemName` を受け取り、記号を `ListLayout.actionIconSize`（22）四方の枠の中央に置く View）に移す。`HoverActionButtons` の `rowSize` は `ListLayout.actionIconSize` から計算する。スレッドの行、リポジトリの見出し、アカウントの見出しの 3 つのボタンは、どれも `ActionIcon` を使う。
 
-`ActionIcon` という型を足すのは、spec の「アカウントの見出しのボタンの大きさ」が、リポジトリの見出しのボタンと同じ大きさを求めるため（大きさを 2 か所に書くと片方だけ変わる。A9）。置き場所を `ListLayout.swift` にするのは、`HoverActionButtons` はホバーで重ねるボタンの部品で、常に出ているアカウントの見出しのボタンがそこから記号を借りるのは名前と責務が合わないため。一覧の寸法は `ListLayout` に集めている（A1。UI の層の中の置き場所）。
+`ActionIcon` という型を足すのは、spec の「アカウントの見出しのボタンの大きさ」が、リポジトリの見出しのボタンと同じ大きさを求めるため（大きさを 2 か所に書くと片方だけ変わる。A9）。置き場所を `ListLayout.swift` にするのは、記号の枠は一覧の寸法で、ホバーで重ねるボタンの並び（`HoverActionButtons`）とは別の部品だから（A1。UI の層の中の置き場所。一覧の寸法は `ListLayout` に集めている）。
 
 採らなかった案:
 
 - アカウントの見出しから `HoverActionButtons.icon(_:)` をそのまま呼ぶ: 型を足さずに済むが、ホバーしないボタンが「ホバーのボタン」の部品に依存し、読み手を迷わせる
-- `.imageScale(.large)` で囲みのある記号を大きく描く: 記号の意味は残るが、すべて既読が Done に見える問題が残り、行・リポジトリの記号とも揃わない
+- `.imageScale(.large)` で囲みのある記号を大きく描く: すべて既読が Done に見える問題が残り、行・リポジトリの記号とも揃わない。Web の通知一覧の囲みのある記号は、22pt の枠に入れて押せる範囲を揃えれば足りる（四角の枠から出ていく矢印は外部へ開く慣用の形なので、囲みを外さない）
 
 ### D2. アカウントの見出しのボタンは、`outset` を付けずに 22pt の枠で並べる（A16）
 
-`OpenWebNotificationsButton` の記号を `ActionIcon("arrow.up.forward")` にし、`HoverHighlightButtonStyle()`（`outset` 0）にする。すべて既読とすべて Done は `ActionIcon("envelope.open")` と `ActionIcon("checkmark")` を `ConfirmingButton` に渡す。3 つのボタンは `HStack(spacing: 2)` にまとめ、見出しの `HStack` の右端に置く（間隔 2 は `HoverActionButtons` と同じ）。並びは Web の通知一覧、すべて既読、すべて Done で、リポジトリの見出しの「既読にする」「Done にする」の順に合わせる。
+`OpenWebNotificationsButton` の記号を `ActionIcon("arrow.up.forward.square")` にし、`HoverHighlightButtonStyle()`（`outset` 0）にする。すべて既読とすべて Done は `ActionIcon("envelope.open")` と `ActionIcon("checkmark")` を `ConfirmingButton` に渡す。3 つのボタンは `HoverActionButtons` に並べる（D8）。並びは Web の通知一覧、すべて既読、すべて Done で、リポジトリの見出しの「既読にする」「Done にする」の順に合わせる。
 
 22pt の枠は見出しの高さの下限 24pt に収まるので、見出しの高さは変わらない。押せる範囲は 22pt 四方になり、A16 の「20pt 以上」を満たす。`ConfirmingButton` の `outset` の引数は、使うところが無くなるので消す（A9）。`HoverHighlightButtonStyle` の `outset` は `CommandRow` が使うので残す。
 
@@ -86,6 +86,21 @@ View が表示している一覧は `feeds` そのもの（どちらも `@MainAc
 
 - github.com のときだけホスト種別を省く: GHE Cloud と GHES もホスト名で種類が分かり（`*.ghe.com` は GHE Cloud）、見出しの幅は 3 つ目のボタンでさらに狭くなるので、どのホストでも省く
 - 設定ウィンドウからも省く: settings spec が求めていて、幅にも余裕がある。ポップオーバーの見出しの問題（幅と、同じ名前が続く見え方）は設定ウィンドウには無い
+
+### D8. アカウントの見出しのボタンは、リポジトリの見出しと同じ部品でホバーの間だけ重ねる（A9・A16）
+
+`HoverActionButtons` を、ボタンの並びを `@ViewBuilder` で受け取る形に変える（今は「既読にする」のボタンを中に持ち、「Done にする」だけを受け取る）。アカウントの見出しの「すべて既読」は確認のボタンで、すぐ既読にする行・リポジトリの「既読にする」と形が違い、先頭に Web の通知一覧も並ぶため。行とリポジトリの見出しの「既読にする」は、`HoverActionButtons.markReadButton(_:action:)` で作る（2 か所で同じボタンを書かないため）。ボタンの間と左右のすき間を押しても下の見出しに届かないようにする処理は、今のまま `HoverActionButtons` に残す。
+
+見出しにボタンを重ねる処理（`overlay(alignment: .trailing)`、出さないときに見えず・押せず・読まれないようにする、`onGeometryChange` でボタンの並びの幅を測る）を、`View.headingActions(isShown:width:buttons:)` にして `HoverActionButtons.swift` に置き、リポジトリとアカウントの見出しで使う。spec の「リポジトリの見出しの操作のボタンの配置」と「アカウントの見出しの操作のボタンの配置」が同じ振る舞いを求め、2 か所に書くと片方だけ直す不具合の種になるため（A9）。
+
+アカウントの見出しは、`AccountSectionView` が `isHovering` と `actionsWidth` の `@State` を持ち、`DisclosureButton` に `isHovering` と `trailingInset`（ボタンを出している間はボタンの並びの幅）を渡す。ボタンを出すのは、マウスを載せている間か、確認の表示の間（`confirming != nil`）。見出しの `HStack` と `Spacer` はやめ、`DisclosureButton` を行の幅いっぱいにして、塗りと折りたたみの範囲をリポジトリの見出しと同じにする。折りたたみの操作を出さない見出し（止まっている、トークンを取れないなど）でも Web の通知一覧を出すので、`DisclosureButton` の畳めないときの表示にも `trailingInset` を効かせる。
+
+コンテキストメニューと VoiceOver の操作は、リポジトリの見出しと同じく見出しに付ける。Web の通知一覧はすぐ開き、すべて既読とすべて Done は `confirming` を設定して確認の表示にするだけにする。VoiceOver で確認の表示にしたときは `AccessibilityNotification.Announcement` で知らせる。すべて既読とすべて Done は、押せないときはメニューの項目を `disabled` にし、VoiceOver の操作には出さない（`accessibilityActions` の `@ViewBuilder` で条件を付ける）。
+
+採らなかった案:
+
+- アカウントの見出しにだけ、別のホバーの仕組みを書く: リポジトリの見出しと同じ振る舞いが 2 か所に分かれる
+- `HoverActionButtons` に Web の通知一覧の枠（`leading`）を足し、「既読にする」は中に残す: アカウントの「すべて既読」は確認のボタンなので、どのみち中の「既読にする」を使えない
 
 ## actor と @MainActor の境界
 

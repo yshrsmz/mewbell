@@ -61,7 +61,8 @@ struct ThreadRow: View {
         // 上端に揃えて件名の 1 行目の高さに置く（件名が 2 行の行でも位置が変わらず、Done で繰り上がった行でもカーソルの下に来るように）
         .overlay(alignment: .topTrailing) {
             if isHovering {
-                HoverActionButtons(readLabel: "Mark as read", markRead: markRead) {
+                HoverActionButtons {
+                    HoverActionButtons.markReadButton("Mark as read", action: markRead)
                     Button(action: markDone) {
                         ActionIcon("checkmark")
                     }

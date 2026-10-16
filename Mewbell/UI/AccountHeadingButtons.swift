@@ -53,6 +53,9 @@ struct MarkAllReadLabels: Equatable {
     private static let olderThanShown =
         "Also marks older unread threads that are not shown here as read (only the newest \(GitHubAPIClient.threadLimit) are fetched)."
 
+    /// 操作の名前（VoiceOver の操作と、確認の前のツールチップ・読み上げ）
+    static let read = "Mark all as read"
+
     /// 一覧に出ていない未読も既読にすることになるか
     var includesUnlisted: Bool { participatingOnly || isTruncated }
 
@@ -61,11 +64,11 @@ struct MarkAllReadLabels: Equatable {
     }
 
     func help(confirming: Bool) -> String {
-        withNotes(confirming ? "Click again to mark all as read" : "Mark all as read")
+        withNotes(confirming ? "Click again to mark all as read" : Self.read)
     }
 
     func accessibilityLabel(confirming: Bool) -> String {
-        guard confirming else { return withNotes("Mark all as read") }
+        guard confirming else { return withNotes(Self.read) }
         return withNotes(includesUnlisted ? "Confirm marking all as read" : "Confirm marking \(count) as read")
     }
 

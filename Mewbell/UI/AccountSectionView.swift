@@ -14,6 +14,9 @@ struct AccountSectionView: View {
 
     /// 確認の表示にしている見出しのボタン。すべて既読とすべて Done を同時に確認の表示にしないよう、1 つの値で持つ
     @State private var confirming: AccountHeadingAction?
+    @State private var isHovering = false
+    /// 重ねたボタンの幅（見出しの中身をその手前で省略する）
+    @State private var actionsWidth: CGFloat = 0
 
     private var account: Account { status.account }
 
@@ -52,41 +55,93 @@ struct AccountSectionView: View {
         }
     }
 
+    /// 確認の表示はマウスを外しても出し続ける
+    private var showsActions: Bool { isHovering || confirming != nil }
+
+    /// すべて既読とすべて Done を出すときの取得の状態（トークンが使えて、止まっていないとき）。出さないときは nil
+    private var markAllFeed: FeedState? {
+        guard status.tokenState == .ready, let feed, !feed.phase.isStopped else { return nil }
+        return feed
+    }
+
     private func header(_ disclosure: AccountDisclosure) -> some View {
-        HStack(spacing: 6) {
-            // 開閉のボタンと「すべて既読」は分ける（押し間違えて開閉しないように）
-            DisclosureButton(
-                isCollapsed: disclosure.isCollapsed, name: account.displayName,
-                isCollapsible: disclosure.showsThreads, count: feed?.threads.count ?? 0
-            ) {
-                expansion.toggle()
-            } label: {
-                title
-            }
-            Spacer(minLength: 0)
-            // 並びと間隔は、リポジトリの見出しの「既読にする」「Done にする」に合わせる
-            HStack(spacing: 2) {
-                // トークンや取得の状態にかかわらず出す（止まっていても Web では通知を見られる）
-                OpenWebNotificationsButton(host: account.host) {
-                    actions.openWebNotifications(account.id)
+        // 操作のボタンは開閉のボタンの中に入れず、上に重ねる（見出しのクリックと奪い合わないように。リポジトリの見出しと同じ）
+        DisclosureButton(
+            isCollapsed: disclosure.isCollapsed, name: account.displayName,
+            isCollapsible: disclosure.showsThreads, count: feed?.threads.count ?? 0, isHovering: isHovering,
+            trailingInset: showsActions ? actionsWidth : 0
+        ) {
+            expansion.toggle()
+        } label: {
+            title
+        }
+        // ホバーのボタンを使えない VoiceOver でも操作できるように（すべて既読とすべて Done は確認の表示にするだけ）
+        .accessibilityActions {
+            Button(OpenWebNotificationsButton.label(for: account.host), action: openWebNotifications)
+            if let feed = markAllFeed {
+                if feed.canMarkAllRead {
+                    Button(MarkAllReadLabels.read) { announceConfirming(.markAllRead, feed: feed) }
                 }
-                if status.tokenState == .ready, let feed, !feed.phase.isStopped {
-                    MarkAllReadButton(
-                        confirming: confirmingBinding(.markAllRead), count: feed.threads.count,
-                        newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead,
-                        participatingOnly: participatingOnly, isTruncated: feed.isTruncated
-                    ) {
-                        actions.markAllRead(account.id)
-                    }
-                    MarkAllDoneButton(
-                        confirming: confirmingBinding(.markAllDone), threadIDs: feed.threads.map(\.id),
-                        isEnabled: !feed.threads.isEmpty
-                    ) {
-                        actions.markAllDone(account.id)
+                if !feed.threads.isEmpty {
+                    Button(MarkAllDoneLabels(count: feed.threads.count).done) {
+                        announceConfirming(.markAllDone, feed: feed)
                     }
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // 並びと間隔は、リポジトリの見出しの「既読にする」「Done にする」に合わせる
+        .headingActions(isShown: showsActions, width: $actionsWidth) { actionButtons }
+        .onHover { isHovering = $0 }
+        .contextMenu {
+            Button("Open Notifications in Browser", action: openWebNotifications)
+            if let feed = markAllFeed {
+                Button("Mark All as Read") { confirming = .markAllRead }
+                    .disabled(!feed.canMarkAllRead)
+                Button("Mark All as Done") { confirming = .markAllDone }
+                    .disabled(feed.threads.isEmpty)
+            }
+        }
+    }
+
+    /// 見出しに重ねる操作のボタン
+    @ViewBuilder private var actionButtons: some View {
+        // トークンや取得の状態にかかわらず出す（止まっていても Web では通知を見られる）
+        OpenWebNotificationsButton(host: account.host, action: openWebNotifications)
+        if let feed = markAllFeed {
+            MarkAllReadButton(
+                confirming: confirmingBinding(.markAllRead), count: feed.threads.count,
+                newest: feed.newestUpdate, isEnabled: feed.canMarkAllRead,
+                participatingOnly: participatingOnly, isTruncated: feed.isTruncated
+            ) {
+                actions.markAllRead(account.id)
+            }
+            MarkAllDoneButton(
+                confirming: confirmingBinding(.markAllDone), threadIDs: feed.threads.map(\.id),
+                isEnabled: !feed.threads.isEmpty
+            ) {
+                actions.markAllDone(account.id)
+            }
+        }
+    }
+
+    private func openWebNotifications() {
+        actions.openWebNotifications(account.id)
+    }
+
+    /// VoiceOver の操作から確認の表示にする。見出しの表示が変わるだけでは何も読まれないので、確認を待っていることを知らせる
+    private func announceConfirming(_ action: AccountHeadingAction, feed: FeedState) {
+        confirming = action
+        let label =
+            switch action {
+            case .markAllRead:
+                MarkAllReadLabels(
+                    count: feed.threads.count, participatingOnly: participatingOnly, isTruncated: feed.isTruncated
+                )
+                .accessibilityLabel(confirming: true)
+            case .markAllDone: MarkAllDoneLabels(count: feed.threads.count).accessibilityLabel(confirming: true)
+            }
+        AccessibilityNotification.Announcement(label).post()
     }
 
     /// 1 つのボタンの確認の状態。true にすると、もう一方のボタンの確認は解ける

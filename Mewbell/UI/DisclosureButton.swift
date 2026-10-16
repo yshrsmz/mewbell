@@ -53,6 +53,7 @@ struct DisclosureButton<Label: View>: View {
                 DisclosureChevron(isCollapsed: isCollapsed).hidden()
                 labelWithCount
             }
+            .padding(.trailing, trailingInset)
             // 畳めるようになっても見出しの高さが変わらないように、畳めるときと同じ枠にする
             .frame(maxWidth: .infinity, minHeight: ListLayout.headingHeight, alignment: .leading)
         }
