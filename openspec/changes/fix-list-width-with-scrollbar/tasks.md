@@ -2,18 +2,18 @@
 
 ## 1. 余白の幅の判断
 
-- [ ] 1.1 `UI/ListScroller.swift` に `ScrollerGutter`（`init(style:overflows:indicatorsHidden:)` と `width`）を足す（design D2）。legacy で収まっているとき・アニメーションで隠しているときはスクロールバーの幅、legacy ではみ出しているときと overlay のときは 0
-- [ ] 1.2 `MewbellTests/ScrollerGutterTests.swift` に、spec の Scenario の 4 つの状態（legacy で収まっている、legacy ではみ出している、legacy でアニメーション中にはみ出している、overlay）を引数にしたテストを足し、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test -only-testing:MewbellTests/ScrollerGutterTests` が通り、結果のスイート数が 1 であることを確かめる
+- [x] 1.1 `UI/ListScroller.swift` に `ScrollerGutter`（`init(style:overflows:indicatorsHidden:)` と `width`）を足す（design D2）。legacy で収まっているとき・アニメーションで隠しているときはスクロールバーの幅、legacy ではみ出しているときと overlay のときは 0
+- [x] 1.2 `MewbellTests/ScrollerGutterTests.swift` に、spec の Scenario の 4 つの状態（legacy で収まっている、legacy ではみ出している、legacy でアニメーション中にはみ出している、overlay）を引数にしたテストを足し、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test -only-testing:MewbellTests/ScrollerGutterTests` が通り、結果のスイート数が 1 であることを確かめる
 
 ## 2. 一覧のスクロール
 
-- [ ] 2.1 `HidesScrollIndicatorsWhileAnimating` を `ListScrollerModifier` に改めて `UI/ListScroller.swift` に移す（design D2）。はみ出しを `onScrollGeometryChange` で `@State` に持ち（D1）、スクロールバーの表示のしかたを `@State` に持って `NSScroller.preferredScrollerStyleDidChangeNotification` で読み直し（D3）、`ScrollerGutter` の幅を `.contentMargins(.trailing, _, for: .scrollContent)` に渡す。`scrollIndicators` と `onAppear` での数の破棄は今のまま
-- [ ] 2.2 `NotificationListView` の呼び出しを `ListScrollerModifier` に替え、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell build` が通ること、`#Preview("Notifications")` の見た目が overlay で変わっていないことを確かめる
+- [x] 2.1 `HidesScrollIndicatorsWhileAnimating` を `ListScrollerModifier` に改めて `UI/ListScroller.swift` に移す（design D2）。はみ出しを `onScrollGeometryChange` で `@State` に持ち（D1）、スクロールバーの表示のしかたを `@State` に持って `NSScroller.preferredScrollerStyleDidChangeNotification` で読み直し（D3）、`ScrollerGutter` の幅を `.contentMargins(.trailing, _, for: .scrollContent)` に渡す。`scrollIndicators` と `onAppear` での数の破棄は今のまま
+- [x] 2.2 `NotificationListView` の呼び出しを `ListScrollerModifier` に替え、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell build` が通ること、`#Preview("Notifications")` の見た目が overlay で変わっていないことを確かめる
 
 ## 3. テストと lint
 
-- [ ] 3.1 `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` を `-only-testing` を付けずに回し、通ることを確かめる
-- [ ] 3.2 `bash scripts/lint.sh` が通ることを確かめる
+- [x] 3.1 `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` を `-only-testing` を付けずに回し、通ることを確かめる
+- [x] 3.2 `bash scripts/lint.sh` が通ることを確かめる
 
 ## 4. 手元での確認（spec の Scenario ごと）
 
