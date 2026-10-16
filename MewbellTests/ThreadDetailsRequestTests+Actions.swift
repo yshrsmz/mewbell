@@ -118,9 +118,7 @@ extension ThreadDetailsRequestTests {
             ])
     }
 
-    /// 承認できる run が複数あるときは、承認待ちになった時刻が通知（12:00）に最も近いものにする。承認できても 10 分より
-    /// 離れた run は選ばない（通知の run が承認された後に待ち始めた別の run を開かないため）。通知の 1 分前に待ち始めた
-    /// 承認できない run があるので、通知の run がまだ待っているかもしれず、通知の前に作られた run の一覧は取らない。
+    /// 承認できる run が複数あるときは、承認待ちになった時刻が通知（12:00）に最も近いものにする。
     @Test func takesTheApprovableRunClosestToTheNotification() async throws {
         let (thread, endpoints) = try approvalThread()
         let list = Self.runs([
@@ -128,6 +126,13 @@ extension ThreadDetailsRequestTests {
         ])
         let both = transport(list: list) { _ in Self.pending(canApprove: true) }
         #expect(await fetch(thread, endpoints, both) == Self.found("102"))
+    }
+
+    /// 承認できても通知（12:00）から 10 分より離れて待ち始めた run は選ばない（通知の run が承認された後に待ち始めた
+    /// 別の run を開かないため）。通知の 1 分前に待ち始めた承認できない run があるので、通知の run がまだ待っているかも
+    /// しれず、通知の前に作られた run の一覧は取らない。
+    @Test func rejectsAnApprovableRunThatStartedWaitingLater() async throws {
+        let (thread, endpoints) = try approvalThread()
         let later = transport(
             list: Self.runs([
                 Run("102", "Deploy", "2026-10-08T11:59:00Z"), Run("103", "Deploy", "2026-10-08T12:20:00Z"),
