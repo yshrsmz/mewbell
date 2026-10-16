@@ -13,7 +13,9 @@ import Testing
         (true, true, true),
         (false, true, true),
     ])
-    func legacyReservesWidthWhileScrollerIsHidden(overflows: Bool, indicatorsHidden: Bool, reserves: Bool) {
+    func legacyReservesWidthWhileScrollerIsHidden(overflows: Bool, indicatorsHidden: Bool, reserves: Bool) throws {
+        // 幅が 0 だと、空けるときと空けないときを見分けられない
+        try #require(Self.scrollerWidth > 0)
         let gutter = ScrollerGutter(style: .legacy, overflows: overflows, indicatorsHidden: indicatorsHidden)
         #expect(gutter.width == (reserves ? Self.scrollerWidth : 0))
     }
@@ -23,9 +25,5 @@ import Testing
     func overlayReservesNothing(overflows: Bool, indicatorsHidden: Bool) {
         let gutter = ScrollerGutter(style: .overlay, overflows: overflows, indicatorsHidden: indicatorsHidden)
         #expect(gutter.width == 0)
-    }
-
-    @Test func scrollerWidthIsPositive() {
-        #expect(Self.scrollerWidth > 0)
     }
 }

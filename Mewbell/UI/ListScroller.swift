@@ -4,7 +4,7 @@ import SwiftUI
 /// 一覧の中身の右に残す、スクロールバーの分の空き。
 /// スクロールバーが中身の横に並ぶ表示（legacy）では、スクロールバーが出ていないときだけスクロールバーの幅を空け、
 /// 出ているかどうかで中身の幅（と右端に揃えたボタンの位置）が変わらないようにする。中身に重なる表示（overlay）では空けない
-@MainActor struct ScrollerGutter: Equatable {
+@MainActor struct ScrollerGutter {
     let width: CGFloat
 
     /// - Parameters:
