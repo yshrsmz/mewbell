@@ -66,7 +66,7 @@
 
 ### D5. すべて Done の入口は `NotificationStore.markAllDone(in:)` にし、押したときの一覧を store から読む（A2・A14）
 
-`ThreadListActions` に `markAllDone: (AccountID) -> Void` を足し、`MenuBarContentView` で `NotificationStore.markAllDone(in:)` につなぐ。`markAllDone(in:)` は `feeds[account]?.threads` を、リポジトリのグループと同じ `RepositoryGroup.isNewer`（`updatedAt` の新しい順、同じ時刻は ID 順）で並べ直し、`perform(threads.map { .done(threadID: $0.id) }, in: account)` を呼ぶ。取得の状態が「取得できた」でないとき・一覧が空のとき（`FeedState.canMarkAll` が false のとき）は何もしない。すべて既読の入口と同じ確認で、確認の表示の間に取得が失敗して前の一覧のまま残ったときに、そのスレッドをまとめて Done にしないため（code-review の指摘。最初は一覧が 1 件以上なら押せた）。`canMarkAll` は `canMarkAllRead` を改名したもので、すべて既読とすべて Done の両方の条件にする。並べ直すのは、`feeds` の並びが新しい順だと決まっていないため（`ThreadListMerge.merge` は受け取ったスレッドの後に今の一覧を並べるだけで、並べ替えない）。spec「リポジトリのグループの既読化と Done のリクエストの順」の「更新日時が新しい順」を守る（リポジトリのグループは `RepositoryGroup.groups(from:)` が並べ替えている）。
+`ThreadListActions` に `markAllDone: (AccountID) -> Void` を足し、`MenuBarContentView` で `NotificationStore.markAllDone(in:)` につなぐ。`markAllDone(in:)` は `feeds[account]?.threads` を、リポジトリのグループの中と同じ `NotificationThread.isNewer`（`updatedAt` の新しい順、同じ時刻は ID 順。`FeedState.swift` に置く。並べ方はスレッドの一覧のもので、リポジトリの分け方とは関係しないため）で並べ直し、`perform(threads.map { .done(threadID: $0.id) }, in: account)` を呼ぶ。取得の状態が「取得できた」でないとき・一覧が空のとき（`FeedState.canMarkAll` が false のとき）は何もしない。すべて既読の入口と同じ確認で、確認の表示の間に取得が失敗して前の一覧のまま残ったときに、そのスレッドをまとめて Done にしないため（code-review の指摘。最初は一覧が 1 件以上なら押せた）。`canMarkAll` は `canMarkAllRead` を改名したもので、すべて既読とすべて Done の両方の条件にする。並べ直すのは、`feeds` の並びが新しい順だと決まっていないため（`ThreadListMerge.merge` は受け取ったスレッドの後に今の一覧を並べるだけで、並べ替えない）。spec「リポジトリのグループの既読化と Done のリクエストの順」の「更新日時が新しい順」を守る（リポジトリのグループは `RepositoryGroup.groups(from:)` が並べ替えている）。
 
 View が表示している一覧は `feeds` そのもの（どちらも `@MainActor`）で、確認の途中で一覧のスレッドが変わったら確認が解ける（D4 の `target`）。そのため、2 回目を押したときの `feeds` は、ユーザーが確認の表示で見ていたスレッドと同じになる（spec「アカウントのすべて Done」の「押したときに表示していたスレッドだけ」）。押した後に届いたスレッドは、`perform` が一覧から外した後に届くので、対象に入らない。
 
@@ -110,7 +110,7 @@ View が表示している一覧は `feeds` そのもの（どちらも `@MainAc
 ## テスト
 
 - `MarkAllDoneLabelsTests`: 文言（`Mark N as done?`、確認中かどうかで変わるツールチップと読み上げ）
-- `NotificationStoreActionTests`: `markAllDone(in:)` が一覧のスレッドをすべて外し、ポーラーに Done の配列を更新日時が新しい順で渡すこと、ほかのアカウントの一覧に触れないこと。一覧が空のときに何も送らないことは、送るのが `Task` の中なのでこの経路では確かめにくく、`perform` の空の配列の確認に任せる（code-review の指摘で、待たずに確かめていたテストを消した）。押せる条件は `canMarkAllOnlyWhenLoadedWithThreads` で確かめる
+- `NotificationStoreActionTests`: `markAllDone(in:)` が一覧のスレッドをすべて外し、ポーラーに Done の配列を更新日時が新しい順で渡すこと、ほかのアカウントの一覧に触れないこと。一覧が空のときに何も送らないことは、送るのが `Task` の中なのでこの経路では確かめにくく、`perform` の空の配列の確認に任せる（code-review の指摘で、待たずに確かめていたテストを消した）。押せる条件は `canMarkAllOnlyWhenLoadedWithThreads` で、取得が失敗して待っている間に `markAllDone(in:)` が一覧から外さないことは `ignoresMarkAllDoneWhileRetrying` で確かめる（2 回目の code-review の指摘）
 - ポーラーの振る舞い（順、打ち切り、止まったとき、失敗のまとめ）は `GroupActionPollingTests` が `perform(_:)` を確かめているので、足さない（A12。入口が変わるだけで、削ったら見逃す不具合が無い）
 - 記号の大きさ・塗りの範囲・見出しの高さは、ユニットテストの `NSHostingView` では確かめにくい（`ImageRenderer` はボタンを描かない）。手元のアプリで、リポジトリの見出しのボタンと並べて見比べる項目として tasks に置く
 - ネットワークは今までどおり `FakeHTTPTransport` で差し替える（A5）
@@ -127,6 +127,7 @@ View が表示している一覧は `feeds` そのもの（どちらも `@MainAc
 
 ## Risks / Trade-offs
 
+- [多くのスレッドを続けて Done にすると、GitHub の二次レート制限（書き込みのリクエストは 1 分あたりの点数が大きい）にかかり、途中で止まることがある] → spec のとおり、レート制限になったら残りは送らず、送らなかったスレッドは次の取得で一覧に戻る。失敗は 1 つの知らせとして出るので、少し待ってもう一度すべて Done にすればよい。送る間隔を空けて制限を避けることは、ポーラーの送り方（リポジトリのグループと共通）を変えることになるので、この change では行わない（2 回目の code-review の指摘）
 - [500 件の一覧をすべて Done にすると、送り終えるまで数十秒〜数分かかる] → 一覧からはすぐに外すので、待たせる表示は要らない。途中で止まったスレッドは次の取得で一覧に戻る。確認の文に件数を出すので、多いことは押す前に分かる
 - [すべて既読と違い、一覧に出ていない未読は Done にならない] → spec のとおり。確認の文は一覧の件数（`Mark N as done?`）を出すので、対象が一覧のスレッドであることが分かる
 - [見出しのボタンが 3 つになり、ユーザー名とホスト名に使える幅が減る] → 22pt × 3 と間隔で約 70pt。今の 2 つ（約 40pt と間隔 6）より約 30pt 減るが、「ポップオーバーの文字の読みやすさの幅と省略」の省略の順（ホスト名から、次にユーザー名の末尾）はそのまま効く

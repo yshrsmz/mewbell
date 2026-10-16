@@ -42,19 +42,15 @@ struct AccountHeadingView: View {
         // ホバーのボタンを使えない VoiceOver でも操作できるように（すべて既読とすべて Done は確認の表示にするだけ）
         .accessibilityActions {
             Button(OpenWebNotificationsButton.label(for: account.host), action: openWebNotifications)
-            if let feed = markAllFeed {
-                if feed.canMarkAll {
-                    Button(MarkAllReadLabels.read) {
-                        announceConfirming(
-                            .markAllRead, label: markAllReadLabels(feed).accessibilityLabel(confirming: true))
-                    }
+            if let feed = markAllFeed, feed.canMarkAll {
+                Button(MarkAllReadLabels.read) {
+                    announceConfirming(
+                        .markAllRead, label: markAllReadLabels(feed).accessibilityLabel(confirming: true))
                 }
-                if feed.canMarkAll {
-                    Button(MarkAllDoneLabels.done) {
-                        announceConfirming(
-                            .markAllDone,
-                            label: MarkAllDoneLabels(count: feed.threads.count).accessibilityLabel(confirming: true))
-                    }
+                Button(MarkAllDoneLabels.done) {
+                    announceConfirming(
+                        .markAllDone,
+                        label: MarkAllDoneLabels(count: feed.threads.count).accessibilityLabel(confirming: true))
                 }
             }
         }
@@ -64,13 +60,28 @@ struct AccountHeadingView: View {
         .onHover { isHovering = $0 }
         .contextMenu {
             Button("Open Notifications in Browser", action: openWebNotifications)
-            if let feed = markAllFeed {
-                Button("Mark All as Read") { confirming = .markAllRead }
-                    .disabled(!feed.canMarkAll)
-                Button("Mark All as Done") { confirming = .markAllDone }
-                    .disabled(!feed.canMarkAll)
+            if markAllFeed != nil {
+                Button("Mark All as Read") { startConfirming(.markAllRead) }
+                    .disabled(!canMarkAll)
+                Button("Mark All as Done") { startConfirming(.markAllDone) }
+                    .disabled(!canMarkAll)
             }
         }
+        // 押せなくなったら確認を解く（ボタンが消えると、5 秒で戻す処理も動かず、ホバーのボタンが出たままになる）
+        .onChange(of: canMarkAll) { _, canMarkAll in
+            if !canMarkAll {
+                confirming = nil
+            }
+        }
+    }
+
+    /// すべて既読とすべて Done を押せるか
+    private var canMarkAll: Bool { markAllFeed?.canMarkAll == true }
+
+    /// コンテキストメニューと VoiceOver の操作から確認の表示にする。メニューを開いている間に押せなくなっていたら何もしない
+    private func startConfirming(_ action: AccountHeadingAction) {
+        guard canMarkAll else { return }
+        confirming = action
     }
 
     /// 見出しに重ねる操作のボタン
@@ -106,6 +117,7 @@ struct AccountHeadingView: View {
     /// VoiceOver の操作から確認の表示にする。見出しの表示が変わるだけでは何も読まれないので、確認を待っていることを
     /// `label`（確認の表示のボタンの読み上げ）で知らせる
     private func announceConfirming(_ action: AccountHeadingAction, label: String) {
+        guard canMarkAll else { return }
         confirming = action
         AccessibilityNotification.Announcement(label).post()
     }

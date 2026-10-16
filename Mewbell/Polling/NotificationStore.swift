@@ -245,7 +245,7 @@ final class NotificationStore {
     /// まとめて Done にしないよう何もしない（すべて既読と同じ条件）。
     func markAllDone(in account: AccountID) {
         guard let feed = feeds[account], feed.canMarkAll else { return }
-        perform(feed.threads.sorted(by: RepositoryGroup.isNewer).map { .done(threadID: $0.id) }, in: account)
+        perform(feed.threads.sorted(by: NotificationThread.isNewer).map { .done(threadID: $0.id) }, in: account)
     }
 
     /// アカウントの一覧を、表示している一覧の最新のスレッドまですべて既読にする。一覧から外すのはポーラーで、

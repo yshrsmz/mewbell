@@ -128,6 +128,23 @@ struct NotificationStoreActionTests {
         store.stopAll()
     }
 
+    @Test func ignoresMarkAllDoneWhileRetrying() async {
+        let store = await loadedStore()
+        // 次の取得を失敗させ、前の一覧を出したまま待っている状態にする
+        transport.setHandler { _ in HTTPResponse(statusCode: 500) }
+        // alice と bob のどちらの待ちが先かは決まっていないので、両方を進める
+        sleeper.advance()
+        sleeper.advance()
+        await waitUntil {
+            MainActor.assumeIsolated {
+                if case .retrying = store.feeds[alice]?.phase { true } else { false }
+            }
+        }
+        store.markAllDone(in: alice)
+        #expect(store.feeds[alice]?.threads.count == 3)
+        store.stopAll()
+    }
+
     @Test func marksAThreadReadWithoutOpeningIt() async throws {
         let store = await loadedStore()
         let thread = try #require(store.feeds[alice]?.threads.first { $0.id == "2" })
