@@ -116,7 +116,6 @@ struct NotificationStoreNewThreadsTests {
         store.stopAll()
     }
 
-    /// すべて既読のように取り下げだけのときは、macOS の通知には渡すが `onNewThreads` は呼ばない。
     @Test func removesTheThreadsOfAGroupMarkedDoneTogether() async throws {
         let store = makeStore()
         let threads = [try thread("1"), try thread("2"), try thread("3")]
@@ -137,6 +136,7 @@ struct NotificationStoreNewThreadsTests {
         store.stopAll()
     }
 
+    /// すべて既読のように取り下げだけのときは、macOS の通知には渡すが `onNewThreads` は呼ばない。
     @Test func doesNotReportRetractionsAloneAsNewThreads() async throws {
         let store = makeStore()
         await send(feed([try thread("1"), try thread("2")]))
