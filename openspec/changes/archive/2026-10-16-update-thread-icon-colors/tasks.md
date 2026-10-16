@@ -6,6 +6,8 @@
 
 ## 2. 手元での確認（spec の Scenario ごと）
 
+ユーザーが別の PC で確かめるため、マージの時点では 2.1〜2.4 は未確認（2.3 の `assetutil` での確認は済み。12 個の値がすべて表と一致した）。
+
 - [ ] 2.1 `bash scripts/run.sh` で起動し、ライトの外観で、マージした Pull request（例: `yshrsmz/mewbell#54`）のアイコンが GitHub の Web と同じ紫で、閉じた Pull request（例: Renovate が autoclose した PR）の赤と見分けられることを確かめる。開いている Pull request と Issue が緑、完了として閉じた Issue が紫で出ることも確かめる
 - [ ] 2.2 ダークの外観に切り替え、ポップオーバーを開き直さなくても次に描くときから GitHub のダークの色で出ることを確かめる
 - [ ] 2.3 `xcrun assetutil --info build/Debug/Mewbell.app/Contents/Resources/Assets.car` で、3 つの色セットの `NSAppearanceNameAccessibilitySystem`・`NSAppearanceNameAccessibilityDarkAqua` の値が spec の表のコントラストを上げたときの値と一致することを確かめる（design D2）。「コントラストを上げる」をオンにして、ライトとダークの両方で、ハイコントラストの値（ライトでは濃く、ダークでは明るく）に変わることを確かめる
@@ -14,10 +16,10 @@
 ## 3. 仕上げ
 
 - [x] 3.1 `bash scripts/lint.sh` が通ることを確かめる
-- [ ] 3.2 `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug MEWBELL_WARNINGS_AS_ERRORS=YES build` と同じ Release のビルドが通り、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が通り、手元で起動して 2 の確認を終えたことを確かめる
+- [ ] 3.2 （警告をエラー扱いにした Debug と Release のビルドと、全テスト 512 件は通った。手元での確認は 2 のとおり未確認）`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug MEWBELL_WARNINGS_AS_ERRORS=YES build` と同じ Release のビルドが通り、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が通り、手元で起動して 2 の確認を終えたことを確かめる
 
 ## 4. レビュー（.claude/rules/review-process.md）
 
-- [ ] 4.1 別コンテキストの opus サブエージェント（`general-purpose`）で `simplify` を実行し、入った変更を確かめる
-- [ ] 4.2 別の opus サブエージェントで `code-review` を effort `medium` で実行し、指摘ごとに直す・直さない（理由）を決めて対応する。ロジックの変更を含む修正が多いときは、もう一度 `code-review` を新しいサブエージェントで回す
-- [ ] 4.3 PR 本文の Test plan に、simplify と code-review をサブエージェントで実行したこと、指摘の件数と対応を書く（トークン・ネットワーク・URL を開く処理に触れないので「セキュリティ上の確認」の節は要らない）
+- [x] 4.1 別コンテキストの opus サブエージェント（`general-purpose`）で `simplify` を実行し、入った変更を確かめる
+- [x] 4.2 別の opus サブエージェントで `code-review` を effort `medium` で実行し、指摘ごとに直す・直さない（理由）を決めて対応する。ロジックの変更を含む修正が多いときは、もう一度 `code-review` を新しいサブエージェントで回す
+- [x] 4.3 PR 本文の Test plan に、simplify と code-review をサブエージェントで実行したこと、指摘の件数と対応を書く（トークン・ネットワーク・URL を開く処理に触れないので「セキュリティ上の確認」の節は要らない）
