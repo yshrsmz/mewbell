@@ -31,3 +31,7 @@ Timeline の項目のうち、「スレッドのイベントの決定の候補�
 種類が `WorkflowRun` で（`subject.url` が「通知のスレッドを開く URL の Pull request と Issue」「通知のスレッドを開く URL の Commit とそのほか」の Pull request・Issue・Commit に当たらないとき）、run の ID を覚えていないとき（取る前、取れなかった、決まらなかったなど）: `<Web ベース>/<owner>/<name>/actions?query=is:waiting`
 種類が `CheckSuite` で（`subject.url` が「通知のスレッドを開く URL の Pull request と Issue」「通知のスレッドを開く URL の Commit とそのほか」の Pull request・Issue・Commit に当たらないとき）、run の ID を覚えていないとき: `<Web ベース>/<owner>/<name>/actions` に、件名（github-api「ワークフローの実行の検索の CheckSuite の件名」の形）から作った絞り込みを `query` に付けたもの。
 レート制限（polling「失敗したときの待ち方」「待ち時間が分からないレート制限の待ち方」）で待っているアカウントは、再読み込みを押しても早めてはならない（MUST NOT）。
+既読化のリクエストは、そのアカウントの取得の間隔や待ち時間（「ポーリングの間隔」「失敗したときの待ち方」「待ち時間が分からないレート制限の待ち方」）を変えてはならず（MUST NOT）、取得と並行して送ってよい（MAY）。
+種類が Release でリリースの ID を持つスレッド（`subject.url` が API ベース URL と同じオリジンで、パスが API ベース URL のパスに続く `repos/<owner>/<name>/releases/<1〜20 桁の数字>` で、`<owner>/<name>` がスレッドのリポジトリと一致するもの）については、イベントと状態の代わりにリリースのタグ（github-api の「リリースのタグの取得の」で始まる要件）を取らなければならない（MUST）。
+種類が `WorkflowRun` か `CheckSuite` のスレッドについては、イベントと状態の代わりに、そのスレッドのワークフローの実行（run）の ID（github-api の「ワークフローの実行の検索の」で始まる要件）を取らなければならない（MUST）。
+失敗は「操作の失敗の記録」「知らせる失敗と最後の操作の失敗」に従って、既読か Done の失敗として記録しなければならない（SHALL）。

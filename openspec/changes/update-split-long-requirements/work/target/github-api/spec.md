@@ -718,7 +718,7 @@ Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling
 
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
 
-3. 承認を待っている run が 1〜5 件なら、それぞれの `GET <API ベース URL>/repos/{owner}/{name}/actions/runs/{run の ID}/pending_deployments` を取り、`current_user_can_approve` が true の待ちを 1 つでも持つ run のうち、`updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内で、差が最も小さいものにする。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」
+- 承認を待っている run が 1〜5 件なら、それぞれの `GET <API ベース URL>/repos/{owner}/{name}/actions/runs/{run の ID}/pending_deployments` を取り、`current_user_can_approve` が true の待ちを 1 つでも持つ run のうち、`updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内で、差が最も小さいものにする。当たる run が無いとき、差が最も小さいものが 2 件以上あるときは、run は「無い」
 
 1 件のときも `pending_deployments` で確かめ、時刻も照らさなければならない（MUST）。通知の run がほかの人に承認された後に、ユーザーが承認できない別の run や、後から待ち始めた別の run だけが待っていることがあるため。
 
@@ -750,7 +750,7 @@ Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling
 
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
 
-4. 承認を待っている run が 6 件以上（`total_count` が 6 以上のときを含む）なら、run は「無い」
+- 承認を待っている run が 6 件以上（`total_count` が 6 以上のときを含む）なら、run は「無い」
 
 #### Scenario: 承認を待っている run が多い
 
@@ -762,7 +762,7 @@ Mewbell は、種類が `WorkflowRun` か `CheckSuite` のスレッド（polling
 
 種類が `WorkflowRun` のスレッド（デプロイの承認リクエスト）は、次のように run を決めなければならない（MUST）。
 
-5. 「ワークフローの実行の検索の承認を待っている run の一覧」の一覧の run をすべて見られて（`total_count` が一覧の件数以下）、そのどれも `updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内でないとき（0 件を含む。通知の run はもう承認を待っていない）と、「ワークフローの実行の検索の承認を待っている run の一覧」の一覧が「無い」（`404` など）になったときは、「ワークフローの実行の検索の承認できる run」「ワークフローの実行の検索の承認を待っている run が多いとき」の代わりに、`GET <API ベース URL>/repos/{owner}/{name}/actions/runs?created=<=<スレッドの updated_at>&per_page=30` で、通知より前に作られた run を取る。
+- 「ワークフローの実行の検索の承認を待っている run の一覧」の一覧の run をすべて見られて（`total_count` が一覧の件数以下）、そのどれも `updated_at`（承認を待ち始めた時刻）とスレッドの `updated_at` の差が 10 分以内でないとき（0 件を含む。通知の run はもう承認を待っていない）と、「ワークフローの実行の検索の承認を待っている run の一覧」の一覧が「無い」（`404` など）になったときは、「ワークフローの実行の検索の承認できる run」「ワークフローの実行の検索の承認を待っている run が多いとき」の代わりに、`GET <API ベース URL>/repos/{owner}/{name}/actions/runs?created=<=<スレッドの updated_at>&per_page=30` で、通知より前に作られた run を取る。
 
 #### Scenario: 通知から離れた時刻に待ち始めた run だけが承認を待っている
 

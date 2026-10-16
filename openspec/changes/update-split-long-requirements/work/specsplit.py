@@ -11,6 +11,8 @@ usage:
   python3 -I specsplit.py verify-archive BEFORE_DIR TARGET_DIR ARCHIVED_DIR
                                          # archive result == target + kept scenarios
   python3 -I specsplit.py same   A_DIR B_DIR                      # same requirement set (order ignored)
+  python3 -I specsplit.py refs   BEFORE_DIR TARGET_DIR            # references to review (design D2), run at the
+                                         # repository root; reads refs-reviewed.txt next to this script
 """
 import difflib
 import os
@@ -26,6 +28,11 @@ SHALL_MUST = re.compile(r"\b(MUST|SHALL)\b")
 ITEM = re.compile(r"^(?:[-*]|\d+\.)\s+")
 # reviewed.txt: one sentence per line, as it reads after the split, checked by eye (design D1, D2)
 REVIEWED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reviewed.txt")
+# refs-reviewed.txt: <file>\t<cap>「<name>」\t<reason>, a reference checked by eye that still points correctly (design D2)
+REFS_REVIEWED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "refs-reviewed.txt")
+REF_DIRS = ["Mewbell", "MewbellTests", "docs", "scripts", ".claude"]
+REF_EXTS = (".swift", ".md", ".sh")
+COMMENT = re.compile(r"^\s*//+\s?")
 # a reviewed sentence explains a missing one when it covers this share of its characters
 COVERAGE = 0.85
 # a reference: 「name」, optionally prefixed by a capability (polling「name」)
@@ -332,6 +339,73 @@ def cmd_same(a, bdir):
     return bad
 
 
+def split_groups(before, target):
+    """capability -> {original name: children whose names do not start with it}, for the split requirements."""
+    out = {}
+    for cap in CAPS:
+        bnames = {n for n, _ in load(before, cap)[1]}
+        groups, cur = {}, None
+        for n, _ in load(target, cap)[1]:
+            if n in bnames:
+                cur = n
+            elif cur is not None and not n.startswith(cur):
+                groups.setdefault(cur, []).append(n)
+        out[cap] = groups
+    return out
+
+
+def logical_lines(path):
+    """(line number, text): comment lines that continue each other (// or ///) are joined into one."""
+    out = []
+    for i, line in enumerate(open(path, encoding="utf-8").read().split("\n"), 1):
+        m = COMMENT.match(line)
+        if m and out and out[-1][2]:
+            out[-1][1] += line[m.end() :]
+        else:
+            out.append([i, line[m.end() :] if m else line, bool(m)])
+    return [(i, t) for i, t, _ in out]
+
+
+def ref_files(target):
+    for cap in CAPS:
+        yield os.path.relpath(os.path.join(target, cap, "spec.md")), cap
+    for d in REF_DIRS:
+        for root, _, files in os.walk(d):
+            for f in sorted(files):
+                if f.endswith(REF_EXTS):
+                    yield os.path.join(root, f), None
+
+
+def cmd_refs(before, target):
+    """List references to a split requirement whose children do not all start with its name."""
+    groups = split_groups(before, target)
+    allowed = {}
+    if os.path.exists(REFS_REVIEWED):
+        for line in open(REFS_REVIEWED, encoding="utf-8").read().split("\n"):
+            if line.strip():
+                f, ref, _ = line.split("\t", 2)
+                allowed[(f, ref)] = False
+    for path, own in ref_files(target):
+        for no, text in logical_lines(path):
+            for m in REF.finditer(text):
+                caps = [m.group(1)] if m.group(1) else [own] if own else CAPS
+                for cap in caps:
+                    children = groups[cap].get(m.group(2))
+                    if not children:
+                        continue
+                    key = (path, f"{cap}「{m.group(2)}」")
+                    context = text[max(m.start() - 40, 0) : m.end() + 40].strip()
+                    if key in allowed:
+                        allowed[key] = True
+                        print(f"[INFO ref reviewed] {path}:{no} {key[1]}")
+                    else:
+                        print(f"[REF TO REVIEW] {path}:{no} {key[1]} -> {children}\n    {context}")
+    for (f, ref), seen in allowed.items():
+        if not seen:
+            print(f"[REF REVIEWED NOT FOUND] {f}\t{ref}")
+    return 0
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "delta":
@@ -342,3 +416,5 @@ if __name__ == "__main__":
         sys.exit(1 if cmd_verify_archive(*sys.argv[2:5]) else 0)
     elif cmd == "same":
         sys.exit(1 if cmd_same(*sys.argv[2:4]) else 0)
+    elif cmd == "refs":
+        sys.exit(cmd_refs(*sys.argv[2:4]))
