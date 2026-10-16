@@ -82,8 +82,8 @@ extension GitHubAPIClient {
                 event: ThreadEventResolver.event(issue: issue, timeline: timeline, updatedAt: thread.updatedAt)))
     }
 
-    /// リリースのタグを取る（github-api「リリースのタグの取得のリクエスト」）。読むのは `tag_name` だけで、
-    /// 検証を通らなければタグは「無い」。
+    /// リリースのタグを取る（github-api の「リリースのタグの取得の」で始まる要件）。
+    /// 読むのは `tag_name` だけで、検証を通らなければタグは「無い」。
     private func fetchReleaseTag(
         _ releaseID: String, of repository: RepositoryName, endpoints: APIEndpoints, token: AccessToken
     ) async -> ThreadDetailsFetchResult {
@@ -102,7 +102,8 @@ extension GitHubAPIClient {
     /// 承認を待っている run を、`pending_deployments` で確かめる上限（これより多ければ決めない）
     private static let waitingRunLimit = 5
 
-    /// 種類が WorkflowRun のスレッドの run を探す（github-api「ワークフローの実行の検索のリクエスト」）。通知の前後に承認を
+    /// 種類が WorkflowRun のスレッドの run を探す
+    /// （github-api の「ワークフローの実行の検索の」で始まる要件のうち WorkflowRun のもの）。通知の前後に承認を
     /// 待ち始めた run があれば、その中から決める（通知の run がまだ待っているかもしれないので、決まらなくても別の探し方は
     /// しない）。無ければ、通知の時刻に動いていた run を探す。どちらでも決まらなければ「無い」。
     private func fetchApprovalRequestRun(
@@ -191,8 +192,9 @@ extension GitHubAPIClient {
         }
     }
 
-    /// 種類が CheckSuite のスレッドの run を、件名のブランチの run の一覧から探す（github-api「ワークフローの実行の検索の
-    /// リクエスト」）。ワークフロー名と結果が一致し、`updated_at` がスレッドに最も近い run。決まらなければ「無い」。
+    /// 種類が CheckSuite のスレッドの run を、件名のブランチの run の一覧から探す
+    /// （github-api「ワークフローの実行の検索の CheckSuite の件名」「ワークフローの実行の検索の CheckSuite の run」）。
+    /// ワークフロー名と結果が一致し、`updated_at` がスレッドに最も近い run。決まらなければ「無い」。
     private func fetchCheckSuiteRun(
         _ title: CheckSuiteTitle, updatedAt: Date, of repository: RepositoryName, endpoints: APIEndpoints,
         token: AccessToken

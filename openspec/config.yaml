@@ -27,6 +27,7 @@ rules:
     - 既存の spec（openspec/specs/）と矛盾しないかを確認し、矛盾する場合は MODIFIED として扱う
   specs:
     - Requirement は SHALL / MUST で書き、各 Requirement に少なくとも 1 つの Scenario を Given/When/Then で付ける
+    - Requirement の本文（見出しから最初の Scenario まで）は 500 文字以内にする。超えるときは振る舞いごとに Requirement を分ける（MODIFIED の本文は change の validate では調べられず、archive の後に main specs で初めて止まる）
     - capability は gh-cli, accounts, github-api, polling, notifications, ui, diagnostics のいずれかに揃える（新設は proposal で理由を書く）
     - 外部 API のエンドポイントとステータスコード (200 / 304 / 401 / 403 / 422) を明示する
     - トークンを扱う capability では、トークンが漏れない・意図しないホストへ送られないことを Requirement と Scenario で明示する

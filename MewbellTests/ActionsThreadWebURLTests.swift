@@ -3,7 +3,9 @@ import Testing
 
 @testable import Mewbell
 
-/// 種類が WorkflowRun と CheckSuite のスレッドを開く URL（ui「通知のスレッドを開く」）。
+/// 種類が WorkflowRun と CheckSuite のスレッドを開く URL（ui「通知のスレッドを開く URL の Actions の run」
+/// 「通知のスレッドを開く URL の WorkflowRun の一覧」「通知のスレッドを開く URL の CheckSuite の一覧」
+/// 「通知のスレッドを開く URL の CheckSuite の絞り込み」）。
 struct ActionsThreadWebURLTests {
     private let github: APIEndpoints
     private let ghes: APIEndpoints

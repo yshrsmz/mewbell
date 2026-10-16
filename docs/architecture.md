@@ -193,7 +193,7 @@
   - 見出しの押せる範囲を `outset` で広げる: リポジトリの見出しとその下の行の間隔が狭く、押せる範囲が隣と重なる。畳めない見出しの高さもそろわない
   - 見出しに上下の余白を付ける: 書体ごとに高さが変わる
 - **適用外**: なし
-- **根拠**: update-popover-hover-feedback D1・D3、update-heading-hit-target D1・D2・D5。振る舞いは `openspec/specs/ui/spec.md` の「ポップオーバーの押せる要素のホバーの反応」。lint の規則 `no_plain_button_style`
+- **根拠**: update-popover-hover-feedback D1・D3、update-heading-hit-target D1・D2・D5。振る舞いは `openspec/specs/ui/spec.md` の「ポップオーバーの押せる要素のホバーの反応」「ポップオーバーの押せる要素のホバーの塗り」「ポップオーバーの押せる要素のホバーの範囲」。lint の規則 `no_plain_button_style`
 
 ### A17. 書体の大きさはテキストスタイルで指定し、ポイント数を書かない
 
