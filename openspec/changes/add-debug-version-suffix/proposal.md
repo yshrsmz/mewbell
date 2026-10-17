@@ -10,7 +10,7 @@ M5（配布）の後の改善で、配布物の運用に関わる change とし�
 
 - Debug ビルドが表示・送信するバージョンを `X.Y.Z-dev`（例: `0.5.0-dev`）にする。対象は About パネル、Diagnostics タブの Version の行とコピーするテキスト、API の `User-Agent`（`Mewbell/0.5.0-dev`）
 - Debug ビルドがアプリの画面に出すアプリ名を `Mewbell (dev)` にする。対象はポップオーバーの見出しと、Diagnostics タブの Mewbell の節の見出し（コピーするテキストの `[Mewbell (dev)]` を含む）
-- Release ビルドの表示は変えない（`Mewbell`、`0.5.0`）
+- Release ビルドの見出しとバージョンの値は変えない（`Mewbell`、`0.5.0`）。ただし、About パネルにバージョンを渡す形にするので、AppKit がビルド番号を括弧で添えていたなら Release でも括弧が消えうる（design の D5）
 - Info.plist の `CFBundleDisplayName`・`CFBundleShortVersionString`・`CFBundleVersion`、`project.xcproj` のバージョンの書き方は変えない（release-please の印、CI のバージョンの検査、配布物の検査 `verify-app.sh` はそのまま）。About パネルのアプリ名、通知のバナーのアプリ名、システム設定に出る名前は `Mewbell` のまま
 
 ## Capabilities
@@ -21,8 +21,11 @@ M5（配布）の後の改善で、配布物の運用に関わる change とし�
 
 ### Modified Capabilities
 
-- `distribution`: Debug ビルドが表示・送信するバージョンに `-dev` を、画面に出すアプリ名に `(dev)` を付ける要件を足す
-- `ui`: About パネルに出すバージョンを、Info.plist の値そのものではなく、アプリが表示するバージョン（Debug なら `-dev` 付き）にする
+- `distribution`: 表示用のアプリ名とバージョンをビルドの構成で決める要件を足す（Debug は `Mewbell (dev)` と `X.Y.Z-dev`、Release は付けない、Info.plist は変えない）。どこに出すかは各 capability が定める
+- `ui`: ポップオーバーの見出しを表示用のアプリ名に、About パネルのバージョンを表示用のバージョンにする
+- `diagnostics`: コピーするテキストに入れるアプリ名とバージョンを、表示用のアプリ名とバージョンにする
+
+`github-api` の `User-Agent` の要件は「Mewbell を示す」とだけ定めていてバージョンの形を決めていないので、spec は変えない（design で `Mewbell/<表示用のバージョン>` にする）。
 
 ## Impact
 

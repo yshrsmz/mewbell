@@ -29,21 +29,28 @@
 
 ### D1. 印はビルド設定ではなく、コードの `#if DEBUG` で付ける（A9、A13）
 
-`Mewbell/Shared/AppInfo.swift` に、表示用のアプリ名とバージョンを返す小さな型を置く。
+`Mewbell/Shared/AppInfo.swift` に、表示用のアプリ名とバージョンを持つ小さな型を置く。
 
 ```swift
 enum AppInfo {
-    /// 画面に出すアプリ名。Debug ビルドでは ` (dev)` を付ける
-    static let name = makeName(isDebug: isDebugBuild)
-    /// 表示・送信に使うバージョン。Debug ビルドでは `-dev` を付ける
-    static let version = makeVersion(shortVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, isDebug: isDebugBuild)
+    private static let shortVersion =
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
 
-    static func makeName(isDebug: Bool) -> String
-    static func makeVersion(shortVersion: String?, isDebug: Bool) -> String
+    #if DEBUG
+        /// 画面に出すアプリ名
+        static let name = "Mewbell (dev)"
+        /// 表示・送信に使うバージョン
+        static let version = "\(shortVersion)-dev"
+    #else
+        static let name = "Mewbell"
+        static let version = shortVersion
+    #endif
 }
 ```
 
-`isDebugBuild` は `#if DEBUG` で決める private な定数にする。`make...` は純粋な関数にして、Debug と Release の両方の組み立てをユニットテストで確かめられるようにする（テストは Debug 構成で動くので、`name` と `version` だけでは Release の側を確かめられない）。`shortVersion` が読めないときの値は、今の `APIGateway` に合わせて `0` にする。アプリ名は Info.plist から読まずに `Mewbell` と書く（今の 2 か所と同じ。`CFBundleDisplayName` を変えない以上、読む理由が無い）。
+`#if DEBUG` で分ける `static let` だけを置き、組み立ての関数は置かない。Release の側をユニットテストで確かめるために `isDebug` を引数に取る純粋な関数を置く案もあったが、確かめる中身は文字列の選び分けだけで、削っても見逃す現実的な不具合が無い（A12）。本体から呼ばれない入口をテストのために足すことにもなる（A10）。Release の側は手元の Release ビルドで確かめる（tasks 3.2）。ユニットテストは、Debug 構成で動くテストで `name` と `version` に印が付いていることを確かめる 1 本だけにする。`shortVersion` が読めないときの値は、今の `APIGateway` に合わせて `0` にする（`SettingsView` は `?` にしていたが、`GENERATE_INFOPLIST_FILE` と `MARKETING_VERSION` があるので読めないことは起きない）。アプリ名は Info.plist から読まずに `Mewbell` と書く（今の 2 か所と同じ。`CFBundleDisplayName` を変えない以上、読む理由が無い）。
+
+「ビルド構成の違いをコードの `#if DEBUG` で表す」ことは `docs/architecture.md` の原則には足さない。Debug のバンドル ID やアイコンのように、Info.plist やアセットそのものを変えるものはビルド設定で分けるのが正しく、いつも成り立つ決まりではないため。この change では、変えたいのがアプリが自分で出す文字列だけで、Info.plist を変えない（distribution の要件）からコードで分ける。
 
 **代替案**: `MARKETING_VERSION[config=Debug]` や `CURRENT_PROJECT_VERSION[config=Debug]` で Info.plist の値を変える案は採らない。`ci.yml` の検査（設定は 1 つだけ）と release-please の印の前提を崩し、Info.plist の `CFBundleShortVersionString` に `X.Y.Z` 以外の形を入れることにもなる。`INFOPLIST_KEY_CFBundleDisplayName[config=Debug]` で名前を変える案は、範囲をアプリの画面の中だけにしたので採らない。独自のビルド設定を Info.plist の独自キーに流す案も、読むのは結局コードなので、`#if DEBUG` より部品が増えるだけになる。
 
@@ -53,7 +60,7 @@ enum AppInfo {
 
 ### D3. `DiagnosticsReport` は名前も引数で受け取る（A5、A7）
 
-`DiagnosticsReport` は今 `appVersion` を引数で受け取り、`Bundle` を読まない純粋な値型になっている。同じ形に合わせて `appName` を引数に足し、最初の節の見出しにする。`SettingsView` が `AppInfo.name` と `AppInfo.version` を渡す。こうすると `DiagnosticsReportTests` は構成によらず決まった値で確かめられる。
+`DiagnosticsReport` は今 `appVersion` を引数で受け取り、`Bundle` を読まない純粋な値型になっている。同じ形に合わせて `appName` を引数に足し、最初の節の見出しにする。`SettingsView` が `AppInfo.name` と `AppInfo.version` を渡す。こうすると `DiagnosticsReportTests` は構成によらず決まった値で確かめられる。コピーするテキストの 1 行目の `Mewbell Diagnostics` は変えない（何のテキストかを示す題で、どのビルドかは次の節の見出しとバージョンで分かる）。
 
 ### D4. Diagnostics の `(build)` の添え書きをやめる（A9）
 
@@ -61,7 +68,7 @@ enum AppInfo {
 
 ### D5. About パネルにはオプションで渡す
 
-`orderFrontStandardAboutPanel(options:)` に `.applicationVersion: AppInfo.version` を渡す。何も渡さないと AppKit は `CFBundleVersion` を括弧で添えるので、Debug では `0.5.0-dev (0.5.0)` のように出るおそれがある。括弧を出さない渡し方（`.version` に空の文字列を渡すか、`.applicationVersion` と同じ値を渡すか）は、手元で About パネルを開いて決める（tasks 2.2）。Release でも同じオプションを渡し、表示が今と同じ `0.5.0` であることを確かめる。アプリ名（`.applicationName`）は渡さない（Non-Goals）。
+`orderFrontStandardAboutPanel(options:)` に `.applicationVersion: AppInfo.version` を渡す。何も渡さないと AppKit は `CFBundleVersion` を括弧で添えるので、Debug では `0.5.0-dev (0.5.0)` のように出るおそれがある。括弧を出さない渡し方（`.version` に空の文字列を渡すか、`.applicationVersion` と同じ値を渡すか）は、手元で About パネルを開いて決める（tasks 2.3）。Release でも同じオプションを渡す。今の Release の About パネルが `0.5.0 (0.5.0)` のように括弧を出しているなら、この変更で括弧が消える（バージョンの値は同じ）。tasks 3.2 で main のビルドの表示と見比べて記録する。アプリ名（`.applicationName`）は渡さない（Non-Goals）。
 
 ### actor と `@MainActor` の境界
 
@@ -69,7 +76,7 @@ enum AppInfo {
 
 ### テストでの差し替え
 
-ネットワークと gh サブプロセスには触れないので、差し替えるものは無い。`make...` の引数で Debug と Release を切り替えて確かめる。`User-Agent` は既存の `GitHubAPIClientTests` の `FakeHTTPTransport` で、`Mewbell/\(AppInfo.version)` になることを確かめる。
+ネットワークと gh サブプロセスには触れないので、差し替えるものは無い。`AppInfo` のテストは Debug 構成で動く前提で書き、そのことをテストのコメントに書く（スキームの Test 構成は Debug）。`User-Agent` は既存の `GitHubAPIClientTests` の `FakeHTTPTransport` で、`Mewbell/\(AppInfo.version)` になることを確かめる。
 
 ## セキュリティ
 
@@ -80,6 +87,6 @@ enum AppInfo {
 
 ## Risks / Trade-offs
 
-- [About パネルの括弧の出方が macOS のバージョンで違う] → tasks 2.2 で手元の macOS 26 で確かめ、決めた渡し方をコメントに書く
+- [About パネルの括弧の出方が macOS のバージョンで違う] → tasks 2.3 で手元の macOS 26 で確かめ、決めた渡し方をコメントに書く
 - [About パネルの名前は `Mewbell` のままで、バージョンだけに印が付く] → ユーザーの判断で名前はアプリの画面の中だけにした。バージョンの `-dev` で見分けられる
 - [`User-Agent` が Debug と Release で違う] → GitHub 側の挙動は `User-Agent` の値で変わらない。むしろ Debug のリクエストを見分けられる
