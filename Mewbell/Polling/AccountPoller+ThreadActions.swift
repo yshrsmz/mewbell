@@ -11,7 +11,8 @@ extension AccountPoller {
         await publish(state)
     }
 
-    /// スレッドを既読か Done にする。どれも一覧からすぐに外し、配列の順に 1 件ずつリクエストを送り、次の取得を条件なしにする。
+    /// スレッドを既読か Done にする。どれも一覧からすぐに外し、配列の順に 1 件ずつ（2 件目からは `threadActionSpacing` 空けて）
+    /// リクエストを送り、次の取得を条件なしにする。
     /// 認証エラーかレート制限になったら残りは送らない。止まっているとき・`stop()` の後・トークンが無いときは送らない
     /// （送らなかったスレッドは、次の条件なしの取得で未読のままなら一覧に戻る）。失敗は最後の 1 つだけを知らせる。
     func perform(_ actions: [ThreadAction]) async {
@@ -26,14 +27,15 @@ extension AccountPoller {
         }
         var failure: (action: ThreadAction, kind: FailureKind)?
         var sending = true
-        // 二次レート制限を避けるため、並行させずに 1 件ずつ送る
-        for action in actions {
+        // 二次レート制限を避けるため、並行させずに 1 件ずつ、2 件目からは前の結果が出てから `threadActionSpacing` 空けて送る
+        for (index, action) in actions.enumerated() {
             if sending {
-                // 1 件ごとにトークンを読み直し、止まっていないかを確かめ直す（送っている間に止まったり、無効化・削除・終了で
-                // トークンを捨てたりしたら、手元のトークンで残りを送らない）。止まっているかはトークンを待った後に見る。
-                // 止まっていれば送らず、それまでの失敗も記録しない（取得の状態で伝わる）
+                let spaced = index == 0 ? true : (try? await actionSpacing(Self.threadActionSpacing)) != nil
+                // 待った後に、1 件ごとにトークンを読み直し、止まっていないかを確かめ直す（送っている間や待っている間に止まったり、
+                // 無効化・削除・終了でトークンを捨てたりしたら、手元のトークンで残りを送らない）。止まっているかはトークンを待った後に見る。
+                // 止まっているか待てなかったら（キャンセル）送らず、それまでの失敗も記録しない（取得の状態で伝わる）
                 let token = await tokens.currentToken(for: accountID)
-                if state.phase.isStopped || isDiscarded {
+                if !spaced || state.phase.isStopped || isDiscarded {
                     sending = false
                     failure = nil
                 } else if let kind = await send(action, token: token) {

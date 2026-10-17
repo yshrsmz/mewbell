@@ -44,7 +44,7 @@ struct NotificationStoreNewThreadsTests {
                 updates.byAccount[account.id] = onUpdate
                 return AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
-                    sleep: sleeper.sleep, onUpdate: { _ in })
+                    sleep: sleeper.sleep, actionSpacing: { _ in }, onUpdate: { _ in })
             }, notifier: notifier ?? recorder, openURL: { _ in },
             onNewThreads: { [received] account, threads in
                 if account == alice {

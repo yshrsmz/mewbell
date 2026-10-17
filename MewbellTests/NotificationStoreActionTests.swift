@@ -16,6 +16,8 @@ struct NotificationStoreActionTests {
     }
     private let tokens = FakeTokenProvider()
     private let sleeper = ManualSleeper()
+    /// まとめた操作のリクエストの間に求められた待ち（すぐ返す）
+    private let spacings = LockedValue<[Duration]>([])
     private let opened = LockedValue<[URL]>([])
     private let center = FakeUserNotificationCenter()
 
@@ -25,10 +27,11 @@ struct NotificationStoreActionTests {
     private func makeStore(notifier: (any ThreadNotifying)?) -> NotificationStore {
         let client = GitHubAPIClient(transport: transport)
         return NotificationStore(
-            makePoller: { [tokens, sleeper] account, endpoints, _, _, _, onUpdate in
+            makePoller: { [tokens, sleeper, spacings] account, endpoints, _, _, _, onUpdate in
                 AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
-                    sleep: sleeper.sleep, onUpdate: onUpdate)
+                    sleep: sleeper.sleep, actionSpacing: { duration in spacings.withLock { $0.append(duration) } },
+                    onUpdate: onUpdate)
             }, notifier: notifier, openURL: { [opened] url in opened.withLock { $0.append(url) } })
     }
 
@@ -121,6 +124,8 @@ struct NotificationStoreActionTests {
         await waitUntil { self.urls("DELETE").count == 3 }
         #expect(
             urls("DELETE") == ["2", "1", "3"].map { "https://api.github.com/notifications/threads/\($0)" })
+        // 1 件目は待たず、2 件目と 3 件目の前に 1 秒ずつ空ける
+        #expect(spacings.value == [.seconds(1), .seconds(1)])
         #expect(urls("PUT").isEmpty)
         // alice の通知だけが取り下がる
         await notifier.waitForPendingWork()
