@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.6.0](https://github.com/yshrsmz/mewbell/compare/v0.5.0...v0.6.0) (2026-10-17)
+
+
+### Features
+
+* add the menu bar icon context menu ([#70](https://github.com/yshrsmz/mewbell/issues/70)) ([134aea6](https://github.com/yshrsmz/mewbell/commit/134aea6238ab17c0ddf0f70eafc89811108de3f5))
+* align the account heading actions with the repository heading and add mark all as done ([#66](https://github.com/yshrsmz/mewbell/issues/66)) ([ffaca97](https://github.com/yshrsmz/mewbell/commit/ffaca97cff070dd6a9fd941540111a40f13600ea))
+* mark the app name and version of debug builds ([#71](https://github.com/yshrsmz/mewbell/issues/71)) ([26f25ad](https://github.com/yshrsmz/mewbell/commit/26f25ad12c5fc646230eae5dfffb86db8d656af5))
+* space out batched thread actions by one second ([#69](https://github.com/yshrsmz/mewbell/issues/69)) ([8c339fe](https://github.com/yshrsmz/mewbell/commit/8c339fe0cef76ed92d7e046125c8e99c6fb40f33))
+* use GitHub's state colors for thread icons ([#61](https://github.com/yshrsmz/mewbell/issues/61)) ([0e222c5](https://github.com/yshrsmz/mewbell/commit/0e222c52f1df65b1ee58f8f64cc6ab570c8d6643))
+
+
+### Bug Fixes
+
+* align the account heading text on one baseline ([#68](https://github.com/yshrsmz/mewbell/issues/68)) ([e2bf9a7](https://github.com/yshrsmz/mewbell/commit/e2bf9a721fc17131059b4a95882624709d1d7b40))
+* keep the list width when the scroll bar appears ([#62](https://github.com/yshrsmz/mewbell/issues/62)) ([2d64cb0](https://github.com/yshrsmz/mewbell/commit/2d64cb03928348e81ee98d1138bb9a02a733c6d8))
+* match the later-waiting run scenario to the approval run search ([#65](https://github.com/yshrsmz/mewbell/issues/65)) ([67423d8](https://github.com/yshrsmz/mewbell/commit/67423d8de83f4db7de39ec27b0fbc191be9c91dd))
+* withdraw the notifications of threads removed together in one call ([#67](https://github.com/yshrsmz/mewbell/issues/67)) ([1177a22](https://github.com/yshrsmz/mewbell/commit/1177a22665d89446c5b2d53426170be92315e2be))
+
 ## [0.5.0](https://github.com/yshrsmz/mewbell/compare/v0.4.0...v0.5.0) (2026-10-15)
 
 
