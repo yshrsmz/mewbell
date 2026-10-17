@@ -9,8 +9,8 @@ final class StatusItemMenu: NSObject {
     private static let releasesURL = URL(string: "https://github.com/yshrsmz/mewbell/releases")
 
     private let openURL: (URL) -> Void
-    /// 設定ウィンドウを開く。SwiftUI の `openSettings` はシーンの中でしか読めないので、`MenuBarLabel` から受け取る
-    var openSettings: (() -> Void)?
+    /// 設定ウィンドウを開く。SwiftUI の `openSettings` はシーンの中でしか読めないので、付けるときにシーンから受け取る
+    private var openSettings: () -> Void = {}
     /// ジェスチャー認識と `menu` を付けたボタン（同じボタンに 2 つ目を付けないため）
     private weak var attachedButton: NSStatusBarButton?
     private(set) lazy var menu = makeMenu()
@@ -32,11 +32,11 @@ final class StatusItemMenu: NSObject {
         return menu
     }
 
-    /// `MenuBarExtra` のステータスアイテムのボタンを探し、まだ付けていなければジェスチャー認識と `menu` を付ける。
-    /// ボタンは `MenuBarExtra` がステータスアイテムを作った後にしか無いので、メニューバーのラベルが表示されたときに呼ぶ。
-    /// 見つからなければ何もしない（右クリックはポップオーバーを開く `MenuBarExtra` の動きのままになる）。
-    func attachToStatusItem() {
-        guard let button = Self.findStatusBarButton(), button !== attachedButton else { return }
+    /// ステータスアイテムのボタンに、まだ付けていなければジェスチャー認識と `menu` を付ける。
+    /// `openSettings` は付けたかどうかにかかわらず新しいものに替える。
+    func attach(to button: NSStatusBarButton, openSettings: @escaping () -> Void) {
+        self.openSettings = openSettings
+        guard button !== attachedButton else { return }
         // ほかのメニューバーのメニューと同じく押した時点で開く（クリックの認識は、長く押すと失敗して何も出ない）
         let recognizer = NSPressGestureRecognizer(target: self, action: #selector(rightPressed(_:)))
         recognizer.minimumPressDuration = 0
@@ -48,7 +48,8 @@ final class StatusItemMenu: NSObject {
         attachedButton = button
     }
 
-    private static func findStatusBarButton() -> NSStatusBarButton? {
+    /// `MenuBarExtra` が作ったステータスアイテムのボタン。`MenuBarExtra` がステータスアイテムを作る前は nil。
+    static func statusBarButton() -> NSStatusBarButton? {
         // `NSStatusBarWindow` は非公開の型なので、型ではなく中身のビューで見分ける
         NSApp.windows.lazy.compactMap { $0.contentView.flatMap(findStatusBarButton(in:)) }.first
     }
@@ -76,7 +77,7 @@ final class StatusItemMenu: NSObject {
     }
 
     @objc private func showSettings() {
-        openSettings?()
+        openSettings()
     }
 
     @objc private func openReleases() {

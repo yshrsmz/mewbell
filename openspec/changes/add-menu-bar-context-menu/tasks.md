@@ -8,7 +8,7 @@
 ## 2. 設定ウィンドウとの接続
 
 - [x] 2.1 `OpenSettingsButton.open()` の `NSApp.activate()`・`openSettings()`・`SettingsWindowActivator.bringToFront()` を `SettingsWindowActivator.open(using:)` にまとめ、ボタンからはそれを呼ぶ（design.md D4）。ポップオーバーの歯車と案内画面の Open Settings… で、今までどおり設定ウィンドウが前面に開くことを手元で確かめる。
-- [x] 2.2 `MenuBarLabel` で `@Environment(\.openSettings)` を読み、表示されたときにクロージャで `AppDelegate` に渡す。`AppDelegate` は `init` で `StatusItemMenu` を作り（テストのホストとプレビューでは作らない）、受け取った `openSettings` と、ボタンを探す合図を `StatusItemMenu` に渡す（design.md D2・D4、A14）。メニューの Settings… で設定ウィンドウが前面に開き、開いている設定ウィンドウは 1 つのまま前に出ることを手元で確かめる。開かなければ design.md D4 を見直してから進める。
+- [x] 2.2 `AppDelegate` は `init` で `StatusItemMenu` を作って持つ（テストのホストとプレビューでは作らない）。`MewbellApp` に private な `ViewModifier` を置き、`@Environment(\.openSettings)` を読んで、`MenuBarLabel` と `MenuBarContentView` の `onAppear` でボタンを探し、`attach(to:openSettings:)` に `SettingsWindowActivator.open(using:)` で包んだアクションを渡す（design.md D2a・D4）。テストで、2 回付けてもジェスチャー認識が 1 つのままで `menu` が付くことと、Settings… が最後に渡したアクションを呼ぶことを確かめる。メニューの Settings… で設定ウィンドウが前面に開き、開いている設定ウィンドウは 1 つのまま前に出ることを手元で確かめる。開かなければ design.md D4 を見直してから進める。
 
 ## 3. ポップオーバーの Quit を消す
 

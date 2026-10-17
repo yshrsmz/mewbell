@@ -27,12 +27,23 @@ struct StatusItemMenuTests {
         #expect(opened.first?.scheme == "https")
     }
 
-    @Test func opensSettingsThroughTheGivenAction() {
-        var opens = 0
+    @Test func opensSettingsThroughTheLatestAction() {
+        var opened: [String] = []
         let statusMenu = StatusItemMenu(openURL: { _ in })
-        statusMenu.openSettings = { opens += 1 }
+        let button = NSStatusBarButton()
+        statusMenu.attach(to: button, openSettings: { opened.append("first") })
+        statusMenu.attach(to: button, openSettings: { opened.append("second") })
         let menu = statusMenu.menu
         menu.performActionForItem(at: menu.indexOfItem(withTitle: "Settings…"))
-        #expect(opens == 1)
+        #expect(opened == ["second"])
+    }
+
+    @Test func attachesOnceToTheSameButton() {
+        let statusMenu = StatusItemMenu(openURL: { _ in })
+        let button = NSStatusBarButton()
+        statusMenu.attach(to: button, openSettings: {})
+        statusMenu.attach(to: button, openSettings: {})
+        #expect(button.gestureRecognizers.count == 1)
+        #expect(button.menu === statusMenu.menu)
     }
 }
