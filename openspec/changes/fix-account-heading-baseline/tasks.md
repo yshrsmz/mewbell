@@ -1,0 +1,26 @@
+# Tasks
+
+## 1. 開閉のボタンの並び
+
+- [ ] 1.1 `DisclosureButton` を `DisclosureButton<Icon: View, Label: View>` にし、`@ViewBuilder let icon: Icon` を足す。山形とアイコンは中央揃えの `HStack` に、`label` と件数は `.firstTextBaseline` の `HStack` に入れる。畳めるときと畳めないときを同じ並びにする。`Icon == EmptyView` の extension に `icon` を取らないイニシャライザを置き、リポジトリの見出しの呼び出しはそのままにする（design D1・D2）。確認: `RepositoryGroupView` の呼び出しを変えずにビルドが通る
+- [ ] 1.2 `DisclosureButtonCountTests` の型の書き方を、引数が 2 つの generic に合わせて直す。`DisclosureButtonHeightTests` に、アカウントの見出しと同じ組み合わせ（記号のアイコン、`.headline` の文字と `.subheadline` の文字）を渡す場合を足す（design D3）。確認: `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test -only-testing:MewbellTests/DisclosureButtonHeightTests -only-testing:MewbellTests/DisclosureButtonCountTests` が通り、結果のスイート数が 2 になる
+
+## 2. アカウントの見出し
+
+- [ ] 2.1 `AccountHeadingView` の `tokenIcon` を `title` から外し、`.frame(width: ListLayout.iconColumnWidth)` を付けたまま `DisclosureButton` の `icon` に渡す。`title` は文字だけの `HStack(alignment: .firstTextBaseline)` にする。`.help` と `.accessibilityLabel` はアイコンに付けたままにする（design D1）。確認: ビルドが通り、`AccountHeadingView` の `title` にトークンの状態のアイコンが残っていない
+
+## 3. 確認
+
+- [ ] 3.1 ビルドとテストが通ることを確かめる。確認: `bash scripts/format.sh` の後に `bash scripts/lint.sh`、`xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test`、`MEWBELL_WARNINGS_AS_ERRORS=YES` の Debug と Release のビルド、`pnpm exec openspec validate fix-account-heading-baseline --strict` が通る
+- [ ] 3.2 `bash scripts/run.sh` で起動し、ポップオーバーの範囲だけを撮って測る（proposal の Why と同じ方法）。確認: アカウントの見出しのユーザー名・アクティブの印・ホスト名の下端（ベースライン）が同じ行にあり、山形とトークンの状態のアイコンの中心が文字の中心から 0.5pt 以内に残る。アカウントの見出しを畳んだときの件数も同じベースラインにある。リポジトリの見出しの山形とリポジトリ名の位置が、変更前（山形の中心 262.5px、リポジトリ名の大文字の中心 261.5px からの差）と変わらない。見出しの高さが 24pt のまま
+- [ ] 3.3 手元で確かめる（ユーザーが行う）。確認: 参加しているスレッドだけを出す設定で、参加のみの印がホスト名と同じベースラインに出る。トークンの取得中（起動の直後か、アカウントを無効から有効に戻した直後）に、取得中の印が見出しの縦の中央に出て、記号に切り替わるときに上下に動かない。VoiceOver で、アカウントの見出しがトークンの状態の名前（`Ready` など）、ユーザー名の順に読まれ、トークンの状態のアイコンにマウスを載せるとツールチップが出る
+
+## 4. レビュー
+
+- [ ] 4.1 別コンテキストの opus サブエージェントで `simplify` を実行する（`.claude/rules/review-process.md`）。変更を確かめてから取り込み、テストが通ることを確かめる
+- [ ] 4.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く
+- [ ] 4.3 ロジックの変更を含む修正が多ければ、4.2 を新しいサブエージェントでもう一度実行する
+
+## Workflow follow-up
+
+- レビューを終えたら `/opsx:archive fix-account-heading-baseline` で archive し、PR を ready にする
