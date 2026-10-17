@@ -66,10 +66,16 @@ enum MenuBarIcon {
 /// メニューバーのラベル。猫アイコンと未読の件数を描いた画像 1 枚にする。
 struct MenuBarLabel: View {
     let notifications: NotificationStore
+    /// 表示されたとき（`MenuBarExtra` がステータスアイテムを作った後）に、設定ウィンドウを開くアクションを渡す。
+    /// メニューバーのアイコンのメニューは AppKit で作るので、シーンの中でしか読めない `openSettings` をここで読む
+    var onAppear: (OpenSettingsAction) -> Void = { _ in }
+
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         let badge = UnreadBadge.text(for: notifications.unreadCount)
         Image(nsImage: MenuBarIcon.image(badge: badge))
             .accessibilityLabel(MenuBarIcon.accessibilityLabel(badge: badge))
+            .onAppear { onAppear(openSettings) }
     }
 }

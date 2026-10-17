@@ -16,7 +16,9 @@ struct MewbellApp: App {
                 permission: appDelegate.notificationPermission, settings: appDelegate.settings,
                 expansion: appDelegate.listExpansion)
         } label: {
-            MenuBarLabel(notifications: appDelegate.notificationStore)
+            MenuBarLabel(notifications: appDelegate.notificationStore) { openSettings in
+                appDelegate.menuBarLabelDidAppear(openSettings: openSettings)
+            }
         }
         .menuBarExtraStyle(.window)
 

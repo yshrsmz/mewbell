@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import UserNotifications
 
 @MainActor
@@ -12,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let listExpansion: ListExpansion
     /// 通知センターの delegate（通知センターは delegate を弱く持つので、ここで持ち続ける）
     private let clickHandler: NotificationClickHandler?
+    /// メニューバーのアイコンの右クリックのメニュー（テストのホストとプレビューでは作らない）
+    private let statusItemMenu: StatusItemMenu?
 
     override init() {
         let listExpansion = ListExpansion()
@@ -23,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notificationStore = NotificationStore(makePoller: nil, openURL: { _ in })
             notificationPermission = NotificationPermission(center: nil)
             clickHandler = nil
+            statusItemMenu = nil
         } else {
             let settings = AppSettings(storage: UserDefaultsStorage())
             launchAtLogin = LaunchAtLogin(service: MainAppLoginItem())
@@ -50,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clickHandler = NotificationClickHandler { request in
                 notificationStore.openFromNotification(request)
             }
+            statusItemMenu = StatusItemMenu(openURL: { NSWorkspace.shared.open($0) })
         }
         super.init()
         accountStore.onStateChange = { [notificationStore] state in
@@ -76,6 +81,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.onGhConfigDirectoryChange = { [accountStore] in
             accountStore.ghConfigDirectoryChanged()
         }
+    }
+
+    /// メニューバーのラベルが表示されたら、右クリックのメニューをステータスアイテムに付け、設定ウィンドウを開くアクションを渡す。
+    func menuBarLabelDidAppear(openSettings: OpenSettingsAction) {
+        guard let statusItemMenu else { return }
+        statusItemMenu.openSettings = { SettingsWindowActivator.open(using: openSettings) }
+        statusItemMenu.attachToStatusItem()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

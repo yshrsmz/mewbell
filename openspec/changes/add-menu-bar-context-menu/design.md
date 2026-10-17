@@ -34,7 +34,7 @@ proposal を書く前に、macOS 27.0.1 の手元で試作して次のことを�
 
 ### D1. `MenuBarExtra` のまま、ステータスアイテムのボタンに右ボタンのジェスチャー認識を付ける（A1・A9・A13）
 
-`App/` に `StatusItemMenu`（`@MainActor final class`）を置き、`AppDelegate.applicationDidFinishLaunching` で作って持つ（テストのホストとプレビューでは作らない）。`StatusItemMenu` は `NSApp.windows` から `NSStatusBarWindow` の `contentView` の中の `NSStatusBarButton` を探し、`buttonMask = 0x2` の `NSClickGestureRecognizer` を 1 つ付ける。認識が終わったら、メニューを `menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)` でアイコンの下に出し、出している間は `button.highlight(true)` でアイコンを押した見た目にする（ほかのメニューバーのアイコンと同じ見た目）。同じボタンに 2 つ目を付けないよう、付けたボタンを弱参照で覚える。
+`App/` に `StatusItemMenu`（`@MainActor final class`）を置き、`AppDelegate.applicationDidFinishLaunching` で作って持つ（テストのホストとプレビューでは作らない）。`StatusItemMenu` は `NSApp.windows` から `NSStatusBarWindow` の `contentView` の中の `NSStatusBarButton` を探し、`buttonMask = 0x2` の `NSClickGestureRecognizer` を 1 つ付ける。認識が終わったら、メニューを `menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)` でアイコンの下に出す。出している間にアイコンを押した見た目にする `button.highlight(true)` は、macOS 27.0.1 では見た目が変わらず（ポップオーバーの表示も、ボタンの状態ではなく expanded interface session が受け持つ）、26 では確かめられないので付けない（A9）。同じボタンに 2 つ目を付けないよう、付けたボタンを弱参照で覚える。
 
 Control+クリックは、システムが右クリックに変えて届けるので、別に扱わない（試作で確かめた。A9）。
 
