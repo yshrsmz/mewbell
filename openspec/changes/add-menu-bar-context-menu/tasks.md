@@ -14,6 +14,7 @@
 
 - [x] 3.1 `MenuBarContentView` の下端の `Divider()` と Quit ボタンを消す（design.md D6）。プレビューと手元で、ポップオーバーの下端に余計な区切りや余白が残っていないことを確かめる。
 - [x] 3.2 スキル `update-architecture-doc` の手順で、`docs/architecture.md` の A16 の標準の押しボタンの例から Quit を外し、`Open cli.github.com` に差し替える。`bash scripts/check-architecture.sh` を通す。
+- [x] 3.3 `SettingsActions` に `quit` を足し（`SettingsView` で `NSApp.terminate(nil)` につなぐ）、General タブの最後のセクションに Quit Mewbell のボタンを置く（design.md D7）。手元で、General タブの最後に標準の押しボタンで出ること、押すと終了することを確かめる。
 
 ## 4. 確認
 
