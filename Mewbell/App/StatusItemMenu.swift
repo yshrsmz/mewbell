@@ -6,7 +6,7 @@ import AppKit
 @MainActor
 final class StatusItemMenu: NSObject {
     /// Releases の項目で開くページ。固定の URL だけを開く
-    static let releasesURL = URL(string: "https://github.com/yshrsmz/mewbell/releases")
+    private static let releasesURL = URL(string: "https://github.com/yshrsmz/mewbell/releases")
 
     private let openURL: (URL) -> Void
     /// 設定ウィンドウを開く。SwiftUI の `openSettings` はシーンの中でしか読めないので、`MenuBarLabel` から受け取る
@@ -19,7 +19,7 @@ final class StatusItemMenu: NSObject {
         self.openURL = openURL
     }
 
-    func makeMenu() -> NSMenu {
+    private func makeMenu() -> NSMenu {
         let menu = NSMenu()
         menu.addItem(item("About Mewbell", action: #selector(showAbout)))
         menu.addItem(.separator())

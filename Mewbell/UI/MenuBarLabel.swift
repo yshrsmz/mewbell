@@ -68,7 +68,7 @@ struct MenuBarLabel: View {
     let notifications: NotificationStore
     /// 表示されたとき（`MenuBarExtra` がステータスアイテムを作った後）に、設定ウィンドウを開くアクションを渡す。
     /// メニューバーのアイコンのメニューは AppKit で作るので、シーンの中でしか読めない `openSettings` をここで読む
-    var onAppear: (OpenSettingsAction) -> Void = { _ in }
+    let onAppear: (OpenSettingsAction) -> Void
 
     @Environment(\.openSettings) private var openSettings
 
