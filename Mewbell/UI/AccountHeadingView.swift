@@ -36,6 +36,9 @@ struct AccountHeadingView: View {
             trailingInset: showsActions ? actionsWidth : 0
         ) {
             expansion.toggle()
+        } icon: {
+            tokenIcon
+                .frame(width: ListLayout.iconColumnWidth)
         } label: {
             title
         }
@@ -129,11 +132,10 @@ struct AccountHeadingView: View {
         }
     }
 
-    /// 見出しのうち、開閉のボタンになる部分（山形は `DisclosureButton` が付ける）。
+    /// 見出しの文字（山形とトークンの状態のアイコンは `DisclosureButton` が中央に置く）。
+    /// 大きさの違う文字（13pt のユーザー名と 11pt のホスト名など）をベースラインで揃える
     private var title: some View {
-        HStack(spacing: ListLayout.spacing) {
-            tokenIcon
-                .frame(width: ListLayout.iconColumnWidth)
+        HStack(alignment: .firstTextBaseline, spacing: ListLayout.spacing) {
             // 幅が足りないときはホスト名から縮め、それでも足りなければユーザー名の末尾を省略する（active の印は省略しない）
             OneLineText(text: account.user, truncation: .tail)
                 .font(.headline)
