@@ -23,6 +23,11 @@ struct MewbellApp: App {
                 .modifier(AttachStatusItemMenu(menu: appDelegate.statusItemMenu))
         }
         .menuBarExtraStyle(.window)
+        // SwiftUI が作るメインメニューの Quit（⌘Q）を外し、ポップオーバーや設定ウィンドウで ⌘Q を押しても終了しないようにする。
+        // 終了は右クリックのメニューと設定の General タブから行う
+        .commands {
+            CommandGroup(replacing: .appTermination) {}
+        }
 
         Settings {
             SettingsView(

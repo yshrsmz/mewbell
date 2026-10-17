@@ -15,6 +15,7 @@
 - [x] 3.1 `MenuBarContentView` の下端の `Divider()` と Quit ボタンを消す（design.md D6）。プレビューと手元で、ポップオーバーの下端に余計な区切りや余白が残っていないことを確かめる。
 - [x] 3.2 スキル `update-architecture-doc` の手順で、`docs/architecture.md` の A16 の標準の押しボタンの例から Quit を外し、`Open cli.github.com` に差し替える。`bash scripts/check-architecture.sh` を通す。
 - [x] 3.3 `SettingsActions` に `quit` を足し（`SettingsView` で `NSApp.terminate(nil)` につなぐ）、General タブの最後のセクションに Quit Mewbell のボタンを置く（design.md D7）。手元で、General タブの最後に標準の押しボタンで出ること、押すと終了することを確かめる。
+- [x] 3.4 `MewbellApp` の `MenuBarExtra` のシーンに `.commands { CommandGroup(replacing: .appTermination) {} }` を付け、SwiftUI が作るメインメニューの Quit（⌘Q）を外す（design.md D8）。手元で、メインメニューの Mewbell メニューと、ほかのメインメニューに ⌘Q が無いこと、右クリックのメニューの Quit Mewbell に ⌘Q が残ることを AX で確かめる。ポップオーバーを開いて ⌘Q を押しても終了しないことは、キー入力を送らない約束なので 4.2 で手で確かめる。
 
 ## 4. 確認
 
@@ -22,7 +23,7 @@
   - `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` で全テストを通す。
   - `MEWBELL_WARNINGS_AS_ERRORS=YES` で、Debug と Release のビルドを通す。
   - `bash scripts/lint.sh` と `pnpm exec openspec validate --all --strict` を通す。
-- [ ] 4.2 `bash scripts/run.sh` で起動し、手元で確かめる。右クリックと Control+クリックでメニューだけが出て、ポップオーバーは開かないこと。修飾キーの無い左クリックではポップオーバーが開くこと。ポップオーバーを開いたまま右クリックすると、ポップオーバーが閉じてメニューが出ること。About Mewbell でバージョン 0.5.0 の About パネルが前面に出て、Dock にアイコンが出ないこと。Mewbell Releases で Releases ページが開くこと。Quit Mewbell と、メニューを開いている間の ⌘Q で終了し、アイコンが消えること。ポップオーバーや設定ウィンドウの中の右クリックの動きが変わっていないこと。右ボタンを長く押してもメニューが出ること。外部ディスプレイをつないでいるときは、それぞれのディスプレイのメニューバーのアイコンで右クリックのメニューが出ること。
+- [ ] 4.2 `bash scripts/run.sh` で起動し、手元で確かめる。右クリックと Control+クリックでメニューだけが出て、ポップオーバーは開かないこと。修飾キーの無い左クリックではポップオーバーが開くこと。ポップオーバーを開いたまま右クリックすると、ポップオーバーが閉じてメニューが出ること。About Mewbell でバージョン 0.5.0 の About パネルが前面に出て、Dock にアイコンが出ないこと。Mewbell Releases で Releases ページが開くこと。Quit Mewbell と、メニューを開いている間の ⌘Q で終了し、アイコンが消えること。ポップオーバーと設定ウィンドウを開いている間の ⌘Q では終了しないこと。ポップオーバーや設定ウィンドウの中の右クリックの動きが変わっていないこと。右ボタンを長く押してもメニューが出ること。外部ディスプレイをつないでいるときは、それぞれのディスプレイのメニューバーのアイコンで右クリックのメニューが出ること。
 - [ ] 4.3 VoiceOver をオンにして、メニューバーの猫アイコンで VO+Shift+M を押すと同じメニューが出て、項目を選べることを手元で確かめる。
 
 ## 5. レビュー
