@@ -21,6 +21,18 @@ struct GroupActionPollingTests {
         await fixture.sleeper.waitForSleeps(1)
     }
 
+    /// まとめた操作の間の待ちを手で進める fixture を作り、最初の取得を終えて待ち始めるまで進める。
+    private static func loadedWithManualSpacing(
+        _ responses: [String: HTTPResponse] = PollerFixture.actionSuccesses
+    ) async throws -> (PollerFixture, ManualSleeper) {
+        let spacer = ManualSleeper()
+        let fixture = try PollerFixture(actionSpacing: spacer.sleep)
+        fixture.route(gets: [PollerFixture.ok(1...4)], responses)
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        return (fixture, spacer)
+    }
+
     /// このスレッドへのリクエストか
     private static func isThread(_ id: String) -> @Sendable (URLRequest) -> Bool {
         { $0.url?.path.hasSuffix("/notifications/threads/\(id)") == true }
@@ -142,11 +154,7 @@ struct GroupActionPollingTests {
     }
 
     @Test func waitsOneSecondAfterEachResultBeforeTheNextRequest() async throws {
-        let spacer = ManualSleeper()
-        let fixture = try PollerFixture(actionSpacing: spacer.sleep)
-        fixture.route(gets: [PollerFixture.ok(1...4)])
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
+        let (fixture, spacer) = try await Self.loadedWithManualSpacing()
         let done = Task {
             await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2"), .done(threadID: "3")])
         }
@@ -173,11 +181,7 @@ struct GroupActionPollingTests {
     }
 
     @Test func sendsNoMoreAfterTheWaitWhenThePollerIsStoppedDuringIt() async throws {
-        let spacer = ManualSleeper()
-        let fixture = try PollerFixture(actionSpacing: spacer.sleep)
-        fixture.route(gets: [PollerFixture.ok(1...4)], ["DELETE": HTTPResponse(statusCode: 500)])
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
+        let (fixture, spacer) = try await Self.loadedWithManualSpacing(["DELETE": HTTPResponse(statusCode: 500)])
         let done = Task { await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2")]) }
         await spacer.waitForSleeps(1)
         // 待っている間に止めたら、待ちが明けても残りは送らず、止まる前の失敗も知らせない
@@ -189,11 +193,7 @@ struct GroupActionPollingTests {
     }
 
     @Test func sendsNoMoreAfterTheWaitWhenTheTokenIsDiscardedDuringIt() async throws {
-        let spacer = ManualSleeper()
-        let fixture = try PollerFixture(actionSpacing: spacer.sleep)
-        fixture.route(gets: [PollerFixture.ok(1...4)])
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
+        let (fixture, spacer) = try await Self.loadedWithManualSpacing()
         let done = Task { await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2")]) }
         await spacer.waitForSleeps(1)
         // 待つ前に読んだトークンで、待った後に送らない

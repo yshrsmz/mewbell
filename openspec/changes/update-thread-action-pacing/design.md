@@ -29,7 +29,7 @@
 `AccountPoller.init` に `actionSpacing: Sleep`（既定は `{ try await Task.sleep(for: $0) }`）を足し、`perform(_:)` の 2 件目以降の前にこれで待つ。間隔の値（1 秒）は `AccountPoller` の `static let` に置く（`unconditionalFetchInterval` と同じく、ポーラーの振る舞いの定数として）。
 
 - 採らなかった案: 既存の `sleep` を使い回す。取得の待ちと同じ `ManualSleeper` に並び、既存のテストの `advance()` がどちらの待ちを進めるかが変わる。グループの操作のテストが、間隔の待ちで止まる
-- 採らなかった案: 時刻（`now`）を見て、前の送信から 1 秒たつまで待つ。待ちそのものを差し替えないと、テストで実時間を待つことになる
+- 採らなかった案: 前の送信の時刻をポーラーに持ち、`now` で残りを計算して待つ（`RefreshWaiters.remainingWait(now:)` と同じ形）。`perform(_:)` の呼び出しをまたいでアカウント単位で間隔を守れるが、それは Non-Goals で外した範囲で、actor に持つ状態が 1 つ増える。呼び出しの中で毎回 1 秒待つ形なら、状態を持たずに済む
 
 テストの `PollerFixture` は、間隔の待ちに既定ですぐ返して長さを記録するだけのクロージャを渡す（既存のグループの操作のテストが、間隔のために止まらない）。待っている間に止める場合のテストだけ、別の `ManualSleeper` を渡して待ちの途中で止める。
 

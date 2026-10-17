@@ -12,11 +12,11 @@
   - `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` で全テストを通す。
   - `MEWBELL_WARNINGS_AS_ERRORS=YES` で、Debug と Release のビルドを通す。
   - `bash scripts/lint.sh` と `pnpm exec openspec validate --all --strict` を通す。
-- [ ] 2.2 `bash scripts/run.sh` で起動し、手元で確かめる。スレッドが 3 件以上あるリポジトリのグループを Done にすると、すぐに一覧から消え、数秒のうちに Web の受信箱からも 1 件ずつ消えること。Console.app でポーラーのログに失敗が出ないこと。行の Done は押してすぐに Web の受信箱から消えること。
+- [x] 2.2 `bash scripts/run.sh` で起動し、手元で確かめる。スレッドが 3 件以上あるリポジトリのグループを Done にすると、すぐに一覧から消え、数秒のうちに Web の受信箱からも 1 件ずつ消えること。Console.app でポーラーのログに失敗が出ないこと。行の Done は押してすぐに Web の受信箱から消えること。
 - [ ] 2.3 （任意・取り消せない）通知が 180 件より多いアカウントがあれば、すべて Done を押し、途中でレート制限の知らせが出ずに、数分のうちに Web の受信箱が空になることを確かめる。
 
 ## 3. レビュー
 
-- [ ] 3.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。
+- [x] 3.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込み、テストが通ることを確かめる。
 - [ ] 3.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。
 - [ ] 3.3 ロジックの変更を含む修正が多ければ、3.2 を新しいサブエージェントでもう一度実行する。
