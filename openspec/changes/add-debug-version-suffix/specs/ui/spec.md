@@ -2,7 +2,7 @@
 
 ### Requirement: About パネル
 
-右クリックのメニューの About Mewbell を選ぶと、アプリは macOS 標準の About パネルを前面に出し、アプリ名、バージョン（distribution「Debug ビルドのバージョンの表示」のとおり、Release では `CFBundleShortVersionString`、Debug ではその後ろに `-dev` を付けたもの）、著作権表示を表示しなければならない（SHALL）。About パネルを開いている間も、Dock に Mewbell のアイコンを出してはならない（MUST NOT）。
+右クリックのメニューの About Mewbell を選ぶと、アプリは macOS 標準の About パネルを前面に出し、アプリ名、バージョン（distribution「Debug ビルドの名前とバージョンの表示」のとおり、Release では `CFBundleShortVersionString`、Debug ではその後ろに `-dev` を付けたもの）、著作権表示を表示しなければならない（SHALL）。About パネルを開いている間も、Dock に Mewbell のアイコンを出してはならない（MUST NOT）。
 
 #### Scenario: バージョンを確かめる
 
