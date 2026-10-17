@@ -42,10 +42,10 @@ final class ThreadChangeDispatcher {
         }
     }
 
-    /// スレッドを既読か Done にした。今の一覧から外し、出ている通知を取り下げる。
-    func threadRemoved(_ threadID: String, for account: AccountID) {
-        tracker.remove(threadID, for: account)
-        notifier?.threadRemoved(threadID, for: account)
+    /// スレッドを既読か Done にした。今の一覧から外し、出ている通知をまとめて取り下げる。
+    func threadsRemoved(_ threadIDs: Set<String>, for account: AccountID) {
+        tracker.remove(threadIDs, for: account)
+        notifier?.threadsRemoved(threadIDs, for: account)
     }
 
     /// アカウントのポーリングを止めた（一覧から消えた、無効にした、止まった）。記録を捨て、出ている通知を取り下げる。

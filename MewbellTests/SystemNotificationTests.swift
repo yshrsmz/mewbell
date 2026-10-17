@@ -200,11 +200,35 @@ struct SystemNotifierTests {
         #expect(center.delivered.value == ["github.com/alice/3"])
     }
 
+    @Test func doesNotRetractForNewThreadsAlone() async throws {
+        notifier.threadsChanged(for: alice, posted: [try thread("3")], retracted: [])
+        await notifier.waitForPendingWork()
+        #expect(center.removals.value.isEmpty)
+        #expect(center.delivered.value == ["github.com/alice/3"])
+    }
+
     @Test func retractsAThreadMarkedRead() async {
         center.delivered.value = ["github.com/alice/1", "github.com/alice/2"]
-        notifier.threadRemoved("1", for: alice)
+        notifier.threadsRemoved(["1"], for: alice)
         await notifier.waitForPendingWork()
+        #expect(center.removals.value == [["github.com/alice/1"]])
         #expect(center.delivered.value == ["github.com/alice/2"])
+    }
+
+    @Test func retractsThreadsMarkedDoneTogetherInOneCall() async {
+        center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/alice/3", "github.com/bob/1"]
+        notifier.threadsRemoved(["1", "2"], for: alice)
+        await notifier.waitForPendingWork()
+        #expect(center.removals.value == [["github.com/alice/1", "github.com/alice/2"]])
+        #expect(center.delivered.value == ["github.com/alice/3", "github.com/bob/1"])
+    }
+
+    @Test func doesNothingForNoThreads() async {
+        center.delivered.value = ["github.com/alice/1"]
+        notifier.threadsRemoved([], for: alice)
+        await notifier.waitForPendingWork()
+        #expect(center.removals.value.isEmpty)
+        #expect(center.delivered.value == ["github.com/alice/1"])
     }
 
     @Test func retractsTheAccountWhenItStopsOrIsRemoved() async {
