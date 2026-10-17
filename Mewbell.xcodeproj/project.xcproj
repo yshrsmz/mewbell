@@ -155,7 +155,7 @@
     // release-please が書き換える（release-please-config.json）。Mewbell と MewbellTests で共有する
     "CURRENT_PROJECT_VERSION": "$(MARKETING_VERSION)",
     // x-release-please-start-version
-    "MARKETING_VERSION": "0.5.0",
+    "MARKETING_VERSION": "0.6.0",
     // x-release-please-end
     "MEWBELL_WARNINGS_AS_ERRORS": "NO",
     "MTL_ENABLE_DEBUG_INFO[config=Debug]": "INCLUDE_SOURCE",
