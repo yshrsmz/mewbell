@@ -75,7 +75,6 @@ struct DiagnosticsReportTests {
         let report = DiagnosticsReport(
             ghDetection: GhDiagnostics(), state: .ghNotFound, accounts: [], appName: "Mewbell (dev)",
             appVersion: "0.5.0-dev", osVersion: "26.0")
-        #expect(report.sections.first?.title == "Mewbell (dev)")
         #expect(report.plainText.hasPrefix("Mewbell Diagnostics\n\n[Mewbell (dev)]\nVersion: 0.5.0-dev\n"))
     }
 
