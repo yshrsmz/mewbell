@@ -1,0 +1,110 @@
+# Design
+
+## Context
+
+メニューバーのアイコンは SwiftUI の `MenuBarExtra`（`.menuBarExtraStyle(.window)`）で作っている。`MenuBarExtra` には右クリックを扱う API が無く、今は右クリックしても左クリックと同じくポップオーバーが開く。設定ウィンドウは `OpenSettingsButton` が SwiftUI の `@Environment(\.openSettings)` で開き、`SettingsWindowActivator` が前面に出している。終了は `MenuBarContentView` の Quit ボタン（`.keyboardShortcut("q")`）で、`AppDelegate.applicationShouldTerminate` がポーリングを止めてトークンを捨ててから終わる。
+
+macOS 27 では、ウィンドウ型の `MenuBarExtra` はステータスアイテムのボタンの target と action を使わず（どちらも nil）、システムのメニューバーから届くシーンのアクションと非公開の expanded interface session でポップオーバーを開く（[MenuBarExtraAccess](https://github.com/orchetect/MenuBarExtraAccess) の `NSStatusItem+ExpandedInterfaceSession.swift` の説明と、手元の確認による）。Apple Developer Forums では、Apple のエンジニアが「ローカルのイベントモニターは、ステータスアイテムのイベントを見る方法としてもう勧めていない」と答え、ステータスアイテムの `button` をそのまま使うことと、ジェスチャー認識を付けることを挙げている（[thread 832823](https://developer.apple.com/forums/thread/832823)）。
+
+proposal を書く前に、macOS 27.0.1 の手元で試作して次のことを確かめた（試作のコードは戻してある）。
+
+- `NSApp.windows` のうち `NSStatusBarWindow` の `contentView` の中に、`MenuBarExtra` の `NSStatusBarButton` がある。起動の直後ではなく、`MenuBarExtra` がステータスアイテムを作った後に見つかる
+- そのボタンに `buttonMask = 0x2`（右ボタン）のジェスチャー認識を付けると、右クリックでメニューを出せる。ポップオーバーは開かない。`NSClickGestureRecognizer` では、右ボタンを 1.5 秒ほど押し続けると認識が失敗し、メニューもポップオーバーも出ない。`minimumPressDuration = 0` の `NSPressGestureRecognizer` なら、押した時点（`.began`）でメニューを出せ、長く押しても出る
+- Control+左クリックは、システムが右クリックに変えて届けるので、同じジェスチャー認識で受け取れる
+- 修飾キーの無い左クリックでは、これまでどおりポップオーバーが開く
+- `NSStatusBarButton.menu` にメニューを入れておくと、アクセシビリティの `AXShowMenu`（VoiceOver の VO+Shift+M）でそのメニューが出る。マウスの右クリックは、`menu` を入れただけでは何も出ない
+- 先にローカルのイベントモニター（`rightMouseDown`・`rightMouseUp`）も試し、27.0.1 では動いた。ただし押したときと離したときの両方のイベントを止めないとポップオーバーも開き、上の Apple の答えにも反する
+
+手元に macOS 26 の Mac が無いため、対応 OS の下限の macOS 26 での動きは確かめていない。
+
+## Goals / Non-Goals
+
+**Goals:**
+
+- `MenuBarExtra` とポップオーバーの今の振る舞い（ui の spec の既存の要件）を変えずに、右クリック・Control+クリック・VoiceOver の「メニューを表示」でメニューを出す
+- メニューの項目の並びを、ユニットテストで確かめられる形にする
+
+**Non-Goals:**
+
+- `MenuBarExtra` をやめて `NSStatusItem` と `NSPopover` で作り直すこと
+- メニューに再読み込み・ログイン時に起動などの項目を足すこと（ユーザーと決めた項目は About・Settings…・Releases・Quit の 4 つ）
+- ポップオーバーや設定ウィンドウを開いている間の ⌘Q での終了（ユーザーと決めて、メニューの ⌘Q だけにする。D8）
+
+## Decisions
+
+### D1. `MenuBarExtra` のまま、ステータスアイテムのボタンに右ボタンのジェスチャー認識を付ける（A1・A9・A13）
+
+`App/` に `StatusItemMenu`（`@MainActor final class`）を置き、`AppDelegate` の `init` で作って持つ（テストのホストとプレビューでは作らない。ほかの本物の部品と同じ分岐に置く）。`StatusItemMenu` は `NSApp.windows` から `NSStatusBarWindow` の `contentView` の中の `NSStatusBarButton` を探し、`buttonMask = 0x2`・`minimumPressDuration = 0` の `NSPressGestureRecognizer` を 1 つ付ける。ほかのメニューバーのメニューと同じく押した時点（`.began`）で、メニューを `menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)` でアイコンの下に出す。出している間にアイコンを押した見た目にする `button.highlight(true)` は、macOS 27.0.1 では見た目が変わらず（ポップオーバーの表示も、ボタンの状態ではなく expanded interface session が受け持つ）、26 では確かめられないので付けない（A9）。同じボタンに 2 つ目を付けないよう、付けたボタンを弱参照で覚える。
+
+Control+クリックは、システムが右クリックに変えて届けるので、別に扱わない（試作で確かめた。A9）。
+
+- 採らなかった案: ローカルのイベントモニター（`NSEvent.addLocalMonitorForEvents`）で右クリックを横取りする。27.0.1 では動いたが、Apple がステータスアイテムには勧めないと答えている。押したときと離したときの両方を握りつぶす必要があり、アプリのすべての右クリックがモニターを通る
+- 採らなかった案: `NSStatusItem` と `NSPopover` で作り直し、`button.sendAction(on: [.leftMouseDown, .rightMouseUp])` で左右を分ける（以前からの定番の形）。公開 API だけで済むが、`@Environment(\.openSettings)` が SwiftUI のシーンの外では使えなくなり、ポップオーバーの既存の要件（外側のクリックで閉じる、⌘, など）をすべて作り直して確かめ直すことになる。macOS 27 では自作のステータスアイテムのクリックが壊れたという報告もある（thread 832823）
+- 採らなかった案: 外部のライブラリ（MenuBarExtraAccess）を入れる。ステータスアイテムを `NSStatusBarWindow` の非公開のキー（`statusItem`）から取る手口で、右クリックの API は持たない。A13 に照らして依存を足すほどの量ではなく、こちらは公開されたビューの階層をたどるだけにする
+- `NSStatusBarWindow` の中の構造は公開された約束ではない。ボタンが見つからないときは何もせず（右クリックは今までどおりポップオーバーを開く）、アプリは止めない。リスクに書く
+
+### D2. VoiceOver には `NSStatusBarButton.menu` で同じメニューを渡す（A1）
+
+`AXShowMenu` はマウスのクリックではないので、D1 のジェスチャー認識には届かない。`StatusItemMenu` は、見つけた `NSStatusBarButton` の `menu` に、右クリックで出すのと同じ `NSMenu` を入れる。
+
+### D2a. 付ける時機は、メニューバーのラベルの表示とポップオーバーの表示の 2 つ（A1・A5・A9・A14）
+
+`StatusItemMenu` は「探す」（`static func statusBarButton()`）と「付ける」（`attach(to:openSettings:)`）を分ける。付けるのは、`MewbellApp` の private な `ViewModifier`（`AttachStatusItemMenu`）が、`MenuBarLabel` と `MenuBarContentView` の両方の `onAppear` で行う。ラベルの表示は `MenuBarExtra` がステータスアイテムを作った後なので、起動の直後に付く。ポップオーバーの表示は開くたびに来るので、ラベルの表示で見つからなかったときや、ステータスアイテムが作り直されたときも、ポップオーバーを 1 回開けば付け直せる（付いていない右クリックはポップオーバーを開くので、閉じてもう一度右クリックすればメニューが出る）。同じボタンには 2 つ目を付けない。
+
+`AppDelegate` は `StatusItemMenu` を作って持つだけにし（テストのホストとプレビューでは nil）、modifier は nil のとき探さない。テストは `attach(to:)` に自分で作ったボタンを渡すので、テストのホストの本物のステータスアイテムに触れない（A5）。
+
+- 採らなかった案: 起動の直後に探す。`MenuBarExtra` はステータスアイテムを遅れて作るので、起動の時点ではまだ無いことがある
+- 採らなかった案: 見つからなかったときに次のランループで探し直す、画面の構成の変化の通知で探し直す。どちらも効くかは推測で、テストで確かめられないコードが増える（A9）。外部ディスプレイの確認（tasks 4.2）で付かないことが分かってから足す
+- 採らなかった案: ラベルの `onAppear` からクロージャで `AppDelegate` に合図と `openSettings` を渡す。描くだけの `MenuBarLabel` に合図が入り、`AppDelegate` が SwiftUI の型を受け取ることになる
+
+### D3. メニューの並びを切り出してテストする（A9・A10）
+
+`StatusItemMenu.makeMenu()` が項目（タイトル、`keyEquivalent`、区切りの位置）を組む。テストではタイトルとキーの並びを確かめる。可視性はテストのために広げず、`makeMenu()` は private にして、テストはアプリがボタンに付けるのと同じ `menu`（外からは読むだけ）を確かめる。右クリックかどうかの判定はジェスチャー認識の `buttonMask` に任せ、判定の関数は作らない（守る分岐が無い。A9）。付けるとき（`attach(to:openSettings:)`）は、自分で作ったボタンを渡して、2 回付けてもジェスチャー認識が 1 つのままで `menu` が付くこと、Settings… が最後に渡したアクションを呼ぶことを確かめる。ボタン探しと、右クリックでメニューが出ることは、テストのホストでは本物のステータスアイテムに触れないので、手元の確認のタスクで確かめる。
+
+### D4. メニューから設定ウィンドウを開く処理は、`openSettings` を付けるときの引数で受け取る（A1・A10・A14）
+
+AppKit の `NSMenu` からは `@Environment(\.openSettings)` を使えない。D2a の modifier は `MenuBarExtra` のシーンの中にあるので、そこで `openSettings` を読み、`SettingsWindowActivator.open(using:)` で包んだ `() -> Void` を `attach(to:openSettings:)` の引数で渡す。`StatusItemMenu` は受け取ったものを private に持ち、付けるたびに新しいものに替える（外から書ける Optional の var にしないので、渡し忘れが起きない）。Settings… を選んだら、それを呼ぶ。`open(using:)` は Mewbell を前面にし、`openSettings()` を呼び、すでにある設定ウィンドウを前面に出す。ポップオーバーの歯車（`OpenSettingsButton`）も、ポップオーバーを閉じた後に同じ `open(using:)` を呼ぶ。
+
+- 採らなかった案: `NSApp.sendAction(Selector(("showSettingsWindow:")), ...)`。macOS 14 以降は使えず、警告をログに出すだけになる
+- メニューバーのラベルの環境の `openSettings` で設定ウィンドウが前面に開くことは、macOS 27.0.1 の手元で確かめた
+
+### D5. About は標準の About パネル、Releases は固定の URL、Quit は `terminate(_:)`
+
+- About Mewbell: `NSApp.activate()` の後に `NSApp.orderFrontStandardAboutPanel(nil)`。アプリ名・バージョン・著作権表示は Info.plist（`CFBundleShortVersionString`、`NSHumanReadableCopyright`）から標準のパネルが読む。`LSUIElement` なので Dock にアイコンは出ない
+- Mewbell Releases: `StatusItemMenu` に `private static let releasesURL = URL(string: "https://github.com/yshrsmz/mewbell/releases")` を置き（強制アンラップは lint で禁じているので、`GuidanceView` の固定の URL と同じく Optional にし、開くときに `guard` で外す。打ち間違いは URL の完全一致のテストで気づける）、`NSWorkspace.shared.open` で開く。URL を開く処理は `StatusItemMenu` の初期化で受け取るクロージャにし（A5）、テストでは渡された URL を確かめる
+- Quit Mewbell: `NSMenuItem(title:action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")`。`applicationShouldTerminate` を通るので、終了前の処理は変わらない
+
+### D6. ポップオーバーから Quit ボタンと区切りを消し、A16 の例を差し替える（A16）
+
+`MenuBarContentView` の下端の `Divider()` と Quit ボタンを消す。`docs/architecture.md` の A16 は標準の押しボタンの例に「Quit」を挙げているので、スキル `update-architecture-doc` の手順で例を `Open cli.github.com` に差し替える。型や名前は消さないので、「コードの名前」の検査には掛からない。
+
+### D7. 設定ウィンドウの General タブに Quit Mewbell を置く（A16）
+
+右クリックのメニューは、公開されていない `NSStatusBarWindow` の中のボタンを探して付ける（D1）。ボタンが見つからないと、ポップオーバーから Quit を消したので UI から終了できなくなる。公開 API だけで終了できる経路を 1 つ残すため、General タブの最後のセクションに `Button("Quit Mewbell")` を置き、`SettingsActions.quit`（`SettingsView` が `NSApp.terminate(nil)` につなぐ）を呼ぶ。`applicationShouldTerminate` を通るので、終了前の処理は変わらない。見た目は標準の押しボタンのまま（A16）。
+
+- 採らなかった案: ボタンが見つからなかったときだけ、ポップオーバーに Quit を出す。付けられたかどうかの状態を UI に渡す必要があり、ui の spec の「ポップオーバーに終了のボタンを出してはならない」を条件つきにすることになる
+- 採らなかった案: 何も足さず、壊れたら別の change で直す。壊れたときに、アクティビティモニタでしか終了できない期間ができる
+
+### D8. SwiftUI が作るメインメニューの Quit を外す
+
+`LSUIElement` のアプリでも、SwiftUI はメインメニュー（Mewbell・Edit・View・Window・Help）を作り、Mewbell メニューに Quit Mewbell（⌘Q）を入れる。ポップオーバーや設定ウィンドウを開いている間は Mewbell が前面のアプリなので、⌘Q がこの項目に届いて終了する（ポップオーバーの Quit ボタンの ⌘Q と重なっていて、気づいていなかった）。通知を読んでいる間に誤って終了しないよう、`MenuBarExtra` のシーンに `.commands { CommandGroup(replacing: .appTermination) {} }` を付けて外す。右クリックのメニューの Quit Mewbell（⌘Q）は自前の `NSMenu` なので残り、メニューを開いている間だけ効く。
+
+- 採らなかった案: macOS の標準どおり ⌘Q で終了させる。メニューバー常駐で、通知の一覧を開いている間に誤って終了しやすい。ユーザーと決めた
+- メインメニューは画面に出ない（`LSUIElement`）ので、外しても見た目は変わらない。⌘, の Settings… はメインメニューに残る
+
+## Risks / Trade-offs
+
+- [`NSStatusBarWindow` の中の構造は非公開で、将来の macOS で変わりうる] → 見つからないときは何もせず、右クリックではポップオーバーが開く。ラベルの表示の時点でまだ無かっただけなら、ポップオーバーを開いたときに付け直す（D2a）。構造が変わってボタンそのものが見つからなくなった場合は直らないが、ポップオーバーの歯車から設定ウィンドウを開き、General タブの Quit Mewbell で終了できる（D7）。手元の確認のタスクで、右クリックと VO+Shift+M の両方を確かめる
+- [ポップオーバーや設定ウィンドウを開いている間に ⌘Q で終了できなくなる] → ユーザーと決めた（D8）。メニューの Quit の表示に ⌘Q を付け、設定の General タブにも Quit Mewbell を置く
+- [対応 OS の下限の macOS 26 では確かめていない] → 手元に 26 の Mac が無い。ジェスチャー認識はボタンのビューに付けるだけで、26 以前の target と action の経路にも 27 の expanded interface session の経路にも手を入れないので、26 でも左クリックの動きは変わらない見込み。右クリックが 26 でもジェスチャー認識に届くかは、確かめられる人がいれば確かめる。届かない場合も、右クリックでポップオーバーが開く今の動きに戻るだけになる
+- [macOS 26 以降、メニューバーの一番上の端の右クリックがステータスアイテムに届かないという報告がある（[thread 811718](https://developer.apple.com/forums/thread/811718)）] → システム側の当たり判定の問題で、アプリからは直せない。少し下を右クリックすれば出る
+- [macOS 27 のメニューバーのクリックの経路は変わったばかりで、更新でまた変わりうる] → 手元の確認のタスクで、右クリック・Control+クリック・左クリック・VO+Shift+M を毎回確かめる
+
+## セキュリティ
+
+- トークン: 取得・保持・送信・破棄の流れは変えない。Quit は `applicationShouldTerminate` を通り、ポーリングを止めてメモリ上のトークンを捨てる今の処理をそのまま使う
+- gh サブプロセス: 触れない
+- ネットワーク: 触れない。API への新しいリクエストは無い
+- URL を開く処理: Releases の項目は、コードに書いた固定の `https://github.com/yshrsmz/mewbell/releases` だけを開く。API のレスポンス・設定・ユーザーの入力から URL を組み立てないので、`.claude/rules/security.md` の「ブラウザで開く URL はアカウントの Web ホストと一致するもの」（API が返す URL のための規則）の対象外で、`https://cli.github.com/` のボタンと同じ扱いになる。固定の URL が `https` であることをテストで確かめる
+- ログ: 新しいログは出さない。出す場合も `Logger` を使い、可変値は `.private` のままにする
+- アプリとビルドの設定: entitlement と Info.plist は変えない

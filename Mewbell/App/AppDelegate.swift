@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let listExpansion: ListExpansion
     /// 通知センターの delegate（通知センターは delegate を弱く持つので、ここで持ち続ける）
     private let clickHandler: NotificationClickHandler?
+    /// メニューバーのアイコンの右クリックのメニュー（テストのホストとプレビューでは作らない）
+    let statusItemMenu: StatusItemMenu?
 
     override init() {
         let listExpansion = ListExpansion()
@@ -23,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             notificationStore = NotificationStore(makePoller: nil, openURL: { _ in })
             notificationPermission = NotificationPermission(center: nil)
             clickHandler = nil
+            statusItemMenu = nil
         } else {
             let settings = AppSettings(storage: UserDefaultsStorage())
             launchAtLogin = LaunchAtLogin(service: MainAppLoginItem())
@@ -50,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clickHandler = NotificationClickHandler { request in
                 notificationStore.openFromNotification(request)
             }
+            statusItemMenu = StatusItemMenu(openURL: { NSWorkspace.shared.open($0) })
         }
         super.init()
         accountStore.onStateChange = { [notificationStore] state in

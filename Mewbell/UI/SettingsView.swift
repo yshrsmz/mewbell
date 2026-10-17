@@ -43,7 +43,9 @@ struct SettingsView: View {
             setParticipatingOnly: { settings.setParticipatingOnly($0, for: $1) },
             setNotifies: { settings.setNotifies($0, for: $1) },
             setGhExecutableOverride: { settings.setGhExecutableOverride($0) },
-            setGhConfigDirectoryOverride: { settings.setGhConfigDirectoryOverride($0) })
+            setGhConfigDirectoryOverride: { settings.setGhConfigDirectoryOverride($0) },
+            // `applicationShouldTerminate` の後片付け（ポーリングの停止とトークンの破棄）を通す
+            quit: { NSApp.terminate(nil) })
     }
 
     /// Diagnostics タブの報告。`DiagnosticsSettingsView` の body で呼ばれ、ポーリングのたびに変わる値はそこで読まれる。
@@ -84,13 +86,16 @@ struct SettingsActions {
     var setGhExecutableOverride: (String?) -> Void
     /// gh の設定ディレクトリの上書きを確定する（nil で上書きを外す）
     var setGhConfigDirectoryOverride: (String?) -> Void
+    /// アプリを終了する（メニューバーのアイコンの右クリックのメニューを出せないときの終了の手段）
+    var quit: () -> Void
 
     /// 何もしない（プレビュー用）。
     static var none: SettingsActions {
         SettingsActions(
             setNotificationSound: { _ in }, setLaunchAtLogin: { _ in }, openLoginItemsSettings: {},
             refreshLaunchAtLogin: {}, setEnabled: { _, _ in }, setParticipatingOnly: { _, _ in },
-            setNotifies: { _, _ in }, setGhExecutableOverride: { _ in }, setGhConfigDirectoryOverride: { _ in })
+            setNotifies: { _, _ in }, setGhExecutableOverride: { _ in }, setGhConfigDirectoryOverride: { _ in },
+            quit: {})
     }
 }
 
@@ -127,6 +132,9 @@ struct GeneralSettingsView: View {
                 Toggle(
                     "Play a sound",
                     isOn: Binding(get: { notificationSound }, set: { actions.setNotificationSound($0) }))
+            }
+            Section {
+                Button("Quit Mewbell", action: actions.quit)
             }
         }
         .formStyle(.grouped)

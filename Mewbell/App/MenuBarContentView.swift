@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct MenuBarContentView: View {
@@ -45,13 +44,6 @@ struct MenuBarContentView: View {
                     state: store.state, ghExecutableOverridden: settings.ghExecutableOverride != nil,
                     ghConfigDirectoryOverridden: settings.ghConfigDirectoryOverride != nil)
             }
-
-            Divider()
-
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
-            }
-            .keyboardShortcut("q")
         }
         .padding()
         .frame(width: 380, alignment: .leading)

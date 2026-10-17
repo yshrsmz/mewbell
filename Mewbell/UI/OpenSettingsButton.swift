@@ -36,10 +36,7 @@ struct OpenSettingsButton: View {
 
     private func open() {
         dismiss()
-        NSApp.activate()
-        openSettings()
-        // 初めて開くときは `SettingsWindowActivator` が、ウィンドウができたときに前面に出す。すでにあるウィンドウは、ここで出す
-        SettingsWindowActivator.bringToFront()
+        SettingsWindowActivator.open(using: openSettings)
     }
 }
 
@@ -49,7 +46,15 @@ struct SettingsWindowActivator: NSViewRepresentable {
     /// 今の設定ウィンドウ
     private static weak var window: NSWindow?
 
-    static func bringToFront() {
+    /// Mewbell を前面にして設定ウィンドウを開く（ポップオーバーの歯車とメニューバーのアイコンのメニューから）。
+    static func open(using openSettings: OpenSettingsAction) {
+        NSApp.activate()
+        openSettings()
+        // 初めて開くときは、ウィンドウができたときに `ActivatingView` が前面に出す。すでにあるウィンドウは、ここで出す
+        bringToFront()
+    }
+
+    private static func bringToFront() {
         guard let window else { return }
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
