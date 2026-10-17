@@ -14,6 +14,9 @@ actor AccountPoller {
     /// スレッドしか返さないので、それより古いスレッドの増減は `304` にも条件付きの `200` にも出ない。その分のずれを、
     /// この間隔で取り直して直す
     static let unconditionalFetchInterval: TimeInterval = 300
+    /// まとめた操作で、前のリクエストの結果が出てから次を送るまでの間（GitHub は書き込みを続けて送るときに 1 秒空けることを
+    /// 勧めている。書き込みは 1 件 5 点で、二次レート制限は 1 分 900 点まで）
+    static let threadActionSpacing: Duration = .seconds(1)
 
     let accountID: AccountID
     let endpoints: APIEndpoints
@@ -23,6 +26,8 @@ actor AccountPoller {
     private let firstFetchNotBefore: Date?  // 最初の取得をこの時刻まで待つ（`CarriedWait.until`）
     let detailsTimeout: Duration  // 1 回にまとめて状態とイベントを取るのにかける時間の上限
     private let sleep: Sleep
+    /// まとめた操作のリクエストの間の待ち（取得の待ちと分け、テストで取得の待ちの順を変えずに差し替える）
+    let actionSpacing: Sleep
     let now: @Sendable () -> Date
     private let onUpdate: @Sendable (FeedState) async -> Void
 
@@ -71,6 +76,7 @@ actor AccountPoller {
         accountID: AccountID, endpoints: APIEndpoints, client: GitHubAPIClient, tokens: any TokenProviding,
         participating: Bool = false, initialPhase: FeedPhase? = nil, carriedWait: CarriedWait? = nil,
         detailsTimeout: Duration = .seconds(20), sleep: @escaping Sleep = { try await Task.sleep(for: $0) },
+        actionSpacing: @escaping Sleep = { try await Task.sleep(for: $0) },
         now: @escaping @Sendable () -> Date = { Date() },
         onUpdate: @escaping @Sendable (FeedState) async -> Void
     ) {
@@ -85,6 +91,7 @@ actor AccountPoller {
         self.detailsTimeout = detailsTimeout
         refreshWaiters = RefreshWaiters(lastAttemptStartedAt: carriedWait?.lastAttemptStartedAt)
         self.sleep = sleep
+        self.actionSpacing = actionSpacing
         self.now = now
         self.onUpdate = onUpdate
     }

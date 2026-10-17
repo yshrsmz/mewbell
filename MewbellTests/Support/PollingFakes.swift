@@ -113,18 +113,24 @@ final class PollerFixture: Sendable {
     let transport = FakeHTTPTransport()
     let tokens = FakeTokenProvider([alice: "test-token-alice"])
     let sleeper = ManualSleeper()
+    /// まとめた操作のリクエストの間に求められた待ち（既定ではすぐ返す）
+    let spacings = LockedValue<[Duration]>([])
     let updates = LockedValue<[FeedState]>([])
     /// ポーラーが見る時刻。テストで進められる
     let clock = LockedValue(now)
     let poller: AccountPoller
 
-    init(detailsTimeout: Duration = .seconds(20)) throws {
+    /// `actionSpacing` を渡さなければ、まとめた操作のリクエストの間の待ちは長さを `spacings` に記録してすぐ返す。
+    init(detailsTimeout: Duration = .seconds(20), actionSpacing: AccountPoller.Sleep? = nil) throws {
         let updates = updates
         let clock = clock
+        let spacings = spacings
         poller = AccountPoller(
             accountID: Self.alice, endpoints: try #require(APIEndpoints(host: "github.com")),
             client: GitHubAPIClient(transport: transport, now: { clock.value }), tokens: tokens,
-            detailsTimeout: detailsTimeout, sleep: sleeper.sleep, now: { clock.value },
+            detailsTimeout: detailsTimeout, sleep: sleeper.sleep,
+            actionSpacing: actionSpacing ?? { duration in spacings.withLock { $0.append(duration) } },
+            now: { clock.value },
             onUpdate: { state in updates.withLock { $0.append(state) } })
     }
 

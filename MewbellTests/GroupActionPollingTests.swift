@@ -55,6 +55,8 @@ struct GroupActionPollingTests {
         await startAndLoad()
         await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2"), .done(threadID: "3")])
         #expect(requests("DELETE").count == 1)
+        // 送らないスレッドの前では待たない
+        #expect(fixture.spacings.value.isEmpty)
         #expect(fixture.last?.actionFailure == ActionFailure(action: .done, kind: kind, occurredAt: now))
         #expect(lastIDs == ["4"])
         // 送らなかったスレッドも、その後に送った取得の結果で一覧に戻る
@@ -71,6 +73,8 @@ struct GroupActionPollingTests {
         await startAndLoad()
         await fixture.poller.perform([.read(threadID: "1"), .read(threadID: "2"), .read(threadID: "3")])
         #expect(requests("PATCH").count == 3)
+        // 前の結果が失敗でも、2 件目と 3 件目の前に 1 秒ずつ空ける
+        #expect(fixture.spacings.value == [.seconds(1), .seconds(1)])
         #expect(fixture.last?.actionFailure == ActionFailure(action: .read, kind: .httpStatus(500), occurredAt: now))
         fixture.poller.stop()
     }
@@ -134,6 +138,72 @@ struct GroupActionPollingTests {
         fixture.transport.pausedMethod.value = nil
         await done.value
         #expect(requests("DELETE").map { $0.url?.lastPathComponent } == ["1", "2"])
+        fixture.poller.stop()
+    }
+
+    @Test func waitsOneSecondAfterEachResultBeforeTheNextRequest() async throws {
+        let spacer = ManualSleeper()
+        let fixture = try PollerFixture(actionSpacing: spacer.sleep)
+        fixture.route(gets: [PollerFixture.ok(1...4)])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        let done = Task {
+            await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2"), .done(threadID: "3")])
+        }
+        // 1 件目は待たずに送り、その結果が出てから 1 秒待つまで 2 件目は送らない
+        await spacer.waitForSleeps(1)
+        #expect(fixture.requests("DELETE").count == 1)
+        spacer.advance()
+        await spacer.waitForSleeps(2)
+        #expect(fixture.requests("DELETE").count == 2)
+        spacer.advance()
+        await done.value
+        #expect(fixture.requests("DELETE").map { $0.url?.lastPathComponent } == ["1", "2", "3"])
+        #expect(spacer.durations == [.seconds(1), .seconds(1)])
+        fixture.poller.stop()
+    }
+
+    @Test func doesNotWaitForASingleThread() async {
+        fixture.route(gets: [PollerFixture.ok(1...2)])
+        await startAndLoad()
+        await fixture.poller.perform([.read(threadID: "1")])
+        #expect(requests("PATCH").count == 1)
+        #expect(fixture.spacings.value.isEmpty)
+        fixture.poller.stop()
+    }
+
+    @Test func sendsNoMoreAfterTheWaitWhenThePollerIsStoppedDuringIt() async throws {
+        let spacer = ManualSleeper()
+        let fixture = try PollerFixture(actionSpacing: spacer.sleep)
+        fixture.route(gets: [PollerFixture.ok(1...4)], ["DELETE": HTTPResponse(statusCode: 500)])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        let done = Task { await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2")]) }
+        await spacer.waitForSleeps(1)
+        // 待っている間に止めたら、待ちが明けても残りは送らず、止まる前の失敗も知らせない
+        fixture.poller.stop()
+        spacer.advance()
+        await done.value
+        #expect(fixture.requests("DELETE").count == 1)
+        #expect(fixture.last?.actionFailure == nil)
+    }
+
+    @Test func sendsNoMoreAfterTheWaitWhenTheTokenIsDiscardedDuringIt() async throws {
+        let spacer = ManualSleeper()
+        let fixture = try PollerFixture(actionSpacing: spacer.sleep)
+        fixture.route(gets: [PollerFixture.ok(1...4)])
+        fixture.poller.start()
+        await fixture.sleeper.waitForSleeps(1)
+        let done = Task { await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2")]) }
+        await spacer.waitForSleeps(1)
+        // 待つ前に読んだトークンで、待った後に送らない
+        await fixture.tokens.discardToken(for: PollerFixture.alice)
+        spacer.advance()
+        await done.value
+        #expect(fixture.requests("DELETE").count == 1)
+        #expect(
+            fixture.last?.actionFailure
+                == ActionFailure(action: .done, kind: .noToken, occurredAt: fixture.clock.value))
         fixture.poller.stop()
     }
 }
