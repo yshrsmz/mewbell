@@ -31,7 +31,7 @@ struct DiagnosticsReportTests {
         return DiagnosticsReport(
             ghDetection: ghDetection ?? detection, state: state,
             accounts: DiagnosticsReport.accounts(in: state, feeds: feeds) { preferences[$0] ?? .default },
-            appVersion: "0.1.0 (1)", osVersion: "Version 26.0 (Build 25A100)")
+            appName: "Mewbell", appVersion: "0.1.0", osVersion: "Version 26.0 (Build 25A100)")
     }
 
     private func rows(_ report: DiagnosticsReport, _ title: String) -> [String: DiagnosticsReport.Row] {
@@ -61,13 +61,22 @@ struct DiagnosticsReportTests {
 
     @Test func showsUnknownValuesWhenGhIsMissing() {
         let report = DiagnosticsReport(
-            ghDetection: GhDiagnostics(), state: .ghNotFound, accounts: [], appVersion: "0.1.0", osVersion: "26.0")
+            ghDetection: GhDiagnostics(), state: .ghNotFound, accounts: [], appName: "Mewbell", appVersion: "0.1.0",
+            osVersion: "26.0")
         let rows = rows(report, "gh")
         #expect(rows["Status"]?.text == "gh not found")
         #expect(rows["Executable"]?.text == nil)
         #expect(rows["Version"]?.text == nil)
         #expect(report.plainText.contains("Version: Unknown"))
         #expect(report.sections.map(\.title) == ["Mewbell", "gh"])
+    }
+
+    @Test func headsTheAppSectionWithTheGivenName() {
+        let report = DiagnosticsReport(
+            ghDetection: GhDiagnostics(), state: .ghNotFound, accounts: [], appName: "Mewbell (dev)",
+            appVersion: "0.5.0-dev", osVersion: "26.0")
+        #expect(report.sections.first?.title == "Mewbell (dev)")
+        #expect(report.plainText.hasPrefix("Mewbell Diagnostics\n\n[Mewbell (dev)]\nVersion: 0.5.0-dev\n"))
     }
 
     @Test func describesALoadedAccount() throws {

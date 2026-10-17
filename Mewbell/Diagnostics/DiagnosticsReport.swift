@@ -33,13 +33,13 @@ struct DiagnosticsReport: Sendable, Equatable {
     let sections: [Section]
 
     init(
-        ghDetection: GhDiagnostics, state: DiscoveryState, accounts: [AccountInput], appVersion: String,
-        osVersion: String
+        ghDetection: GhDiagnostics, state: DiscoveryState, accounts: [AccountInput], appName: String,
+        appVersion: String, osVersion: String
     ) {
         sections =
             [
                 Section(
-                    title: "Mewbell",
+                    title: appName,
                     rows: [Row(label: "Version", text: appVersion), Row(label: "macOS", text: osVersion)]),
                 Self.ghSection(ghDetection, state: state),
             ] + accounts.map(Self.accountSection)

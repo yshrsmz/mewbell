@@ -81,7 +81,7 @@ struct GitHubAPIClientTests {
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
         #expect(request.value(forHTTPHeaderField: "Accept") == "application/vnd.github+json")
         #expect(request.value(forHTTPHeaderField: "X-GitHub-Api-Version") == "2022-11-28")
-        #expect(request.value(forHTTPHeaderField: "User-Agent")?.hasPrefix("Mewbell/") == true)
+        #expect(request.value(forHTTPHeaderField: "User-Agent") == "Mewbell/\(AppInfo.version)")
         #expect(request.value(forHTTPHeaderField: "If-Modified-Since") == nil)
     }
 

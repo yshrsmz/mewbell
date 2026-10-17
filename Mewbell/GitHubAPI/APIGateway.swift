@@ -6,8 +6,7 @@ import os
 struct APIGateway: Sendable {
     private static let bodyLimit = 5 * 1024 * 1024
     private static let logger = Logger(category: "GitHubAPI")
-    private static let userAgent =
-        "Mewbell/\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0")"
+    private static let userAgent = "Mewbell/\(AppInfo.version)"
 
     /// 送るのは `send` だけ（オリジン検査とリダイレクトの扱いを迂回させないため、外に見せない）
     private let transport: any HTTPTransport

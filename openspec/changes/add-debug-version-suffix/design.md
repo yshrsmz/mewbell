@@ -87,6 +87,6 @@ enum AppInfo {
 
 ## Risks / Trade-offs
 
-- [About パネルの括弧の出方が macOS のバージョンで違う] → tasks 2.3 で手元の macOS 26 で確かめ、決めた渡し方をコメントに書く
+- [About パネルの括弧の出方が macOS のバージョンで違う] → tasks 2.3 で手元の macOS 27.0.1 で確かめ、`.version` に空の文字列を渡すことにした（理由はコードのコメント）
 - [About パネルの名前は `Mewbell` のままで、バージョンだけに印が付く] → ユーザーの判断で名前はアプリの画面の中だけにした。バージョンの `-dev` で見分けられる
 - [`User-Agent` が Debug と Release で違う] → GitHub 側の挙動は `User-Agent` の値で変わらない。むしろ Debug のリクエストを見分けられる

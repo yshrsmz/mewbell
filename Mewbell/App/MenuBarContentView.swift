@@ -10,7 +10,7 @@ struct MenuBarContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Mewbell")
+                Text(AppInfo.name)
                     .font(.headline)
                 Spacer()
                 OpenSettingsButton()

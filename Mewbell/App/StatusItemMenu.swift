@@ -73,7 +73,9 @@ final class StatusItemMenu: NSObject {
     @objc private func showAbout() {
         // `LSUIElement` のアプリは前面に出さないと、パネルがほかのアプリの後ろに開く
         NSApp.activate()
-        NSApp.orderFrontStandardAboutPanel(nil)
+        // `.version` を渡さないと AppKit が `CFBundleVersion` を括弧で添え、`0.5.0-dev (0.5.0)` になる（Release でも
+        // `0.5.0 (0.5.0)`）。空の文字列を渡すと括弧ごと出なくなる（macOS 27.0.1 で確かめた）
+        NSApp.orderFrontStandardAboutPanel(options: [.applicationVersion: AppInfo.version, .version: ""])
     }
 
     @objc private func showSettings() {
