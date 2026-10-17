@@ -4,20 +4,25 @@
 
 メニューバーのアイコンは SwiftUI の `MenuBarExtra`（`.menuBarExtraStyle(.window)`）で作っている。`MenuBarExtra` には右クリックを扱う API が無く、今は右クリックしても左クリックと同じくポップオーバーが開く。設定ウィンドウは `OpenSettingsButton` が SwiftUI の `@Environment(\.openSettings)` で開き、`SettingsWindowActivator` が前面に出している。終了は `MenuBarContentView` の Quit ボタン（`.keyboardShortcut("q")`）で、`AppDelegate.applicationShouldTerminate` がポーリングを止めてトークンを捨ててから終わる。
 
-proposal を書く前に、macOS 26 の手元で試作して次のことを確かめた（試作のコードは戻してある）。
+macOS 27 では、ウィンドウ型の `MenuBarExtra` はステータスアイテムのボタンの target と action を使わず（どちらも nil）、システムのメニューバーから届くシーンのアクションと非公開の expanded interface session でポップオーバーを開く（[MenuBarExtraAccess](https://github.com/orchetect/MenuBarExtraAccess) の `NSStatusItem+ExpandedInterfaceSession.swift` の説明と、手元の確認による）。Apple Developer Forums では、Apple のエンジニアが「ローカルのイベントモニターは、ステータスアイテムのイベントを見る方法としてもう勧めていない」と答え、ステータスアイテムの `button` をそのまま使うことと、ジェスチャー認識を付けることを挙げている（[thread 832823](https://developer.apple.com/forums/thread/832823)）。
 
-- `NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .rightMouseUp])` で、アイコンの右クリックを受け取れる。`event.window` は `NSStatusBarWindow` で、その `contentView` の中に `NSStatusBarButton` がある
-- `rightMouseDown` でメニューを出して `nil` を返しても、`rightMouseUp` を通すとポップオーバーが開く。`rightMouseUp` も `nil` にすると、メニューだけが出る
-- Control+左クリックは、システムが `rightMouseDown`（Control の修飾なし）に変えて届ける。修飾キーの無い左クリックは、このモニターに `leftMouseDown` として届かない（`MenuBarExtra` がそのままポップオーバーを開く）
-- ポップオーバーを開いたまま右クリックすると、ポップオーバーはキーウィンドウでなくなって閉じ、メニューが出る
+proposal を書く前に、macOS 27.0.1 の手元で試作して次のことを確かめた（試作のコードは戻してある）。
+
+- `NSApp.windows` のうち `NSStatusBarWindow` の `contentView` の中に、`MenuBarExtra` の `NSStatusBarButton` がある。起動の直後ではなく、`MenuBarExtra` がステータスアイテムを作った後に見つかる
+- そのボタンに `buttonMask = 0x2`（右ボタン）の `NSClickGestureRecognizer` を付けると、右クリックで認識が終わり（`.ended`）、そこでメニューを出せる。ポップオーバーは開かない
+- Control+左クリックは、システムが右クリックに変えて届けるので、同じジェスチャー認識で受け取れる
+- 修飾キーの無い左クリックでは、これまでどおりポップオーバーが開く
 - `NSStatusBarButton.menu` にメニューを入れておくと、アクセシビリティの `AXShowMenu`（VoiceOver の VO+Shift+M）でそのメニューが出る。マウスの右クリックは、`menu` を入れただけでは何も出ない
+- 先にローカルのイベントモニター（`rightMouseDown`・`rightMouseUp`）も試し、27.0.1 では動いた。ただし押したときと離したときの両方のイベントを止めないとポップオーバーも開き、上の Apple の答えにも反する
+
+手元に macOS 26 の Mac が無いため、対応 OS の下限の macOS 26 での動きは確かめていない。
 
 ## Goals / Non-Goals
 
 **Goals:**
 
 - `MenuBarExtra` とポップオーバーの今の振る舞い（ui の spec の既存の要件）を変えずに、右クリック・Control+クリック・VoiceOver の「メニューを表示」でメニューを出す
-- メニューの項目の並びと右クリックの判定を、ユニットテストで確かめられる形にする
+- メニューの項目の並びを、ユニットテストで確かめられる形にする
 
 **Non-Goals:**
 
@@ -27,26 +32,28 @@ proposal を書く前に、macOS 26 の手元で試作して次のことを確�
 
 ## Decisions
 
-### D1. `MenuBarExtra` のまま、ローカルのイベントモニターで右クリックを横取りする（A1・A13）
+### D1. `MenuBarExtra` のまま、ステータスアイテムのボタンに右ボタンのジェスチャー認識を付ける（A1・A9・A13）
 
-`App/` に `StatusItemMenu`（`@MainActor final class`）を置き、`AppDelegate.applicationDidFinishLaunching` で作って持つ（テストのホストとプレビューでは作らない）。`NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .rightMouseUp])` を 1 つ付け、イベントのウィンドウの中に `NSStatusBarButton` があれば、`rightMouseDown` でメニューを出して `nil` を、`rightMouseUp` でも `nil` を返す。それ以外のイベントはそのまま返す。メニューは `menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)` でアイコンの下に出し、出している間は `button.highlight(true)` でアイコンを押した見た目にする（ほかのメニューバーのアイコンと同じ見た目）。
+`App/` に `StatusItemMenu`（`@MainActor final class`）を置き、`AppDelegate.applicationDidFinishLaunching` で作って持つ（テストのホストとプレビューでは作らない）。`StatusItemMenu` は `NSApp.windows` から `NSStatusBarWindow` の `contentView` の中の `NSStatusBarButton` を探し、`buttonMask = 0x2` の `NSClickGestureRecognizer` を 1 つ付ける。認識が終わったら、メニューを `menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)` でアイコンの下に出し、出している間は `button.highlight(true)` でアイコンを押した見た目にする（ほかのメニューバーのアイコンと同じ見た目）。同じボタンに 2 つ目を付けないよう、付けたボタンを弱参照で覚える。
 
-Control+クリックは、システムが `rightMouseDown` に変えて届けるので、別に扱わない（試作で確かめた。`leftMouseDown` と Control の組を見る分岐は、このモニターに届かないので足さない。A9）。
+Control+クリックは、システムが右クリックに変えて届けるので、別に扱わない（試作で確かめた。A9）。
 
-- 採らなかった案: `NSStatusItem` と `NSPopover` で作り直す。公開 API だけで右クリックを扱えるが、`@Environment(\.openSettings)` が SwiftUI のシーンの外では使えなくなり、ポップオーバーの既存の要件（外側のクリックで閉じる、⌘, など）をすべて作り直して確かめ直すことになる
-- 採らなかった案: 外部のライブラリ（MenuBarExtraAccess など）を入れる。中身は同じく `NSStatusBarWindow` を探す手口で、A13 に照らして依存を足すほどの量ではない
-- `NSStatusBarWindow` と `NSStatusBarButton` の関係は公開された約束ではない。見つからないときは何もせず（右クリックは今までどおりポップオーバーを開く）、アプリは止めない。リスクに書く
+- 採らなかった案: ローカルのイベントモニター（`NSEvent.addLocalMonitorForEvents`）で右クリックを横取りする。27.0.1 では動いたが、Apple がステータスアイテムには勧めないと答えている。押したときと離したときの両方を握りつぶす必要があり、アプリのすべての右クリックがモニターを通る
+- 採らなかった案: `NSStatusItem` と `NSPopover` で作り直し、`button.sendAction(on: [.leftMouseDown, .rightMouseUp])` で左右を分ける（以前からの定番の形）。公開 API だけで済むが、`@Environment(\.openSettings)` が SwiftUI のシーンの外では使えなくなり、ポップオーバーの既存の要件（外側のクリックで閉じる、⌘, など）をすべて作り直して確かめ直すことになる。macOS 27 では自作のステータスアイテムのクリックが壊れたという報告もある（thread 832823）
+- 採らなかった案: 外部のライブラリ（MenuBarExtraAccess）を入れる。ステータスアイテムを `NSStatusBarWindow` の非公開のキー（`statusItem`）から取る手口で、右クリックの API は持たない。A13 に照らして依存を足すほどの量ではなく、こちらは公開されたビューの階層をたどるだけにする
+- `NSStatusBarWindow` の中の構造は公開された約束ではない。ボタンが見つからないときは何もせず（右クリックは今までどおりポップオーバーを開く）、アプリは止めない。リスクに書く
 
 ### D2. VoiceOver には `NSStatusBarButton.menu` で同じメニューを渡す（A1）
 
-`AXShowMenu` はマウスのイベントではないので、D1 のモニターには届かない。`StatusItemMenu` は、見つけた `NSStatusBarButton` の `menu` に、右クリックで出すのと同じ `NSMenu` を入れる。ボタンを探すのは、`MenuBarLabel` が表示されたとき（`MenuBarExtra` がステータスアイテムを作った後）と、右クリックを受け取ったとき（ステータスアイテムが作り直された場合に付け直す）。`MenuBarLabel` からは A14 のとおりクロージャで `AppDelegate` に伝える。
+`AXShowMenu` はマウスのクリックではないので、D1 のジェスチャー認識には届かない。`StatusItemMenu` は、見つけた `NSStatusBarButton` の `menu` に、右クリックで出すのと同じ `NSMenu` を入れる。
+
+ボタンを探してジェスチャー認識と `menu` を付けるのは、`MenuBarLabel` が表示されたとき（`MenuBarExtra` がステータスアイテムを作った後）にする。ラベルが作り直されたとき（ステータスアイテムが作り直された場合を含む）も同じ合図が来るので、まだ付けていないボタンにだけ付ける。`MenuBarLabel` からは A14 のとおりクロージャで `AppDelegate` に伝える。
 
 - 採らなかった案: 起動の直後に探す。`MenuBarExtra` はステータスアイテムを遅れて作るので、起動の時点ではまだ無いことがある
 
-### D3. 右クリックの判定とメニューの並びを切り出してテストする（A7・A10）
+### D3. メニューの並びを切り出してテストする（A9・A10）
 
-- 判定: `StatusItemClick.action(for type: NSEvent.EventType, onStatusButton: Bool) -> Action`（`.showMenu` / `.swallow` / `.pass`）の純粋な関数にする。モニターはこれを呼ぶだけにする
-- メニュー: `StatusItemMenu.makeMenu()` が項目（タイトル、`keyEquivalent`、区切りの位置）を組む。テストではタイトルとキーの並びを確かめる。可視性はテストのために広げず、`makeMenu()` は内部（internal）のままにする
+`StatusItemMenu.makeMenu()` が項目（タイトル、`keyEquivalent`、区切りの位置）を組む。テストではタイトルとキーの並びを確かめる。可視性はテストのために広げず、`makeMenu()` は内部（internal）のままにする。右クリックかどうかの判定はジェスチャー認識の `buttonMask` に任せ、判定の関数は作らない（守る分岐が無い。A9）。ジェスチャー認識とボタン探しは、ユニットテストの `NSHostingView` ではメニューバーのウィンドウが無いので、手元の確認のタスクで確かめる。
 
 ### D4. メニューから設定ウィンドウを開く処理は、`openSettings` を `MenuBarLabel` から受け取る（A1・A14）
 
@@ -69,7 +76,9 @@ AppKit の `NSMenu` からは `@Environment(\.openSettings)` を使えない。`
 
 - [`NSStatusBarWindow` の中の構造は非公開で、将来の macOS で変わりうる] → 見つからないときは何もせず、右クリックはポップオーバーを開く今の動きに戻るだけにする。設定はポップオーバーの歯車から開けるが、終了の手段がメニューだけになる。手元の確認のタスクで、右クリックと VO+Shift+M の両方を確かめる
 - [ポップオーバーを開いている間に ⌘Q で終了できなくなる] → ユーザーと決めた。メニューの Quit の表示に ⌘Q を付ける
-- [ローカルのイベントモニターはアプリのすべての右クリックを通る] → 判定はウィンドウの種類を見るだけの軽い処理にし、ステータスアイテム以外のイベントはそのまま返す（ポップオーバーや設定ウィンドウの右クリックは変わらない）
+- [対応 OS の下限の macOS 26 では確かめていない] → 手元に 26 の Mac が無い。ジェスチャー認識はボタンのビューに付けるだけで、26 以前の target と action の経路にも 27 の expanded interface session の経路にも手を入れないので、26 でも左クリックの動きは変わらない見込み。右クリックが 26 でもジェスチャー認識に届くかは、確かめられる人がいれば確かめる。届かない場合も、右クリックでポップオーバーが開く今の動きに戻るだけになる
+- [macOS 26 以降、メニューバーの一番上の端の右クリックがステータスアイテムに届かないという報告がある（[thread 811718](https://developer.apple.com/forums/thread/811718)）] → システム側の当たり判定の問題で、アプリからは直せない。少し下を右クリックすれば出る
+- [macOS 27 のメニューバーのクリックの経路は変わったばかりで、更新でまた変わりうる] → 手元の確認のタスクで、右クリック・Control+クリック・左クリック・VO+Shift+M を毎回確かめる
 
 ## セキュリティ
 

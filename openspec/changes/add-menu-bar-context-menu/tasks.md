@@ -1,10 +1,9 @@
 # Tasks
 
-## 1. 右クリックの判定とメニュー
+## 1. メニューと右クリック
 
-- [ ] 1.1 `Mewbell/App/` に右クリックの判定 `StatusItemClick.action(for:onStatusButton:)`（`.showMenu` / `.swallow` / `.pass`）を置く（design.md D1・D3）。`MewbellTests` に、ステータスアイテムの上の `rightMouseDown` は `.showMenu`、`rightMouseUp` は `.swallow`、ステータスアイテム以外のウィンドウの右クリックは `.pass` になるテストを足し、`-only-testing:` でスイート数を確かめて通す。
-- [ ] 1.2 `Mewbell/App/StatusItemMenu.swift` に `StatusItemMenu`（`@MainActor final class`）を置き、`makeMenu()` で About Mewbell、区切り、Settings…（⌘,）、Mewbell Releases、区切り、Quit Mewbell（⌘Q、`NSApplication.terminate(_:)`）を組む。Releases は固定の `releasesURL` を初期化で受け取る `openURL` のクロージャで開き、About は `NSApp.activate()` の後に `orderFrontStandardAboutPanel(nil)` を呼ぶ（design.md D5）。テストで、項目のタイトル・`keyEquivalent`・区切りの位置の並び、Releases の項目を選ぶと `https://github.com/yshrsmz/mewbell/releases`（スキームが `https`）が `openURL` に渡ることを確かめる。
-- [ ] 1.3 `StatusItemMenu` に、ローカルのイベントモニター（`rightMouseDown`・`rightMouseUp`）と、`NSStatusBarWindow` の中の `NSStatusBarButton` を探す処理を足す。判定は 1.1 の関数に任せ、`.showMenu` ではボタンを押した見た目にしてアイコンの下にメニューを出し、閉じたら見た目を戻す。見つけたボタンの `menu` に同じメニューを入れる（VoiceOver の「メニューを表示」のため。design.md D1・D2）。見つからないときは何もしない。モニターは `deinit` ではなく明示的に外せるようにする必要があるかを確かめ、要らなければ持ち続ける理由をコメントに書く。
+- [ ] 1.1 `Mewbell/App/StatusItemMenu.swift` に `StatusItemMenu`（`@MainActor final class`）を置き、`makeMenu()` で About Mewbell、区切り、Settings…（⌘,）、Mewbell Releases、区切り、Quit Mewbell（⌘Q、`NSApplication.terminate(_:)`）を組む。Releases は固定の `releasesURL` を初期化で受け取る `openURL` のクロージャで開き、About は `NSApp.activate()` の後に `orderFrontStandardAboutPanel(nil)` を呼ぶ（design.md D5）。テストで、項目のタイトル・`keyEquivalent`・区切りの位置の並び、Releases の項目を選ぶと `https://github.com/yshrsmz/mewbell/releases`（スキームが `https`）が `openURL` に渡ることを確かめる。`-only-testing:` でスイート数を確かめて通す。
+- [ ] 1.2 `StatusItemMenu` に、`NSApp.windows` の `NSStatusBarWindow` の中から `NSStatusBarButton` を探し、`buttonMask = 0x2` の `NSClickGestureRecognizer` と、`menu`（VoiceOver の「メニューを表示」のため）を付ける処理を足す。認識が終わったら、ボタンを押した見た目にしてアイコンの下にメニューを出し、閉じたら見た目を戻す。付けたボタンは弱参照で覚えて 2 つ目を付けず、見つからないときは何もしない（design.md D1・D2）。ボタン探しとジェスチャー認識はユニットテストで確かめられないので、4.2・4.3 の手元の確認で確かめる。
 
 ## 2. 設定ウィンドウとの接続
 
