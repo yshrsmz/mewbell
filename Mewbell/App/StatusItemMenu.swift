@@ -37,7 +37,9 @@ final class StatusItemMenu: NSObject {
     /// 見つからなければ何もしない（右クリックはポップオーバーを開く `MenuBarExtra` の動きのままになる）。
     func attachToStatusItem() {
         guard let button = Self.findStatusBarButton(), button !== attachedButton else { return }
-        let recognizer = NSClickGestureRecognizer(target: self, action: #selector(rightClicked(_:)))
+        // ほかのメニューバーのメニューと同じく押した時点で開く（クリックの認識は、長く押すと失敗して何も出ない）
+        let recognizer = NSPressGestureRecognizer(target: self, action: #selector(rightPressed(_:)))
+        recognizer.minimumPressDuration = 0
         // 右ボタン。Control+クリックはシステムが右クリックに変えて届ける
         recognizer.buttonMask = 0x2
         button.addGestureRecognizer(recognizer)
@@ -62,8 +64,8 @@ final class StatusItemMenu: NSObject {
         return item
     }
 
-    @objc private func rightClicked(_ recognizer: NSClickGestureRecognizer) {
-        guard recognizer.state == .ended, let button = recognizer.view else { return }
+    @objc private func rightPressed(_ recognizer: NSPressGestureRecognizer) {
+        guard recognizer.state == .began, let button = recognizer.view else { return }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
     }
 

@@ -9,7 +9,7 @@ macOS 27 では、ウィンドウ型の `MenuBarExtra` はステータスアイ�
 proposal を書く前に、macOS 27.0.1 の手元で試作して次のことを確かめた（試作のコードは戻してある）。
 
 - `NSApp.windows` のうち `NSStatusBarWindow` の `contentView` の中に、`MenuBarExtra` の `NSStatusBarButton` がある。起動の直後ではなく、`MenuBarExtra` がステータスアイテムを作った後に見つかる
-- そのボタンに `buttonMask = 0x2`（右ボタン）の `NSClickGestureRecognizer` を付けると、右クリックで認識が終わり（`.ended`）、そこでメニューを出せる。ポップオーバーは開かない
+- そのボタンに `buttonMask = 0x2`（右ボタン）のジェスチャー認識を付けると、右クリックでメニューを出せる。ポップオーバーは開かない。`NSClickGestureRecognizer` では、右ボタンを 1.5 秒ほど押し続けると認識が失敗し、メニューもポップオーバーも出ない。`minimumPressDuration = 0` の `NSPressGestureRecognizer` なら、押した時点（`.began`）でメニューを出せ、長く押しても出る
 - Control+左クリックは、システムが右クリックに変えて届けるので、同じジェスチャー認識で受け取れる
 - 修飾キーの無い左クリックでは、これまでどおりポップオーバーが開く
 - `NSStatusBarButton.menu` にメニューを入れておくと、アクセシビリティの `AXShowMenu`（VoiceOver の VO+Shift+M）でそのメニューが出る。マウスの右クリックは、`menu` を入れただけでは何も出ない
@@ -34,7 +34,7 @@ proposal を書く前に、macOS 27.0.1 の手元で試作して次のことを�
 
 ### D1. `MenuBarExtra` のまま、ステータスアイテムのボタンに右ボタンのジェスチャー認識を付ける（A1・A9・A13）
 
-`App/` に `StatusItemMenu`（`@MainActor final class`）を置き、`AppDelegate.applicationDidFinishLaunching` で作って持つ（テストのホストとプレビューでは作らない）。`StatusItemMenu` は `NSApp.windows` から `NSStatusBarWindow` の `contentView` の中の `NSStatusBarButton` を探し、`buttonMask = 0x2` の `NSClickGestureRecognizer` を 1 つ付ける。認識が終わったら、メニューを `menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)` でアイコンの下に出す。出している間にアイコンを押した見た目にする `button.highlight(true)` は、macOS 27.0.1 では見た目が変わらず（ポップオーバーの表示も、ボタンの状態ではなく expanded interface session が受け持つ）、26 では確かめられないので付けない（A9）。同じボタンに 2 つ目を付けないよう、付けたボタンを弱参照で覚える。
+`App/` に `StatusItemMenu`（`@MainActor final class`）を置き、`AppDelegate` の `init` で作って持つ（テストのホストとプレビューでは作らない。ほかの本物の部品と同じ分岐に置く）。`StatusItemMenu` は `NSApp.windows` から `NSStatusBarWindow` の `contentView` の中の `NSStatusBarButton` を探し、`buttonMask = 0x2`・`minimumPressDuration = 0` の `NSPressGestureRecognizer` を 1 つ付ける。ほかのメニューバーのメニューと同じく押した時点（`.began`）で、メニューを `menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)` でアイコンの下に出す。出している間にアイコンを押した見た目にする `button.highlight(true)` は、macOS 27.0.1 では見た目が変わらず（ポップオーバーの表示も、ボタンの状態ではなく expanded interface session が受け持つ）、26 では確かめられないので付けない（A9）。同じボタンに 2 つ目を付けないよう、付けたボタンを弱参照で覚える。
 
 Control+クリックは、システムが右クリックに変えて届けるので、別に扱わない（試作で確かめた。A9）。
 
@@ -57,7 +57,7 @@ Control+クリックは、システムが右クリックに変えて届けるの
 
 ### D4. メニューから設定ウィンドウを開く処理は、`openSettings` を `MenuBarLabel` から受け取る（A1・A14）
 
-AppKit の `NSMenu` からは `@Environment(\.openSettings)` を使えない。`MenuBarLabel` は `MenuBarExtra` のシーンの中で常に生きているので、そこで `openSettings` を読み、表示されたときに `AppDelegate` 経由で `StatusItemMenu` に渡す（D2 のボタン探しと同じ合図に載せる）。Settings… を選んだら、`NSApp.activate()`、`openSettings()`、`SettingsWindowActivator.bringToFront()` の順に呼ぶ。この順は `OpenSettingsButton.open()` と同じなので、`dismiss()` 以外の 3 行を `SettingsWindowActivator.open(using:)` にまとめ、ボタンとメニューの両方から呼ぶ。
+AppKit の `NSMenu` からは `@Environment(\.openSettings)` を使えない。`MenuBarLabel` は `MenuBarExtra` のシーンの中で常に生きているので、そこで `openSettings` を読み、表示されたときに `AppDelegate` 経由で `StatusItemMenu` に渡す（D2 のボタン探しと同じ合図に載せる）。Settings… を選んだら、`SettingsWindowActivator.open(using:)` を呼ぶ。`open(using:)` は Mewbell を前面にし、`openSettings()` を呼び、すでにある設定ウィンドウを前面に出す。ポップオーバーの歯車（`OpenSettingsButton`）も、ポップオーバーを閉じた後に同じ `open(using:)` を呼ぶ。
 
 - 採らなかった案: `NSApp.sendAction(Selector(("showSettingsWindow:")), ...)`。macOS 14 以降は使えず、警告をログに出すだけになる
 - 実装のときに、`MenuBarLabel` の環境の `openSettings` で設定ウィンドウが開くことを手元で確かめる。開かない場合は、この Decision を見直してから進める
@@ -65,7 +65,7 @@ AppKit の `NSMenu` からは `@Environment(\.openSettings)` を使えない。`
 ### D5. About は標準の About パネル、Releases は固定の URL、Quit は `terminate(_:)`
 
 - About Mewbell: `NSApp.activate()` の後に `NSApp.orderFrontStandardAboutPanel(nil)`。アプリ名・バージョン・著作権表示は Info.plist（`CFBundleShortVersionString`、`NSHumanReadableCopyright`）から標準のパネルが読む。`LSUIElement` なので Dock にアイコンは出ない
-- Mewbell Releases: `StatusItemMenu` に `static let releasesURL = URL(string: "https://github.com/yshrsmz/mewbell/releases")!` を置き、`NSWorkspace.shared.open` で開く。URL を開く処理は `StatusItemMenu` の初期化で受け取るクロージャにし（A5）、テストでは渡された URL を確かめる
+- Mewbell Releases: `StatusItemMenu` に `private static let releasesURL = URL(string: "https://github.com/yshrsmz/mewbell/releases")` を置き（強制アンラップは lint で禁じているので、`GuidanceView` の固定の URL と同じく Optional にし、開くときに `guard` で外す。打ち間違いは URL の完全一致のテストで気づける）、`NSWorkspace.shared.open` で開く。URL を開く処理は `StatusItemMenu` の初期化で受け取るクロージャにし（A5）、テストでは渡された URL を確かめる
 - Quit Mewbell: `NSMenuItem(title:action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")`。`applicationShouldTerminate` を通るので、終了前の処理は変わらない
 
 ### D6. ポップオーバーから Quit ボタンと区切りを消し、A16 の例を差し替える（A16）
