@@ -155,10 +155,15 @@ struct GroupActionPollingTests {
 
     @Test func waitsOneSecondAfterEachResultBeforeTheNextRequest() async throws {
         let (fixture, spacer) = try await Self.loadedWithManualSpacing()
+        fixture.transport.pausedMethod.value = "DELETE"
         let done = Task {
             await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2"), .done(threadID: "3")])
         }
-        // 1 件目は待たずに送り、その結果が出てから 1 秒待つまで 2 件目は送らない
+        // 1 件目は待たずに送り、その結果が出るまでは待ちも始めない
+        await waitUntil { fixture.requests("DELETE").count == 1 }
+        #expect(spacer.durations.isEmpty)
+        // 結果が出てから 1 秒待つまで 2 件目は送らない
+        fixture.transport.pausedMethod.value = nil
         await spacer.waitForSleeps(1)
         #expect(fixture.requests("DELETE").count == 1)
         spacer.advance()
