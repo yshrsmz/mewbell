@@ -83,7 +83,8 @@ struct DisclosureButtonHeightTests {
         #expect(NSHostingView(rootView: button).fittingSize.height == ListLayout.headingHeight)
     }
 
-    /// アカウントの見出しと同じく、中央に置くアイコンと、ベースラインで揃える大きさの違う文字を並べても高くならない
+    /// アカウントの見出しと同じく、中央に置くアイコンと、ベースラインで揃える大きさの違う文字（上下に余白のある
+    /// アクティブの印と参加のみの印を含む）を並べても高くならない
     @Test(arguments: [true, false])
     func staysTheHeadingHeightWithAnIconAndMixedText(_ isCollapsible: Bool) {
         let button = DisclosureButton(isCollapsed: true, name: "alice", isCollapsible: isCollapsible, count: 3) {
@@ -93,7 +94,9 @@ struct DisclosureButtonHeightTests {
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: ListLayout.spacing) {
                 Text("alice").font(.headline)
+                Text("active").font(.subheadline).capsuleBadge(.tint.opacity(0.15))
                 Text("github.com").font(.subheadline)
+                Image(systemName: "person.crop.circle.badge.checkmark").font(.subheadline)
             }
         }
         #expect(NSHostingView(rootView: button).fittingSize.height == ListLayout.headingHeight)
