@@ -3,7 +3,8 @@ import SwiftUI
 /// 見出しの開閉のボタン。先頭に山形を置き、山形のツールチップとアクセシビリティの説明を `Expand` / `Collapse` で切り替える。
 /// 見出しの中身の読み上げとツールチップは残す（ボタン全体のラベルやツールチップで上書きしない）。
 /// 開閉には短いアニメーションを付けるが、「視差効果を減らす」がオンのときは付けない。
-struct DisclosureButton<Label: View>: View {
+/// 山形とアイコンは縦の中央に置き、中身の文字と件数は大きさが違ってもベースラインで揃える。
+struct DisclosureButton<Icon: View, Label: View>: View {
     let isCollapsed: Bool
     /// ツールチップと説明に出す名前（`alice (github.com)`、`owner/name`）
     let name: String
@@ -16,6 +17,9 @@ struct DisclosureButton<Label: View>: View {
     /// 重ねたボタンの分、中身の右に空ける幅（中身はその手前で省略し、塗りと押せる範囲は見出しの幅いっぱいのまま）
     var trailingInset: CGFloat = 0
     let toggle: () -> Void
+    /// 山形の次に置くアイコン（アカウントの見出しのトークンの状態）。幅は呼び出し側が決める
+    @ViewBuilder let icon: Icon
+    /// 見出しの文字（アイコンは `icon` に渡す）
     @ViewBuilder let label: Label
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -37,7 +41,7 @@ struct DisclosureButton<Label: View>: View {
                 HStack(spacing: ListLayout.spacing) {
                     DisclosureChevron(isCollapsed: isCollapsed)
                         .help(hint)
-                    labelWithCount
+                    iconAndText
                 }
                 .padding(.trailing, trailingInset)
                 // 見出しの行の空いている幅まで押せるようにする（アカウントの見出しは右のボタンの手前まで）。
@@ -51,7 +55,7 @@ struct DisclosureButton<Label: View>: View {
             HStack(spacing: ListLayout.spacing) {
                 // 山形の分の幅を空けて、ほかの見出しと字下げを揃える
                 DisclosureChevron(isCollapsed: isCollapsed).hidden()
-                labelWithCount
+                iconAndText
             }
             .padding(.trailing, trailingInset)
             // 畳めるときのボタンと同じく 1 つの要素にまとめる（見出しに付けた VoiceOver の操作が、まとまった要素に付くように）
@@ -61,17 +65,33 @@ struct DisclosureButton<Label: View>: View {
         }
     }
 
-    /// 見出しの中身と、畳んだときの件数。
-    @ViewBuilder private var labelWithCount: some View {
-        label
-        if let shown = Self.shownCount(isCollapsed: isCollapsed, count: count) {
-            CollapsedCount(count: shown)
+    /// アイコンと、見出しの文字と畳んだときの件数。アイコンは縦の中央に置き（取得中の `ProgressView` はベースラインを持たない）、
+    /// 文字と件数はベースラインで揃える（アカウントの見出しの 13pt のユーザー名と 11pt のホスト名・件数が中央で揃うとずれるため）
+    @ViewBuilder private var iconAndText: some View {
+        icon
+        HStack(alignment: .firstTextBaseline, spacing: ListLayout.spacing) {
+            label
+            if let shown = Self.shownCount(isCollapsed: isCollapsed, count: count) {
+                CollapsedCount(count: shown)
+            }
         }
     }
 
     /// 見出しに出す件数。畳んでいて 1 件以上のときだけ出し、それ以外は nil
     static func shownCount(isCollapsed: Bool, count: Int) -> Int? {
         isCollapsed && count > 0 ? count : nil
+    }
+}
+
+extension DisclosureButton where Icon == EmptyView {
+    /// アイコンを置かない見出し（リポジトリの見出し）
+    init(
+        isCollapsed: Bool, name: String, isCollapsible: Bool = true, count: Int = 0, isHovering: Bool? = nil,
+        trailingInset: CGFloat = 0, toggle: @escaping () -> Void, @ViewBuilder label: () -> Label
+    ) {
+        self.init(
+            isCollapsed: isCollapsed, name: name, isCollapsible: isCollapsible, count: count, isHovering: isHovering,
+            trailingInset: trailingInset, toggle: toggle, icon: { EmptyView() }, label: label)
     }
 }
 
