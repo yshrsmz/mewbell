@@ -112,7 +112,7 @@ private struct DiagnosticsValueText: View {
             accounts: DiagnosticsReport.accounts(
                 in: state, feeds: [alice.id: aliceFeed, erin.id: erinFeed]
             ) { $0 == bob.id ? AccountPreferences(isEnabled: false) : .default },
-            appVersion: "0.1.0 (1)", osVersion: "Version 26.0")
+            appName: "Mewbell", appVersion: "0.1.0", osVersion: "Version 26.0")
     )
     .frame(width: 520, height: 420)
 }
@@ -120,8 +120,8 @@ private struct DiagnosticsValueText: View {
 #Preview("gh not found") {
     DiagnosticsReportView(
         report: DiagnosticsReport(
-            ghDetection: GhDiagnostics(), state: .ghNotFound, accounts: [], appVersion: "0.1.0 (1)",
-            osVersion: "Version 26.0")
+            ghDetection: GhDiagnostics(), state: .ghNotFound, accounts: [], appName: "Mewbell",
+            appVersion: "0.1.0", osVersion: "Version 26.0")
     )
     .frame(width: 520, height: 420)
 }
