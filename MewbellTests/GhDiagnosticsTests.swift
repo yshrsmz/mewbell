@@ -67,13 +67,8 @@ struct GhDiagnosticsTests {
         try fixture.writeHosts(oneAccount)
         let discovery = fixture.discovery()
         _ = await reload(discovery)
-        let tokenRequests = fixture.tokenRequests.count
         let missing = fixture.directory.url.appending(path: "gh-old").path
-        // 使えない上書きから既定の設定ディレクトリへ戻らない
-        #expect(
-            await reload(discovery, DiscoveryOptions(overrides: GhOverrides(configDirectory: missing)))
-                == .hostsFileUnreadable(path: missing + "/hosts.yml"))
-        #expect(fixture.tokenRequests.count == tokenRequests)
+        _ = await reload(discovery, DiscoveryOptions(overrides: GhOverrides(configDirectory: missing)))
         let detection = await discovery.ghDiagnostics()
         #expect(detection.executable != nil)
         #expect(detection.configDirectory == nil)

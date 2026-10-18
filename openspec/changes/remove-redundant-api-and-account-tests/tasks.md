@@ -13,8 +13,8 @@
   - `takesTheOnlyWaitingRunTheUserCanApprove`
   - `findsNoWaitingRun` の `[true, true]` の行
 
-  固定データ `release()` の `htmlURL` の既定値を攻撃者のホストにする。`escapesTheBranch` に `;` の行を、`treatsAMissingIssueAsUnavailable` に 403 を足す。
-- [x] 1.2 `URLQueryValueTests.swift` を消す。1.1 で `;` の行を足した後に行う。
+  固定データ `release()` の `htmlURL` の既定値を攻撃者のホストにする。`treatsAMissingIssueAsUnavailable` に 403 を足す。
+- [x] 1.2 `URLQueryValueTests.swift` は残す（simplify の指摘で、エスケープの正本と判断した。design.md の D3）。
 - [x] 1.3 `MarkThreadReadTests`（`classifiesTheStatus`、`ThreadIDTests`）を縮小し、`Retry-After: soon` の行を `GitHubAPIClientTests.classifiesStatusCodes` に移す。
 
 ## 2. GitHubAPI: モデルと文言
@@ -24,7 +24,7 @@
 
 ## 3. gh・アカウント・設定・App
 
-- [x] 3.1 `AccountDiscoveryTests.reportsMissingGh` を消す。`GhClientTests.tokenIsNilWhenGhDoesNotGiveOne` の `second-line` の行を消す。`doesNotFallBackFromAnUnusableConfigDirectory` を `GhDiagnosticsTests.forgetsTheConfigDirectoryWhenTheOverrideIsUnusable` に統合する。`publishesTheGhOfTheNewConfigDirectory` を消す。`doesNotPassGhConfigDirWithoutAnOverride` と `GhCommandTests` には触れない。
+- [x] 3.1 `AccountDiscoveryTests.reportsMissingGh` を消す。`GhClientTests.tokenIsNilWhenGhDoesNotGiveOne` の `second-line` の行を消す。`doesNotFallBackFromAnUnusableConfigDirectory` は残す（design.md の D3）。`publishesTheGhOfTheNewConfigDirectory` を消す。`doesNotPassGhConfigDirWithoutAnOverride` と `GhCommandTests` には触れない。
 - [x] 3.2 `AccountStoreTests` の 2 か所（終了の統合、`reloadsWhenAnAccountIsEnabledAgain` の状態の確認の移動）を行う。
 - [x] 3.3 `SingleInstanceLockTests`、`SettingsStorageTests`、`StatusItemMenuTests` を D2 のとおりに削除・統合する。
 
@@ -39,5 +39,5 @@
 
 ## 6. レビュー
 
-- [ ] 6.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込む。
+- [x] 6.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込む。
 - [ ] 6.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。

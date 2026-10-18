@@ -4,13 +4,12 @@ import Testing
 @testable import Mewbell
 
 // Release のスレッドの `GitHubAPIClient.fetchDetails` のリクエストと結果（github-api「リリースのタグの取得のリクエスト」
-// 「リリースのタグの取得の tag_name」「リリースのタグの取得のレスポンス」「リリースのタグの取得のレート制限と失敗」）
+// 「リリースのタグの取得の tag_name」「リリースのタグの取得のレスポンス」）。共通の取得の失敗は Issue の経路で確かめる
 extension ThreadDetailsRequestTests {
     private func releaseThread(
-        host: String = "github.com", repository: String = "octo/app",
-        subjectURL: String = "https://api.github.com/repos/octo/app/releases/12"
+        repository: String = "octo/app", subjectURL: String = "https://api.github.com/repos/octo/app/releases/12"
     ) throws -> (NotificationThread, APIEndpoints) {
-        try thread(host: host, repository: repository, subjectURL: subjectURL, type: "Release")
+        try thread(repository: repository, subjectURL: subjectURL, type: "Release")
     }
 
     /// すべてのリクエストに `response` を返すトランスポートで取る。
@@ -21,10 +20,11 @@ extension ThreadDetailsRequestTests {
         return (await fetch(thread, endpoints, transport), transport)
     }
 
-    private static func release(tagName: String, htmlURL: String = "https://evil.example.com/octo/app/releases/tag/x")
-        -> HTTPResponse
-    {
-        let body = #"{"id": 12, "tag_name": "\#(tagName)", "html_url": "\#(htmlURL)", "body": "notes"}"#
+    /// `html_url` は攻撃者のホストにしておく（使わないことは `ReleaseSummary` の型が保証する）。
+    private static func release(tagName: String) -> HTTPResponse {
+        let body =
+            #"{"id": 12, "tag_name": "\#(tagName)", "html_url": "https://evil.example.com/octo/app/releases/tag/x", "#
+            + #""body": "notes"}"#
         return HTTPResponse(statusCode: 200, body: Data(body.utf8))
     }
 

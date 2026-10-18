@@ -41,7 +41,6 @@ GitHubAPI:
 
 | テスト | 操作 | T | 代わりに残るもの |
 |---|---|---|---|
-| `URLQueryValueTests`（ファイル） | 削除。`("feat;x", "branch=feat%3Bx")` を `ThreadDetailsRequestTests.escapesTheBranch` に足す | T2・T3 | `ActionsThreadWebURLTests` のエスケープの行、`escapesTheBranch`、`takesTheOnlyWaitingRunTheUserCanApprove` のクエリ |
 | `CheckSuiteTitleTests.readsTheTitle` | 7→4（`cancelled`・`skipped`・`succeeded` を消す） | T4 | `ActionsThreadWebURLTests.opensTheFilteredRunsWithoutARun` が端から端まで通す |
 | `CheckSuiteTitleTests.rejectsTheTitle` | 12→8（`someone requested…`、ブランチが空、`Attempt #x`、`ma\nin` を消す。`\u{662}` は残す） | T4 | 残した行 |
 | `ThreadDetailsRequestTests.fetchesThePageBeforeTheLastWithoutACandidate` | `looksForACloserEventOnThePageBeforeTheLast` に統合し、`page=4` の URL の確認を移す | T4 | 統合先 |
@@ -73,7 +72,6 @@ gh・アカウント・設定・App・シェル:
 | `AccountTests.classifiesHosts` | 削除。`("ghe.com", "https://ghe.com/api/v3", "https://ghe.com")` を `APIEndpointsTests.derivesBaseURLs` に足す | T2 | `derivesBaseURLs` |
 | `AccountDiscoveryTests.reportsMissingGh` | 削除 | T4 | `GhDiagnosticsTests.forgetsTheGhWhenItIsGone` |
 | `GhClientTests.tokenIsNilWhenGhDoesNotGiveOne` の `test-token\nsecond-line` | 1 行削除 | T2 | `AccessTokenTests.rejectsMalformedOutput` |
-| `AccountDiscoverySettingsTests.doesNotFallBackFromAnUnusableConfigDirectory` | `GhDiagnosticsTests.forgetsTheConfigDirectoryWhenTheOverrideIsUnusable` に統合。トークンの取得の件数は、前後で変わらないことで確かめる | T4 | 統合先 |
 | `AccountStoreGhDiagnosticsTests.publishesTheGhOfTheNewConfigDirectory` | 削除 | T4 | `publishesTheGhAfterEachReload` |
 | `AccountStoreTests.stopsReportingStateChangesAfterTermination` | `closesCredentialsAndRefusesToReloadWhenTerminating` に統合 | T4 | 統合先 |
 | `AccountStoreSettingsTests.reloadsWhenAnAccountIsEnabledAgain` | 削除。状態の確認を `reloadsAfterTheDisableWhenEnabledRightAway` に移す | T4 | 移し先 |
@@ -86,6 +84,8 @@ gh・アカウント・設定・App・シェル:
 
 ### D3. 採らなかった候補
 
+- `URLQueryValueTests` の削除: エスケープを決めるのは `URL.appending(queryValue:for:)` で、このテストがその正本になる（T2）。呼び出し元のテストに同じ文字列が並んでいても、消す側は正本ではない。
+- `AccountDiscoverySettingsTests.doesNotFallBackFromAnUnusableConfigDirectory` の統合: 使えない上書きから戻らないことは、設定ディレクトリの上書きの振る舞いで、gh の検出の記録のテストに入れると 1 本が 2 つのことを確かめることになる。
 - `ActionsThreadWebURLTests.opensTheFilteredRunsWithoutARun` の縮小: 結果ごとに別の分岐で、期待値（`is:cancelled` など）は GitHub の仕様の値で、実装の写しではない。`CheckSuiteTitleTests` の縮小もこのテストを前提にしている。
 - `AccountDiscoveryTests.fetchesTokensForEveryAccount` の `--hostname` の確認: fake は引数の最後（ユーザー）からトークンを作るので、正しいホストを渡していることを上の層で確かめるのはここだけ。
 - `GhClientTests.fetchesATokenForTheGivenAccount` のタイムアウトと出力の上限: 値は定数の写しだが、security.md の「タイムアウトと出力の上限」を `gh auth token` について確かめるのはここだけ（T1 の例外）。

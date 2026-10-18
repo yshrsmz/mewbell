@@ -14,13 +14,13 @@
 ## What Changes
 
 - 次のテストを削除・統合・縮小する。対象の一覧と、それぞれの代わりに残るテストは design.md に書く。
-  - GitHubAPI: `URLQueryValueTests`（ファイルごと）、`CheckSuiteTitleTests`、`ThreadDetailsRequestTests`（本体・`+Release`・`+Actions`）、`GitHubAPIModelTests`、`ThreadEventResolverTests`、`MarkThreadReadTests`
-  - gh・アカウント・設定・App: `AccountDiscoveryTests`、`GhLocatorTests`、`GhDiagnosticsTests`、`AccountDiscoverySettingsTests`、`AccountStoreTests`、`SingleInstanceTests`、`SettingsTests`、`StatusItemMenuTests`
+  - GitHubAPI: `CheckSuiteTitleTests`、`ThreadDetailsRequestTests`（本体・`+Release`・`+Actions`）、`GitHubAPIModelTests`、`ThreadEventResolverTests`、`MarkThreadReadTests`
+  - gh・アカウント・設定・App: `AccountDiscoveryTests`、`GhLocatorTests`、`GhDiagnosticsTests`、`AccountStoreTests`、`SingleInstanceTests`、`SettingsTests`、`StatusItemMenuTests`
   - シェルのテスト: `scripts/tests/verify-app-test.sh`、`scripts/tests/check-architecture-test.sh`
-- 消すテストにしか無い確認は、残すテストに移す（`;` のエスケープ、`ghe.com` のホストの判定、`Retry-After: soon` の分類など）。
+- 消すテストにしか無い確認は、残すテストに移す（`ghe.com` のホストの判定、`Retry-After: soon` の分類など）。
 - 本体のコードと、テストの差し替えの仕組み（fake）は変えない。
 
-削る量は約 310 行の見込み。
+削る量は約 270 行の見込み。
 
 ## Capabilities
 

@@ -6,12 +6,9 @@ import Testing
 // WorkflowRun と CheckSuite のスレッドの `GitHubAPIClient.fetchDetails` のリクエストと結果
 // （github-api の「ワークフローの実行の検索の」で始まる要件）。スレッドの `updated_at` は 2026-10-08T12:00:00Z
 extension ThreadDetailsRequestTests {
-    private func approvalThread(host: String = "github.com", repository: String = "octo/app") throws
-        -> (NotificationThread, APIEndpoints)
-    {
+    private func approvalThread() throws -> (NotificationThread, APIEndpoints) {
         try thread(
-            host: host, repository: repository, subjectURL: nil, type: "WorkflowRun",
-            title: "bob requested your review to deploy to an environment")
+            subjectURL: nil, type: "WorkflowRun", title: "bob requested your review to deploy to an environment")
     }
 
     private func checkSuiteThread(title: String = "CI workflow run failed for main branch") throws
@@ -32,7 +29,7 @@ extension ThreadDetailsRequestTests {
         }
     }
 
-    /// run の一覧の `200`。
+    /// run の一覧の `200`。`html_url` は攻撃者のホストにしておく（使わないことは型が保証する）。
     private static func runs(_ runs: [Run], totalCount: Int? = nil) -> HTTPResponse {
         let items = runs.map { run in
             #"{"id": \#(run.id), "name": "\#(run.name)", "display_title": "Fix it", "updated_at": "\#(run.updatedAt)", "#
@@ -207,8 +204,8 @@ extension ThreadDetailsRequestTests {
         #expect(await fetch(thread, endpoints, transport) == Self.found("14190806"))
     }
 
-    /// 承認を待っている run から決まったとき、一覧が一時的な失敗・認証の失敗・レート制限のときは探さない。
-    @Test func doesNotSearchTheSpanningRunAfterAWaitingRunOrAFailure() async throws {
+    /// 承認を待っている run から決まったとき、一覧がレート制限のときは探さない。
+    @Test func doesNotSearchTheSpanningRunAfterAWaitingRunOrARateLimit() async throws {
         let (thread, endpoints) = try approvalThread()
         let created = Self.created([("2", ("2026-10-08T11:59:55Z", "2026-10-08T12:05:16Z"))])
         let decided = transport(list: Self.waiting(["1"]), created: created) { _ in Self.pending(canApprove: true) }
@@ -263,7 +260,6 @@ extension ThreadDetailsRequestTests {
     @Test(arguments: [
         ("feat/a+b", "branch=feat/a%2Bb"),
         ("x&per_page=1", "branch=x%26per_page%3D1"),
-        ("feat;x", "branch=feat%3Bx"),
     ])
     func escapesTheBranch(_ branch: String, _ query: String) async throws {
         let (thread, endpoints) = try checkSuiteThread(
