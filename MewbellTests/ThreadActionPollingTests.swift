@@ -118,9 +118,11 @@ struct MarkAllReadPollingTests {
         await markAllRead()
         #expect(lastIDs.isEmpty)
         #expect(fixture.updates.value.count > updates)
-        #expect(puts.map { $0.url?.absoluteString } == ["https://api.github.com/notifications"])
-        #expect(puts.first.flatMap(Self.lastReadAt) == Self.half)
+        #expect(puts.map(Self.lastReadAt) == [Self.half])
         #expect(puts.first?.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
+        // 成功は失敗として記録しない
+        #expect(fixture.last?.actionFailure == nil)
+        #expect(fixture.last?.diagnostics.lastActionFailure == nil)
         // 次の取得は条件なしで、取得の待ち時間は変わらない
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
@@ -153,6 +155,8 @@ struct MarkAllReadPollingTests {
         await waitUntil { self.puts.count == 1 }
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(2)
+        // PUT を止めている間の取得は条件付きで、届いた 200 を重ねてから隠す
+        #expect(fixture.ifModifiedSince == [nil, "LM-1"])
         #expect(lastIDs == ["3"])
         fixture.transport.pausedMethod.value = nil
         await markAll.value

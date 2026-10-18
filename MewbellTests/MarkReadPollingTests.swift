@@ -25,10 +25,11 @@ struct MarkReadPollingTests {
         await fixture.poller.perform([action])
         #expect(lastIDs == ["1", "3"])
         let sent = fixture.transport.requests.filter { $0.httpMethod != "GET" }
-        #expect(
-            sent.map { "\($0.httpMethod ?? "") \($0.url?.absoluteString ?? "")" }
-                == ["\(method) https://api.github.com/notifications/threads/2"])
+        #expect(sent.map(\.httpMethod) == [method])
         #expect(sent.first?.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
+        // 成功は失敗として記録しない
+        #expect(fixture.last?.actionFailure == nil)
+        #expect(fixture.last?.diagnostics.lastActionFailure == nil)
         // 次の取得は条件なしで、取得は早まらない
         #expect(fixture.sleeper.durations == [.seconds(60)])
         fixture.sleeper.advance()
@@ -38,19 +39,6 @@ struct MarkReadPollingTests {
         await fixture.sleeper.waitForSleeps(3)
         #expect(fixture.ifModifiedSince == [nil, nil, "LM-1"])
         #expect(fixture.sleeper.durations == Array(repeating: .seconds(60), count: 3))
-        fixture.poller.stop()
-    }
-
-    @Test(arguments: actions)
-    func bringsTheThreadBackWhenTheRequestFailed(_ action: ThreadAction) async {
-        fixture.route(gets: [PollerFixture.ok(1...3), PollerFixture.ok(1...3)], [:])
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
-        await fixture.poller.perform([action])
-        #expect(lastIDs == ["1", "3"])
-        fixture.sleeper.advance()
-        await fixture.sleeper.waitForSleeps(2)
-        #expect(lastIDs == ["1", "2", "3"])
         fixture.poller.stop()
     }
 

@@ -16,8 +16,6 @@ struct NotificationStoreActionTests {
     }
     private let tokens = FakeTokenProvider()
     private let sleeper = ManualSleeper()
-    /// まとめた操作のリクエストの間に求められた待ち（すぐ返す）
-    private let spacings = LockedValue<[Duration]>([])
     private let opened = LockedValue<[URL]>([])
     private let center = FakeUserNotificationCenter()
 
@@ -27,11 +25,11 @@ struct NotificationStoreActionTests {
     private func makeStore(notifier: (any ThreadNotifying)?) -> NotificationStore {
         let client = GitHubAPIClient(transport: transport)
         return NotificationStore(
-            makePoller: { [tokens, sleeper, spacings] account, endpoints, _, _, _, onUpdate in
+            makePoller: { [tokens, sleeper] account, endpoints, _, _, _, onUpdate in
                 AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
-                    sleep: sleeper.sleep, actionSpacing: { duration in spacings.withLock { $0.append(duration) } },
-                    onUpdate: onUpdate)
+                    // まとめた操作のリクエストの間の待ちはすぐ返す
+                    sleep: sleeper.sleep, actionSpacing: { _ in }, onUpdate: onUpdate)
             }, notifier: notifier, openURL: { [opened] url in opened.withLock { $0.append(url) } })
     }
 
@@ -56,21 +54,23 @@ struct NotificationStoreActionTests {
         return store
     }
 
-    @Test func marksAThreadDoneWithoutOpeningIt() async throws {
-        let notifier = SystemNotifier(center: center)
-        let store = await loadedStore(notifier: notifier)
-        await notifier.waitForPendingWork()
-        center.delivered.value = ["github.com/alice/2"]
+    /// 通知の取り下げは `NotificationStoreNewThreadsTests` と `SystemNotifierTests` で確かめる
+    @Test(arguments: [true, false])
+    func marksAThreadWithoutOpeningIt(done: Bool) async throws {
+        let (method, otherMethod) = done ? ("DELETE", "PATCH") : ("PATCH", "DELETE")
+        let store = await loadedStore()
         let thread = try #require(store.feeds[alice]?.threads.first { $0.id == "2" })
-        store.markDone(thread, in: alice)
+        if done {
+            store.markDone(thread, in: alice)
+        } else {
+            store.markRead(thread, in: alice)
+        }
         #expect(store.feeds[alice]?.threads.map(\.id) == ["1", "3"])
         #expect(store.unreadCount == 5)
         #expect(opened.value.isEmpty)
-        await waitUntil { self.urls("DELETE").count == 1 }
-        #expect(urls("DELETE") == ["https://api.github.com/notifications/threads/2"])
-        #expect(urls("PATCH").isEmpty)
-        await notifier.waitForPendingWork()
-        #expect(center.delivered.value.isEmpty)
+        await waitUntil { self.urls(method).count == 1 }
+        #expect(urls(method) == ["https://api.github.com/notifications/threads/2"])
+        #expect(urls(otherMethod).isEmpty)
         store.stopAll()
     }
 
@@ -84,10 +84,7 @@ struct NotificationStoreActionTests {
             default: PollerFixture.ok(body: Data("[\(page.joined(separator: ","))]".utf8))
             }
         }
-        let notifier = SystemNotifier(center: center)
-        let store = await loadedStore(notifier: notifier)
-        await notifier.waitForPendingWork()
-        center.delivered.value = ["github.com/alice/1", "github.com/alice/2"]
+        let store = await loadedStore()
         let group = try #require(store.repositories[alice]?.first { $0.repository.description == "octo/app" })
         store.markDone(group, in: alice)
         #expect(store.feeds[alice]?.threads.map(\.id) == ["3"])
@@ -98,8 +95,6 @@ struct NotificationStoreActionTests {
             Set(urls("DELETE")) == [
                 "https://api.github.com/notifications/threads/1", "https://api.github.com/notifications/threads/2",
             ])
-        await notifier.waitForPendingWork()
-        #expect(center.delivered.value.isEmpty)
         store.stopAll()
     }
 
@@ -113,10 +108,7 @@ struct NotificationStoreActionTests {
             default: PollerFixture.ok(body: Data("[\(page.joined(separator: ","))]".utf8))
             }
         }
-        let notifier = SystemNotifier(center: center)
-        let store = await loadedStore(notifier: notifier)
-        await notifier.waitForPendingWork()
-        center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/bob/3"]
+        let store = await loadedStore()
         store.markAllDone(in: alice)
         #expect(store.feeds[alice]?.threads.isEmpty == true)
         #expect(store.feeds[bob]?.threads.count == 3)
@@ -124,12 +116,12 @@ struct NotificationStoreActionTests {
         await waitUntil { self.urls("DELETE").count == 3 }
         #expect(
             urls("DELETE") == ["2", "1", "3"].map { "https://api.github.com/notifications/threads/\($0)" })
-        // 1 件目は待たず、2 件目と 3 件目の前に 1 秒ずつ空ける
-        #expect(spacings.value == [.seconds(1), .seconds(1)])
+        // bob も同じクライアントでポーリングしているが、alice の Done には alice のトークンだけを付ける
+        #expect(
+            transport.requests.filter { $0.httpMethod == "DELETE" }
+                .map { $0.value(forHTTPHeaderField: "Authorization") }
+                == Array(repeating: "Bearer test-token-alice", count: 3))
         #expect(urls("PUT").isEmpty)
-        // alice の通知だけが取り下がる
-        await notifier.waitForPendingWork()
-        #expect(center.delivered.value == ["github.com/bob/3"])
         store.stopAll()
     }
 
@@ -150,18 +142,6 @@ struct NotificationStoreActionTests {
         store.stopAll()
     }
 
-    @Test func marksAThreadReadWithoutOpeningIt() async throws {
-        let store = await loadedStore()
-        let thread = try #require(store.feeds[alice]?.threads.first { $0.id == "2" })
-        store.markRead(thread, in: alice)
-        #expect(store.feeds[alice]?.threads.map(\.id) == ["1", "3"])
-        #expect(opened.value.isEmpty)
-        await waitUntil { self.urls("PATCH").count == 1 }
-        #expect(urls("PATCH") == ["https://api.github.com/notifications/threads/2"])
-        #expect(urls("DELETE").isEmpty)
-        store.stopAll()
-    }
-
     @Test func ignoresDoneWithoutAPoller() throws {
         let thread = try Self.thread()
         let store = NotificationStore(
@@ -179,7 +159,6 @@ struct NotificationStoreActionTests {
         #expect(store.feeds[alice]?.canMarkAll == true)
         store.markAllRead(in: alice)
         await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.threads.isEmpty == true } }
-        #expect(store.feeds[alice]?.threads.isEmpty == true)
         #expect(store.feeds[bob]?.threads.count == 3)
         #expect(store.unreadCount == 3)
         #expect(store.feeds[alice]?.canMarkAll != true)

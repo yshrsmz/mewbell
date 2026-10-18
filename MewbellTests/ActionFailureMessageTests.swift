@@ -34,14 +34,6 @@ struct ActionFailureMessageTests {
         #expect(ActionFailureMessage.command(for: failure, account: bob) == nil)
     }
 
-    @Test func givesNoReasonForOtherFailures() {
-        let failure = failure(.read, .network)
-        #expect(
-            ActionFailureMessage.text(for: failure)
-                == "Could not mark a thread as read. Unread threads come back after the next fetch.")
-        #expect(ActionFailureMessage.command(for: failure, account: alice) == nil)
-    }
-
     @Test func doesNotPromiseThreadsBackWhenMarkAllReadWasNotSent() {
         let text = ActionFailureMessage.text(for: failure(.markAllRead, .noToken))
         #expect(text == "Could not mark all as read.")

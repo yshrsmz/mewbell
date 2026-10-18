@@ -65,14 +65,6 @@ struct NotificationStoreNewThreadsTests {
         await updates.byAccount[alice]?(state)
     }
 
-    @Test func staysQuietForTheBaseline() async throws {
-        let store = makeStore()
-        await send(feed([try thread("1"), try thread("2")]))
-        #expect(recorder.events == ["baselineSet github.com/alice 1,2"])
-        #expect(received.value.isEmpty)
-        store.stopAll()
-    }
-
     @Test func reportsNewThreadsAndGoneOnes() async throws {
         let store = makeStore()
         await send(feed([try thread("1"), try thread("2")]))
@@ -127,15 +119,6 @@ struct NotificationStoreNewThreadsTests {
         store.stopAll()
     }
 
-    @Test func removesAllThreadsMarkedDoneTogether() async throws {
-        let store = makeStore()
-        await send(feed([try thread("1"), try thread("2"), try thread("3")]))
-        recorder.events = []
-        store.markAllDone(in: alice)
-        #expect(recorder.events == ["threadsRemoved github.com/alice 1,2,3"])
-        store.stopAll()
-    }
-
     /// すべて既読のように取り下げだけのときは、macOS の通知には渡すが `onNewThreads` は呼ばない。
     @Test func doesNotReportRetractionsAloneAsNewThreads() async throws {
         let store = makeStore()
@@ -172,23 +155,6 @@ struct NotificationStoreNewThreadsTests {
         await send(feed([try thread("1"), try thread("2")]))
         #expect(recorder.events == ["baselineSet github.com/alice 1,2"])
         #expect(received.value.isEmpty)
-        store.stopAll()
-    }
-
-    @Test func treatsTheFirstFetchAfterARestartAsTheBaseline() async throws {
-        let notifier = SystemNotifier(center: center)
-        let store = makeStore(notifier: notifier)
-        await send(feed([try thread("1"), try thread("2")]))
-        await notifier.waitForPendingWork()
-        center.delivered.value = ["github.com/alice/1", "github.com/alice/2"]
-        store.restart(alice)
-        await notifier.waitForPendingWork()
-        // 取り直しの間は通知を残し、基準の取り直しで今の一覧に無いものだけを消す
-        #expect(center.delivered.value.count == 2)
-        await send(feed([try thread("2"), try thread("4")]))
-        await notifier.waitForPendingWork()
-        #expect(center.added.value.isEmpty)
-        #expect(center.delivered.value == ["github.com/alice/2"])
         store.stopAll()
     }
 

@@ -5,11 +5,12 @@ import Testing
 struct RepositoryActionLabelsTests {
     @Test func namesTheRepositoryAndTheCount() {
         let labels = RepositoryActionLabels(repository: "octo/app", count: 2)
-        #expect(labels.read == "Mark all in octo/app as read")
         #expect(labels.confirmation == "Mark 2 as done?")
-        #expect(labels.doneHelp(confirming: false) == "Mark all in octo/app as done")
-        #expect(labels.doneHelp(confirming: true) == "Click again to mark 2 in octo/app as done")
-        #expect(labels.doneAccessibilityLabel(confirming: false) == "Mark all in octo/app as done")
-        #expect(labels.doneAccessibilityLabel(confirming: true) == "Confirm marking 2 in octo/app as done")
+        // spec が決めているのは、ツールチップとアクセシビリティのラベルでどのリポジトリへの操作かが分かること
+        let named = [
+            labels.read, labels.doneHelp(confirming: false), labels.doneHelp(confirming: true),
+            labels.doneAccessibilityLabel(confirming: false), labels.doneAccessibilityLabel(confirming: true),
+        ]
+        #expect(named.allSatisfy { $0.contains("octo/app") })
     }
 }
