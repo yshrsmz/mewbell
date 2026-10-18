@@ -119,4 +119,22 @@ struct AccountStoreGhDiagnosticsTests {
         await store.waitForReload()
         #expect(store.ghDetection == detection)
     }
+
+    @Test func publishesTheGhOfTheNewConfigDirectory() async {
+        let discovery = BlockingDiscovery()
+        discovery.ghDetection = detection
+        let settings = AppSettings(storage: InMemorySettingsStorage())
+        let store = AccountStore(discovery: discovery, options: { settings.discoveryOptions })
+        discovery.finish()
+        store.reload()
+        await store.waitForReload()
+        var work = detection
+        work.configDirectory = GhConfigDirectory.Resolved(
+            url: URL(filePath: "/Users/me/gh-work", directoryHint: .isDirectory), source: .override)
+        discovery.ghDetection = work
+        discovery.finish()
+        store.ghConfigDirectoryChanged()
+        await store.waitForReload()
+        #expect(store.ghDetection == work)
+    }
 }

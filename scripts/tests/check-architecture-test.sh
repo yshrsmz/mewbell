@@ -116,9 +116,11 @@ expect_fail "廃止の理由が無い" "$repo" "[書式]" "廃止の理由"
 # --- ID の参照 ---
 repo="$(make_repo retired-reference)"
 printf '原則 A2 を見る。\n' >>"$repo/.claude/rules/review.md"
+expect_fail "archive でない文書が廃止した原則を引いている" "$repo" "[ID の参照]" ".claude/rules/review.md" "A2 は廃止"
+
+repo="$(make_repo retired-lint)"
 replace "$repo/.swiftlint.yml" "（A1）" "（A2）"
-expect_fail "archive でない文書と lint の規則が廃止した原則を引いている" "$repo" \
-  ".claude/rules/review.md:" ".swiftlint.yml:" "A2 は廃止"
+expect_fail "lint の規則が廃止した原則を引いている" "$repo" "[ID の参照]" ".swiftlint.yml"
 
 repo="$(make_repo adjacent-ids)"
 printf '原則 A1・A9 を見る。\n' >>"$repo/CLAUDE.md"

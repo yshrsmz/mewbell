@@ -44,6 +44,12 @@ extension ThreadDetailsRequestTests {
         #expect(transport.requests.first?.httpMethod == "GET")
     }
 
+    @Test func buildsTheReleaseURLFromTheValidatedRepository() async throws {
+        let (thread, endpoints) = try releaseThread(subjectURL: "https://api.github.com/repos/OCTO/App/releases/12")
+        let (_, transport) = await fetch(thread, endpoints, Self.release(tagName: "v1.0.0"))
+        #expect(transport.requests.first?.url?.absoluteString == "https://api.github.com/repos/octo/app/releases/12")
+    }
+
     /// タグの形の検証は `ReleaseTagTests` で確かめる
     @Test func treatsAnInvalidTagAsUnavailable() async throws {
         let (thread, endpoints) = try releaseThread()

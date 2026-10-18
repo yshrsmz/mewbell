@@ -136,6 +136,7 @@ extension ThreadDetailsRequestTests {
         ([String](), Int?.none, [Bool]()),
         (["103"], nil, [false]),
         (["101", "102"], nil, [true, true]),
+        (["101", "102", "103", "104", "105", "106"], nil, []),
         (["101"], 8, []),
     ])
     func findsNoWaitingRun(_ ids: [String], _ totalCount: Int?, _ approvable: [Bool]) async throws {

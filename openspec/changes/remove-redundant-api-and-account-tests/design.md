@@ -45,13 +45,13 @@ GitHubAPI:
 | `CheckSuiteTitleTests.rejectsTheTitle` | 12→8（`someone requested…`、ブランチが空、`Attempt #x`、`ma\nin` を消す。`\u{662}` は残す） | T4 | 残した行 |
 | `ThreadDetailsRequestTests.fetchesThePageBeforeTheLastWithoutACandidate` | `looksForACloserEventOnThePageBeforeTheLast` に統合し、`page=4` の URL の確認を移す | T4 | 統合先 |
 | `ThreadDetailsRequestTests.treatsAPlainForbiddenAsUnavailable` | 削除。`treatsAMissingIssueAsUnavailable` の引数に 403 を足す | T4 | 統合先 |
-| `+Release` の `buildsTheReleaseURLFromTheValidatedRepository`、`buildsTheReleaseURLOnGHES`、`sendsNothingWithoutAReleaseID`、`unauthorizedForARelease`、`rateLimitedForARelease` | 削除 | T2 | Issue の経路の同じテスト、`readsNoReleaseIDFromOtherSubjects` |
+| `+Release` の `buildsTheReleaseURLOnGHES`、`sendsNothingWithoutAReleaseID`、`unauthorizedForARelease`、`rateLimitedForARelease` | 削除 | T2 | Issue の経路の同じテスト、`readsNoReleaseIDFromOtherSubjects` |
 | `+Release` の `doesNotUseTheHTMLURL` | 削除。固定データ `release()` の `htmlURL` の既定値を攻撃者のホストにする | T1 | `ReleaseSummary` が `tagName` しか持たない（型の保証）。開く URL は `ThreadPresentationTests.opensTheReleaseOfTheTag` |
 | `+Release` の `treatsAnInvalidTagAsUnavailable` | 4→1（`../../settings`） | T2・T4 | `ReleaseTagTests.rejectsTags` |
 | `+Release` の `temporaryFailuresForARelease` | 確認 6→1（`{}`） | T2 | Issue の経路の一時的な失敗のテスト |
 | `+Release` の `treatsAMissingReleaseAsUnavailable` | 4→1（404） | T4 | `treatsAMissingIssueAsUnavailable` |
 | `+Actions` の `buildsTheWaitingRunsURLOnGHES`、`takesTheApprovableRunClosestToTheNotification`、`findsNoRunWhenTwoRunsSpanTheNotification`、`findsNoRunWhenTheBranchRunsCannotBeRead` | 削除 | T2 | `usesTheIssuesPathForPullRequests`、`WorkflowRunSelectionTests`、`takesTheOnlyRunTheUserCanApprove`、`rejectsAnApprovableRunThatStartedWaitingLater` |
-| `+Actions` の `findsNoWaitingRun` | 6→4（`[false, false]` と 6 件の行を消す。`[true, true]` の行は必ず残す） | T4 | 残した行 |
+| `+Actions` の `findsNoWaitingRun` | 6→5（`[false, false]` の行を消す。`[true, true]` の行と、上限ちょうどの 6 件の行は残す） | T4 | 残した行 |
 | `+Actions` の `doesNotSearchTheSpanningRunAfterAWaitingRunOrAFailure` | ループ 3→1（二次レート制限を残す） | T4 | 残した 1 つ |
 | `+Actions` の `rejectsInvalidRunIDs` | 21 桁の後半を削る（`-5` は残す） | T1 | `JSONDecoder` の挙動 |
 | `+Actions` の `stopsAtAFailedPendingDeploymentsRequest`、`findsNoRunOfTheWorkflowAndDoesNotKeepTheHTMLURL` | 後半を削る | T1・T2 | 前半の確認、`takesTheClosestRunOfTheWorkflow`。`runs()` の固定データの html_url は攻撃者のホストのまま |
@@ -60,10 +60,9 @@ GitHubAPI:
 | `NotificationThreadTests.readsTheKind` | `.other("CheckRun")` の 1 行だけにする | T2 | `+Actions` が `WorkflowRun` と `CheckSuite` を decode している |
 | `NotificationThreadTests.acceptsANullSubjectURL` | 削除 | T2 | `+Actions` のスレッドが `subjectURL: nil` で decode している |
 | `LinkHeaderTests.returnsNilWithoutALastLink` と `readsTheLastLink` の 2 つ目の確認 | 削除 | T2・T4 | `returnsNilWithoutANextLink`、`readsTheLastLink` の 1 つ目 |
-| `ThreadEventResolverTests.actorEvents` | 6→2（`convert_to_draft` と `head_ref_force_pushed`） | T4 | 残した 2 行 |
 | `ThreadEventResolverTests.doesNotKeepCommentBodies` | 削除 | T1 | `TimelineItem` に本文の項目が無い（型の保証） |
 | `MarkThreadReadTests.classifiesTheStatus` | 14→9。`(403, ["Retry-After": "soon"])` を `classifiesStatusCodes` に移す。429 の行は残す | T2 | `classifiesStatusCodes` |
-| `ThreadIDTests.rejects`、`accepts` | 8→5（`""`、21 桁、全角の数字、`-1`、`../1` を残す）、3→2（`0` と 20 桁） | T4 | 残した引数 |
+| `ThreadIDTests.accepts` | 3→2（`0` と 20 桁。21 桁の拒否と合わせて境界の両側になる） | T4 | 残した引数 |
 
 gh・アカウント・設定・App・シェル:
 
@@ -72,7 +71,6 @@ gh・アカウント・設定・App・シェル:
 | `AccountTests.classifiesHosts` | 削除。`("ghe.com", "https://ghe.com/api/v3", "https://ghe.com")` を `APIEndpointsTests.derivesBaseURLs` に足す | T2 | `derivesBaseURLs` |
 | `AccountDiscoveryTests.reportsMissingGh` | 削除 | T4 | `GhDiagnosticsTests.forgetsTheGhWhenItIsGone` |
 | `GhClientTests.tokenIsNilWhenGhDoesNotGiveOne` の `test-token\nsecond-line` | 1 行削除 | T2 | `AccessTokenTests.rejectsMalformedOutput` |
-| `AccountStoreGhDiagnosticsTests.publishesTheGhOfTheNewConfigDirectory` | 削除 | T4 | `publishesTheGhAfterEachReload` |
 | `AccountStoreTests.stopsReportingStateChangesAfterTermination` | `closesCredentialsAndRefusesToReloadWhenTerminating` に統合 | T4 | 統合先 |
 | `AccountStoreSettingsTests.reloadsWhenAnAccountIsEnabledAgain` | 削除。状態の確認を `reloadsAfterTheDisableWhenEnabledRightAway` に移す | T4 | 移し先 |
 | `SingleInstanceLockTests.reportsFailureWhenTheLockFileCannotBeOpened` | 削除 | T4 | `doesNotFollowASymbolicLinkAtTheLockFile` |
@@ -80,12 +78,19 @@ gh・アカウント・設定・App・シェル:
 | `StatusItemMenuTests.attachesOnceToTheSameButton` | `opensSettingsThroughTheLatestAction` に統合。`scheme == "https"` の確認は削る | T4 | 統合先 |
 | `verify-app-test.sh` の署名の後の書き換えのケース | 削除 | T1 | 署名の無い `.app` のケースが `codesign --verify` の失敗を確かめる |
 | `check-architecture-test.sh` の unknown-id | 削除 | T4 | adjacent-ids |
-| `check-architecture-test.sh` の廃止した ID の 2 本、重複の 2 本 | それぞれ 1 本に統合（偽のリポジトリに 2 か所の書き換えを入れ、ファイルごとの出力で確かめる） | T4 | 統合先 |
+| `check-architecture-test.sh` の重複の 2 本 | 1 本に統合（偽のリポジトリに 2 か所の書き換えを入れ、ファイルごとの `[重複]` の出力で確かめる） | T4 | 統合先 |
 
 ### D3. 採らなかった候補
 
 - `URLQueryValueTests` の削除: エスケープを決めるのは `URL.appending(queryValue:for:)` で、このテストがその正本になる（T2）。呼び出し元のテストに同じ文字列が並んでいても、消す側は正本ではない。
 - `AccountDiscoverySettingsTests.doesNotFallBackFromAnUnusableConfigDirectory` の統合: 使えない上書きから戻らないことは、設定ディレクトリの上書きの振る舞いで、gh の検出の記録のテストに入れると 1 本が 2 つのことを確かめることになる。
+- code-review の指摘で、次のものは残した。
+  - `+Release` の `buildsTheReleaseURLFromTheValidatedRepository`: リリースのパスは Issue とは別の箇所で組み立てるので、検証したリポジトリ名でパスを作ることを確かめるのはここだけ（security.md の、トークンを送る先）。
+  - `ThreadIDTests.rejects` の `12a`・`1 2`・`1/2`: パスの区切りや空白を入れる攻撃の形ごとの引数（T4 の例外）。
+  - `ThreadEventResolverTests.actorEvents` の全行: 表の 1 行ずつが API のイベント名との対応で、どの行も別々に間違えうる（T3）。
+  - `findsNoWaitingRun` の 6 件の行: 承認待ちの run の上限ちょうどの境界（T4）。
+  - `AccountStoreGhDiagnosticsTests.publishesTheGhOfTheNewConfigDirectory`: 設定ディレクトリを変えた後の世代の比較を通るのはここだけ。
+  - `check-architecture-test.sh` の廃止した ID の 2 本: 統合すると、`.swiftlint.yml` の行の分類を確かめられない。
 - `ActionsThreadWebURLTests.opensTheFilteredRunsWithoutARun` の縮小: 結果ごとに別の分岐で、期待値（`is:cancelled` など）は GitHub の仕様の値で、実装の写しではない。`CheckSuiteTitleTests` の縮小もこのテストを前提にしている。
 - `AccountDiscoveryTests.fetchesTokensForEveryAccount` の `--hostname` の確認: fake は引数の最後（ユーザー）からトークンを作るので、正しいホストを渡していることを上の層で確かめるのはここだけ。
 - `GhClientTests.fetchesATokenForTheGivenAccount` のタイムアウトと出力の上限: 値は定数の写しだが、security.md の「タイムアウトと出力の上限」を `gh auth token` について確かめるのはここだけ（T1 の例外）。
@@ -109,7 +114,7 @@ security.md の性質を確かめるテストは、この change の後も性質
 | オリジン検査と URL の組み立て | `APIEndpointsTests.checksTheRequestURL`、`sendsNothingToTheLinkedHost`、`sendsNothingWithoutANumber` |
 | リクエストごとのトークン | `GitHubAPIClientTests.buildsTheRequest`、ポーラーの層のトークンの確認 |
 | リダイレクトの拒否 | `classifiesStatusCodes` の 302、`MarkThreadReadTests.classifiesTheStatus` の 307、Issue の経路の一時的な失敗 |
-| ID・ホスト名・ユーザー名の検証 | `ThreadIDTests`（縮小後）、`sendsNothingForAnInvalidID`、`APIEndpointsTests.rejectsAnInvalidHost`、`fetchesTokensForEveryAccount` の `--hostname`、`GhClientTests.fetchesATokenForTheGivenAccount` |
+| ID・ホスト名・ユーザー名の検証 | `ThreadIDTests.rejects`（全引数）、`sendsNothingForAnInvalidID`、`APIEndpointsTests.rejectsAnInvalidHost`、`fetchesTokensForEveryAccount` の `--hostname`、`GhClientTests.fetchesATokenForTheGivenAccount` |
 | API が返す html_url を使わない | 型の保証。固定データ `release()` と `runs()` の html_url は攻撃者のホストにしておく |
 | タイムアウトと出力の上限 | `GhClientTests.fetchesATokenForTheGivenAccount` |
 | シンボリックリンクを追わない | `SingleInstanceLockTests.doesNotFollowASymbolicLinkAtTheLockFile` |

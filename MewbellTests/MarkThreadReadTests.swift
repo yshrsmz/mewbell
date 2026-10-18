@@ -4,7 +4,7 @@ import Testing
 @testable import Mewbell
 
 struct ThreadIDTests {
-    @Test(arguments: ["", "123456789012345678901", "../1", "１２３", "-1"])
+    @Test(arguments: ["", "123456789012345678901", "12a", "../1", "１２３", "-1", "1 2", "1/2"])
     func rejects(_ id: String) {
         #expect(!ThreadID.isValid(id))
     }
