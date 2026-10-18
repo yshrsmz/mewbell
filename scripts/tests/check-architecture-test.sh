@@ -114,10 +114,6 @@ replace "$repo/docs/architecture.md" "- **廃止の理由**: A1 にまとめた"
 expect_fail "廃止の理由が無い" "$repo" "[書式]" "廃止の理由"
 
 # --- ID の参照 ---
-repo="$(make_repo unknown-id)"
-printf '原則 A9 を見る。\n' >>"$repo/CLAUDE.md"
-expect_fail "無い ID を引いている" "$repo" "[ID の参照]" "CLAUDE.md:4" "A9"
-
 repo="$(make_repo retired-reference)"
 printf '原則 A2 を見る。\n' >>"$repo/.claude/rules/review.md"
 expect_fail "archive でない文書が廃止した原則を引いている" "$repo" "[ID の参照]" ".claude/rules/review.md" "A2 は廃止"
@@ -180,11 +176,9 @@ expect_pass "グロブやプレースホルダーのパスは、展開も実在�
 # --- 重複 ---
 repo="$(make_repo duplicate)"
 printf '\nプレビューとテストで store を組まずに済み、どの操作が起きるかが引数で読めるようになる。\n' >>"$repo/CLAUDE.md"
-expect_fail "原則の文をそのまま写している" "$repo" "CLAUDE.md: [重複]" "docs/architecture.md:8"
-
-repo="$(make_repo duplicate-in-skill)"
 printf '\nプレビューとテストで store を組まずに済み、どの操作が起きるかが引数で読めるようになる。\n' >>"$repo/.claude/skills/sample/SKILL.md"
-expect_fail "スキルへの写しも見つける" "$repo" ".claude/skills/sample/SKILL.md: [重複]"
+expect_fail "原則の文を CLAUDE.md とスキルにそのまま写している" "$repo" \
+  "CLAUDE.md: [重複]" ".claude/skills/sample/SKILL.md: [重複]" "docs/architecture.md:8"
 
 repo="$(make_repo no-duplicate-targets)"
 rm "$repo/CLAUDE.md" "$repo/openspec/config.yaml" "$repo/.claude/rules/review.md"

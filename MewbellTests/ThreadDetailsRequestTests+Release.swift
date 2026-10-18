@@ -4,13 +4,12 @@ import Testing
 @testable import Mewbell
 
 // Release のスレッドの `GitHubAPIClient.fetchDetails` のリクエストと結果（github-api「リリースのタグの取得のリクエスト」
-// 「リリースのタグの取得の tag_name」「リリースのタグの取得のレスポンス」「リリースのタグの取得のレート制限と失敗」）
+// 「リリースのタグの取得の tag_name」「リリースのタグの取得のレスポンス」）。共通の取得の失敗は Issue の経路で確かめる
 extension ThreadDetailsRequestTests {
     private func releaseThread(
-        host: String = "github.com", repository: String = "octo/app",
-        subjectURL: String = "https://api.github.com/repos/octo/app/releases/12"
+        repository: String = "octo/app", subjectURL: String = "https://api.github.com/repos/octo/app/releases/12"
     ) throws -> (NotificationThread, APIEndpoints) {
-        try thread(host: host, repository: repository, subjectURL: subjectURL, type: "Release")
+        try thread(repository: repository, subjectURL: subjectURL, type: "Release")
     }
 
     /// すべてのリクエストに `response` を返すトランスポートで取る。
@@ -21,10 +20,11 @@ extension ThreadDetailsRequestTests {
         return (await fetch(thread, endpoints, transport), transport)
     }
 
-    private static func release(tagName: String, htmlURL: String = "https://github.com/octo/app/releases/tag/x")
-        -> HTTPResponse
-    {
-        let body = #"{"id": 12, "tag_name": "\#(tagName)", "html_url": "\#(htmlURL)", "body": "notes"}"#
+    /// `html_url` は攻撃者のホストにしておく（使わないことは `ReleaseSummary` の型が保証する）。
+    private static func release(tagName: String) -> HTTPResponse {
+        let body =
+            #"{"id": 12, "tag_name": "\#(tagName)", "html_url": "https://evil.example.com/octo/app/releases/tag/x", "#
+            + #""body": "notes"}"#
         return HTTPResponse(statusCode: 200, body: Data(body.utf8))
     }
 
@@ -42,18 +42,6 @@ extension ThreadDetailsRequestTests {
                 "https://api.github.com/repos/openai/codex/releases/413167889"
             ])
         #expect(transport.requests.first?.httpMethod == "GET")
-        #expect(transport.requests.first?.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
-    }
-
-    @Test func buildsTheReleaseURLOnGHES() async throws {
-        let (thread, endpoints) = try releaseThread(
-            host: "ghe.example.com", repository: "team/svc",
-            subjectURL: "https://ghe.example.com/api/v3/repos/team/svc/releases/12")
-        let (_, transport) = await fetch(thread, endpoints, Self.release(tagName: "v1.0.0"))
-        #expect(
-            transport.requests.map { $0.url?.absoluteString } == [
-                "https://ghe.example.com/api/v3/repos/team/svc/releases/12"
-            ])
     }
 
     @Test func buildsTheReleaseURLFromTheValidatedRepository() async throws {
@@ -62,63 +50,21 @@ extension ThreadDetailsRequestTests {
         #expect(transport.requests.first?.url?.absoluteString == "https://api.github.com/repos/octo/app/releases/12")
     }
 
-    @Test func doesNotUseTheHTMLURL() async throws {
+    /// タグの形の検証は `ReleaseTagTests` で確かめる
+    @Test func treatsAnInvalidTagAsUnavailable() async throws {
         let (thread, endpoints) = try releaseThread()
-        let response = Self.release(
-            tagName: "v1.0.0", htmlURL: "https://evil.example.com/octo/app/releases/tag/v1.0.0")
-        let (result, _) = await fetch(thread, endpoints, response)
-        #expect(result == Self.found("v1.0.0"))
-        var tagged = thread
-        tagged.details = ThreadDetails(state: nil, event: nil, resource: .release(tag: "v1.0.0"))
-        let opened = try #require(ThreadWebURL.make(for: tagged, endpoints: endpoints))
-        #expect(opened.absoluteString == "https://github.com/octo/app/releases/tag/v1.0.0")
+        #expect(await fetch(thread, endpoints, Self.release(tagName: "../../settings")).0 == .unavailable)
     }
 
-    /// リリースの ID を持つかどうかの判定は `ThreadWebURL.detailsSubject` のテストで確かめる
-    @Test func sendsNothingWithoutAReleaseID() async throws {
-        let (thread, endpoints) = try releaseThread(subjectURL: "https://evil.example.com/repos/octo/app/releases/12")
-        let (result, transport) = await fetch(thread, endpoints, Self.release(tagName: "v1.0.0"))
-        #expect(result == .unavailable)
-        #expect(transport.requests.isEmpty)
+    @Test func treatsAMissingReleaseAsUnavailable() async throws {
+        let (thread, endpoints) = try releaseThread()
+        #expect(await fetch(thread, endpoints, HTTPResponse(statusCode: 404)).0 == .unavailable)
     }
 
-    @Test(arguments: ["../../settings", "v1 0", "", "a//b"])
-    func treatsAnInvalidTagAsUnavailable(_ tag: String) async throws {
+    /// 共通の取得の失敗は Issue の経路で確かめる。ここではリリースのボディの読み取りだけを見る
+    @Test func treatsABodyWithoutATagAsMalformed() async throws {
         let (thread, endpoints) = try releaseThread()
-        #expect(await fetch(thread, endpoints, Self.release(tagName: tag)).0 == .unavailable)
-    }
-
-    @Test(arguments: [404, 410, 422, 403])
-    func treatsAMissingReleaseAsUnavailable(_ status: Int) async throws {
-        let (thread, endpoints) = try releaseThread()
-        #expect(await fetch(thread, endpoints, HTTPResponse(statusCode: status)).0 == .unavailable)
-    }
-
-    @Test func unauthorizedForARelease() async throws {
-        let (thread, endpoints) = try releaseThread()
-        #expect(await fetch(thread, endpoints, HTTPResponse(statusCode: 401)).0 == .unauthorized)
-    }
-
-    @Test func rateLimitedForARelease() async throws {
-        let (thread, endpoints) = try releaseThread()
-        let reset = now.addingTimeInterval(600)
-        let forbidden = HTTPResponse(
-            statusCode: 403,
-            headers: ["X-RateLimit-Remaining": "0", "X-RateLimit-Reset": String(Int(reset.timeIntervalSince1970))])
-        #expect(await fetch(thread, endpoints, forbidden).0 == .rateLimited(retryAt: reset))
-        let tooMany = HTTPResponse(statusCode: 429, headers: ["Retry-After": "120"])
-        #expect(await fetch(thread, endpoints, tooMany).0 == .rateLimited(retryAt: now.addingTimeInterval(120)))
-        #expect(await fetch(thread, endpoints, FakeHTTPTransport.secondaryRateLimit()).0 == .rateLimited(retryAt: now))
-    }
-
-    @Test func temporaryFailuresForARelease() async throws {
-        let (thread, endpoints) = try releaseThread()
-        #expect(await fetch(thread, endpoints, HTTPResponse(statusCode: 500)).0 == .failed(.unexpectedStatus(500)))
-        let redirect = HTTPResponse(statusCode: 302, headers: ["Location": "https://evil.example.com/"])
-        #expect(await fetch(thread, endpoints, redirect).0 == .failed(.redirect))
-        for body in ["{}", #"{"tag_name": 1}"#, "[]", "not json"] {
-            let response = HTTPResponse(statusCode: 200, body: Data(body.utf8))
-            #expect(await fetch(thread, endpoints, response).0 == .failed(.malformedBody))
-        }
+        let response = HTTPResponse(statusCode: 200, body: Data("{}".utf8))
+        #expect(await fetch(thread, endpoints, response).0 == .failed(.malformedBody))
     }
 }

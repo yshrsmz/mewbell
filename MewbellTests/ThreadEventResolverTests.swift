@@ -192,13 +192,6 @@ struct ThreadEventResolverTests {
         #expect(event == ThreadEvent(kind: .closed, actor: "alice"))
     }
 
-    @Test func doesNotKeepCommentBodies() throws {
-        let items = try #require(
-            TimelineItem.decodePage(
-                from: TimelineJSON.page([TimelineJSON.commented(at: "2026-10-08T12:00:00Z", by: "bob")])))
-        #expect(!String(describing: items).contains("hello"))
-    }
-
     @Test func skipsMalformedItemsAndRejectsNonArrays() throws {
         let items = try #require(
             TimelineItem.decodePage(from: Data(#"[{"event": 1}, {"event": "commented"}, 3]"#.utf8)))

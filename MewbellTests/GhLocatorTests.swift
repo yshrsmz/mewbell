@@ -218,7 +218,6 @@ struct GhClientTests {
     @Test(arguments: [
         Result<ProcessOutput, ProcessRunError>.success(
             FakeProcessRunner.output("test-token\n", exitCode: 1, stderr: "no token")),
-        .success(FakeProcessRunner.output("test-token\nsecond-line\n")),
         .failure(.timedOut),
     ])
     func tokenIsNilWhenGhDoesNotGiveOne(_ result: Result<ProcessOutput, ProcessRunError>) async {

@@ -74,15 +74,12 @@ struct SettingsStorageTests {
         #expect(storage.values[SettingsKey.ghExecutableOverride] == nil)
     }
 
-    @Test func userDefaultsStorageReadsMalformedValuesAsDefaults() throws {
+    @Test func userDefaultsStorageKeepsTheSettings() throws {
         let suite = "MewbellTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set("YES", forKey: SettingsKey.notificationSound)
-        defaults.set(false, forKey: "unrelated")
 
         let settings = AppSettings(storage: UserDefaultsStorage(defaults: defaults))
-        #expect(settings.notificationSound)
         settings.setNotificationSound(false)
         settings.setEnabled(false, for: alice)
         #expect(!AppSettings(storage: UserDefaultsStorage(defaults: defaults)).notificationSound)

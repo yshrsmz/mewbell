@@ -209,6 +209,7 @@ struct GitHubAPIClientTests {
         ),
         (403, ["Retry-After": "300"], .rateLimited(retryAt: Date(timeIntervalSince1970: 1_791_461_100))),
         (403, ["X-RateLimit-Remaining": "4999"], .forbidden(scopes: OAuthScopes(header: nil))),
+        (403, ["Retry-After": "soon"], .forbidden(scopes: OAuthScopes(header: nil))),
         (403, ["X-OAuth-Scopes": "gist"], .forbidden(scopes: OAuthScopes(header: "gist"))),
         (429, ["Retry-After": "600"], .rateLimited(retryAt: Date(timeIntervalSince1970: 1_791_461_400))),
         (429, [:], .rateLimited(retryAt: nil)),

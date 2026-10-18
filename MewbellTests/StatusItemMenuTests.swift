@@ -24,10 +24,9 @@ struct StatusItemMenuTests {
         let menu = statusMenu.menu
         menu.performActionForItem(at: menu.indexOfItem(withTitle: "Mewbell Releases"))
         #expect(opened.map(\.absoluteString) == ["https://github.com/yshrsmz/mewbell/releases"])
-        #expect(opened.first?.scheme == "https")
     }
 
-    @Test func opensSettingsThroughTheLatestAction() {
+    @Test func attachesOnceAndOpensSettingsThroughTheLatestAction() {
         var opened: [String] = []
         let statusMenu = StatusItemMenu(openURL: { _ in })
         let button = NSStatusBarButton()
@@ -36,13 +35,6 @@ struct StatusItemMenuTests {
         let menu = statusMenu.menu
         menu.performActionForItem(at: menu.indexOfItem(withTitle: "Settings…"))
         #expect(opened == ["second"])
-    }
-
-    @Test func attachesOnceToTheSameButton() {
-        let statusMenu = StatusItemMenu(openURL: { _ in })
-        let button = NSStatusBarButton()
-        statusMenu.attach(to: button, openSettings: {})
-        statusMenu.attach(to: button, openSettings: {})
         #expect(button.gestureRecognizers.count == 1)
         #expect(button.menu === statusMenu.menu)
     }

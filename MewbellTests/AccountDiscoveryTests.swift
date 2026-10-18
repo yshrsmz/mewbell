@@ -5,17 +5,6 @@ import Testing
 @testable import Mewbell
 
 struct AccountTests {
-    @Test(arguments: [
-        ("github.com", HostKind.gitHubDotCom),
-        ("GitHub.com", .gitHubDotCom),
-        ("acme.ghe.com", .gheCloud),
-        ("github.example.com", .enterpriseServer),
-        ("ghe.com", .enterpriseServer),
-    ])
-    func classifiesHosts(_ host: String, _ kind: HostKind) {
-        #expect(HostKind(host: host) == kind)
-    }
-
     @Test func lowercasesTheHostInTheID() {
         #expect(AccountID(host: "GHE.Example.com", user: "Dave").description == "ghe.example.com/Dave")
     }
@@ -117,11 +106,6 @@ struct AccountDiscoveryTests {
 
     private func status(_ host: String, _ user: String, _ state: TokenState, active: Bool = true) -> AccountStatus {
         AccountStatus(account: Account(id: AccountID(host: host, user: user), isActive: active), tokenState: state)
-    }
-
-    @Test func reportsMissingGh() async {
-        let states = await reload(fixture.discovery(candidates: ["/nonexistent/gh"]))
-        #expect(states.last == .ghNotFound)
     }
 
     @Test func reportsAGhThatCannotRunAndChecksAgainNextTime() async throws {

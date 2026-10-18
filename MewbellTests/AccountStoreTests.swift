@@ -20,18 +20,6 @@ struct AccountStoreTests {
         #expect(reported.value == [.notLoggedIn])
     }
 
-    @Test func stopsReportingStateChangesAfterTermination() async {
-        let discovery = BlockingDiscovery()
-        let store = AccountStore(discovery: discovery, state: .ghNotFound)
-        let reported = LockedValue<[DiscoveryState]>([])
-        store.onStateChange = { state in reported.withLock { $0.append(state) } }
-        store.reload()
-        await store.discardCredentials()
-        discovery.finish()
-        await store.waitForReload()
-        #expect(reported.value.isEmpty)
-    }
-
     @Test func doesNotRunTwoReloadsAtOnce() async {
         let discovery = BlockingDiscovery()
         let store = AccountStore(discovery: discovery, state: .ghNotFound)
@@ -81,14 +69,18 @@ struct AccountStoreTests {
         discovery.finish()
     }
 
-    @Test func closesCredentialsAndRefusesToReloadWhenTerminating() async {
+    @Test func closesCredentialsAndStopsWhenTerminating() async {
         let discovery = BlockingDiscovery()
-        let store = AccountStore(discovery: discovery)
+        let store = AccountStore(discovery: discovery, state: .ghNotFound)
+        let reported = LockedValue<[DiscoveryState]>([])
+        store.onStateChange = { state in reported.withLock { $0.append(state) } }
         store.reload()
         await store.discardCredentials()
         #expect(discovery.events.contains("closed"))
         discovery.finish()
         await store.waitForReload()
+        // 終了の前に始めた読み直しの結果は知らせない
+        #expect(reported.value.isEmpty)
         store.reload()
         #expect(!store.isReloading)
         #expect(discovery.callCount == 1)
@@ -150,19 +142,6 @@ struct AccountStoreSettingsTests {
         #expect(store.state == accounts(.ready, .disabled))
     }
 
-    @Test func reloadsWhenAnAccountIsEnabledAgain() async {
-        let discovery = BlockingDiscovery()
-        discovery.result = accounts(.ready, .ready)
-        let settings = AppSettings(storage: InMemorySettingsStorage())
-        let store = AccountStore(
-            discovery: discovery, options: { settings.discoveryOptions }, state: accounts(.ready, .disabled))
-        discovery.finish()
-        store.setEnabled(true, for: bob.id)
-        await store.waitForReload()
-        #expect(discovery.events.prefix(2) == ["enable github.com/bob", "reload"])
-        #expect(store.state == accounts(.ready, .ready))
-    }
-
     @Test func reloadsAsTheUserWhenTheGhPathChanges() async {
         let discovery = BlockingDiscovery()
         let store = AccountStore(discovery: discovery)
@@ -200,6 +179,10 @@ struct AccountStoreDisableOrderTests {
 
     @Test func reloadsAfterTheDisableWhenEnabledRightAway() async {
         let discovery = BlockingDiscovery()
+        let enabled = DiscoveryState.accounts([
+            AccountStatus(account: Account(id: bob, isActive: true), tokenState: .ready)
+        ])
+        discovery.result = enabled
         let settings = AppSettings(storage: InMemorySettingsStorage())
         let store = AccountStore(discovery: discovery, options: { settings.discoveryOptions }, state: .accounts([]))
         discovery.finish()
@@ -207,6 +190,7 @@ struct AccountStoreDisableOrderTests {
         store.setEnabled(true, for: bob)
         await store.waitForReload()
         #expect(discovery.events.prefix(3) == ["disable github.com/bob", "enable github.com/bob", "reload"])
+        #expect(store.state == enabled)
     }
 }
 
