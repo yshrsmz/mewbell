@@ -59,7 +59,9 @@ func waitUntil(sourceLocation: SourceLocation = #_sourceLocation, _ condition: @
 }
 
 /// `waitUntil` の、条件を actor から async で読む版。
-private func waitUntilAsync(sourceLocation: SourceLocation, _ condition: @Sendable () async -> Bool) async {
+func waitUntilAsync(
+    sourceLocation: SourceLocation = #_sourceLocation, _ condition: @Sendable () async -> Bool
+) async {
     let deadline = ContinuousClock.now + waitTimeout
     while await !condition() {
         guard ContinuousClock.now < deadline else {

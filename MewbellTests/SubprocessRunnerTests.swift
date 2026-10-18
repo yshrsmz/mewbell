@@ -22,9 +22,14 @@ struct SubprocessRunnerTests {
         #expect(String(bytes: output.stderr, encoding: .utf8) == "oops\n")
     }
 
+    /// シェルが `$0` に書いた PID を読む。
+    private func readPID(from file: URL) -> pid_t? {
+        (try? String(contentsOf: file, encoding: .utf8)).flatMap { pid_t($0.trimmingCharacters(in: .newlines)) }
+    }
+
     @Test func childIsGoneAfterTheTimeout() async throws {
-        let pidFile = FileManager.default.temporaryDirectory.appending(path: "MewbellTests-\(UUID().uuidString).pid")
-        defer { try? FileManager.default.removeItem(at: pidFile) }
+        let directory = try TemporaryDirectory()
+        let pidFile = directory.url.appending(path: "child.pid")
         let clock = ContinuousClock()
         let start = clock.now
         await #expect(throws: ProcessRunError.timedOut) {
@@ -35,30 +40,31 @@ struct SubprocessRunnerTests {
             )
         }
         #expect(clock.now - start < .seconds(30))
-        let pid = try #require(
-            pid_t(try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .newlines)))
+        let pid = try #require(readPID(from: pidFile))
         // 消えなければ waitUntil が Issue を記録する
         await waitUntil { kill(pid, 0) == -1 && errno == ESRCH }
     }
 
-    /// シェルはすぐ終わるが、バックグラウンドの sleep が標準出力を開いたまま残る。sleep の PID を `pidFile` に書く。
-    private func lingeringRequest(pidFile: URL) -> ProcessRequest {
-        request("/bin/sh", ["-c", "/bin/sleep 60 & echo $! > \"$0\"; echo done", pidFile.path], timeout: .seconds(30))
+    /// シェルはすぐ終わるが、バックグラウンドの sleep が標準出力を開いたまま残る。sleep の PID を `directory` に書く。
+    private func lingeringRequest(in directory: TemporaryDirectory) -> ProcessRequest {
+        request(
+            "/bin/sh", ["-c", "/bin/sleep 60 & echo $! > \"$0\"; echo done", lingeringPIDFile(in: directory).path],
+            timeout: .seconds(30))
     }
 
-    /// `lingeringRequest` が残した sleep を終了させ、`pidFile` を消す。
-    private func stopLingeringChild(pidFile: URL) {
-        defer { try? FileManager.default.removeItem(at: pidFile) }
-        guard let text = try? String(contentsOf: pidFile, encoding: .utf8),
-            let pid = pid_t(text.trimmingCharacters(in: .newlines))
-        else { return }
-        kill(pid, SIGTERM)
+    private func lingeringPIDFile(in directory: TemporaryDirectory) -> URL {
+        directory.url.appending(path: "child.pid")
+    }
+
+    /// `lingeringRequest` が残した sleep を終了させる。
+    private func stopLingeringChild(in directory: TemporaryDirectory) {
+        if let pid = readPID(from: lingeringPIDFile(in: directory)) { kill(pid, SIGTERM) }
     }
 
     @Test func returnsWhenABackgroundChildKeepsThePipeOpenIfAllowed() async throws {
-        let pidFile = FileManager.default.temporaryDirectory.appending(path: "MewbellTests-\(UUID().uuidString).pid")
-        defer { stopLingeringChild(pidFile: pidFile) }
-        var lingering = lingeringRequest(pidFile: pidFile)
+        let directory = try TemporaryDirectory()
+        defer { stopLingeringChild(in: directory) }
+        var lingering = lingeringRequest(in: directory)
         lingering.allowsLingeringPipes = true
         let output = try await runner.run(lingering)
         #expect(output.exitCode == 0)
@@ -66,10 +72,10 @@ struct SubprocessRunnerTests {
     }
 
     @Test func failsWhenTheOutputMayBeIncomplete() async throws {
-        let pidFile = FileManager.default.temporaryDirectory.appending(path: "MewbellTests-\(UUID().uuidString).pid")
-        defer { stopLingeringChild(pidFile: pidFile) }
+        let directory = try TemporaryDirectory()
+        defer { stopLingeringChild(in: directory) }
         await #expect(throws: ProcessRunError.outputIncomplete) {
-            try await runner.run(lingeringRequest(pidFile: pidFile))
+            try await runner.run(lingeringRequest(in: directory))
         }
     }
 

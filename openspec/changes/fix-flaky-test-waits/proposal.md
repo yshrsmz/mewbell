@@ -11,13 +11,13 @@
 
 ## What Changes
 
-- `AccountDiscovery` に、走っている `gh auth token` にほかの呼び出し元が合流するまで待つテスト用のフックを足し、合流の 2 本の 200ms の待ちをこれに置き換える。`docs/architecture.md` の A10 の適用外に、このフックを足す。
+- `AccountDiscovery` に、走っている `gh auth token` にほかの呼び出し元が合流したかを返す読み取りの口を足し、合流の 2 本の 200ms の待ちを、これを `waitUntilAsync` で待つ形に置き換える。`docs/architecture.md` の A10 の適用外に、この口を足す。
 - `NotificationStoreSettingsTests.advance(until:)` を、起こしたポーラーが次の待ちに入るまで待つ形にする（30ms の待ちを消す）。
 - `ThreadDetailsFetcher` に打ち切りの待ちのクロージャ（`sleep`）を注入できるようにし、テストでは `ManualSleeper` で進める。本番の呼び出し元は既定の `Task.sleep` のままにする。
 - `SubprocessRunnerTests` の 2 本で、孫プロセスの PID をファイルに書かせ、テストの終わりに終了させる。
 - `docs/testing.md` の「既知の逸脱」から 3 件を消す。
 
-本体の振る舞いは変えない。本体で変えるのは、`ThreadDetailsFetcher` の待ちの注入（既定値は今と同じ `Task.sleep`）と、`AccountDiscovery` のテスト用のフックの追加だけ。
+本体の振る舞いは変えない。本体で変えるのは、`ThreadDetailsFetcher` の待ちの注入（既定値は今と同じ `Task.sleep`）と、`AccountDiscovery` のテスト用の読み取りの口の追加だけ。
 
 ## Capabilities
 
@@ -32,7 +32,7 @@
 ## Impact
 
 - マイルストーン: 特定のマイルストーンには属さない保守の change。
-- 変更するもの: `MewbellTests/` の `AccountDiscoveryTests.swift`、`SettingsPollingTests.swift`、`ThreadDetailsCacheTests.swift`、`SubprocessRunnerTests.swift`。本体の `Mewbell/Accounts/AccountDiscovery.swift` と `Mewbell/Polling/ThreadDetailsFetcher.swift`。`docs/architecture.md`（A10）と `docs/testing.md`（既知の逸脱）。
-- トークン・gh サブプロセス: `AccountDiscovery` のトークンの取得の経路にフックを足すが、フックはメモリ上の合流の有無を読むだけで、トークンを返さず、取得・保存・破棄の流れを変えない。`SubprocessRunner` の本体には触れない。
+- 変更するもの: `MewbellTests/` の `AccountDiscoveryTests.swift`、`SettingsPollingTests.swift`、`ThreadDetailsCacheTests.swift`、`SubprocessRunnerTests.swift`。本体の `Mewbell/Accounts/AccountDiscovery.swift` と `Mewbell/Polling/ThreadDetailsFetcher.swift`。`MewbellTests/Support/PollingFakes.swift`（`waitUntilAsync`）。`docs/architecture.md`（A10）と `docs/testing.md`（T6 の例と既知の逸脱）。
+- トークン・gh サブプロセス: `AccountDiscovery` のトークンの取得の経路に読み取りの口を足すが、この口はメモリ上の合流の有無を読むだけで、トークンを返さず、取得・保存・破棄の流れを変えない。`SubprocessRunner` の本体には触れない。
 - ネットワーク・URL を開く処理: `ThreadDetailsFetcher` の打ち切りの待ちの差し替えだけで、リクエスト先の検査やトークンの付け方には触れない。
 - トークンの永続化に関わる変更は無い。

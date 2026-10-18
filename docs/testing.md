@@ -50,7 +50,7 @@
 
 - **方針**: 時刻と待ちは注入したクロージャ（`now`、`sleep`）で制御し、テストで進める。非同期の処理の終わりは、テスト用のフックか、状態が変わるまで async で待って合わせる。状態を短い間隔で確かめ直し、期限を過ぎたら失敗させる待ち方はよい。固定の時間の `Task.sleep` や `Task.yield()` の回数で、起きるはずのことを待たない。fake の中では同期的に待たず（`Thread.sleep`、セマフォ）、止めるときは async で中断させる。
 - **起きないことを確かめるとき**: 起きるならその前に来るはずの区切り（次の待ちに入ったこと、など）まで待ってから確かめる。区切りが無いとき（処理が止まって何も起きなくなる、など）だけ、短い固定の待ちの後に確かめてよい。この待ちは短すぎても見逃すだけで、誤って落ちることはない。
-- **例**: 待ちを進めるのは `ManualSleeper`（時刻は別の `now` クロージャで動かす）、次の待ちに入ったことを待つのは `ManualSleeper.waitForSleeps`、状態が変わるまで待つのは `waitUntil`、終わりを待つフックは `AccountStore.waitForReload` と `SystemNotifier.waitForPendingWork`、fake を async で止めるのは `FakeHTTPTransport` の `pausedMethod`。
+- **例**: 待ちを進めるのは `ManualSleeper`（時刻は別の `now` クロージャで動かす）、次の待ちに入ったことを待つのは `ManualSleeper.waitForSleeps`、状態が変わるまで待つのは `waitUntil`（fake から見えない区切りは、本体の読み取りの口を `waitUntilAsync` で待つ。`AccountDiscovery.hasJoinedTokenFetch`）、終わりを待つフックは `AccountStore.waitForReload` と `SystemNotifier.waitForPendingWork`、fake を async で止めるのは `FakeHTTPTransport` の `pausedMethod`。
 - **理由**: 実時間の待ちは遅く、負荷の高い機械では落ちる。`SWIFT_APPROACHABLE_CONCURRENCY` のため、fake で同期的に待つと呼び出し元の actor が塞がり、テストが止まる。
 - **守り方**: `Thread.sleep` は lint の `no_thread_sleep` が止める。
 

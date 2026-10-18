@@ -4,9 +4,9 @@
 
 ## 1. 合流の待ち（D1）
 
-- [x] 1.1 `AccountDiscovery.waitForJoinedTokenFetch(for:)` を足す。
-- [x] 1.2 `AccountDiscoveryTests.keepsGhRunningForAJoinedCallerWhenTheFirstIsCancelled` と `sharesARunningTokenFetchBetweenReloadAndRefresh` の 200ms の待ちをフックに置き換え、`.timeLimit(.minutes(1))` を付ける。`fetchToken` で `isShared` を立てる行を一時的に消して、`keepsGhRunning...` が落ちることを確かめてから戻す。
-- [x] 1.3 スキル `update-architecture-doc` の手順で、`docs/architecture.md` の A10 の適用外に `AccountDiscovery.waitForJoinedTokenFetch` を足す。`bash scripts/check-architecture.sh` を流す。
+- [x] 1.1 `AccountDiscovery.hasJoinedTokenFetch(for:)` を足し、`waitUntilAsync` をテストのターゲットの中で使えるようにする。
+- [x] 1.2 `AccountDiscoveryTests.keepsGhRunningForAJoinedCallerWhenTheFirstIsCancelled` と `sharesARunningTokenFetchBetweenReloadAndRefresh` の 200ms の待ちを、`hasJoinedTokenFetch` を `waitUntilAsync` で待つ形に置き換える。`fetchToken` で `isShared` を立てる行を一時的に消して、`keepsGhRunning...` が落ちることを確かめてから戻す。
+- [x] 1.3 スキル `update-architecture-doc` の手順で、`docs/architecture.md` の A10 の適用外に `AccountDiscovery.hasJoinedTokenFetch` を足す。`docs/testing.md` の T6 の例にも足す。`bash scripts/check-architecture.sh` を流す。
 
 ## 2. ポーラーを進める待ち（D2）
 
@@ -31,5 +31,5 @@
 
 ## 7. レビュー
 
-- [ ] 7.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込む。
+- [x] 7.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込む。
 - [ ] 7.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。

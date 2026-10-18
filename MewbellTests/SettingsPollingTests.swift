@@ -81,8 +81,8 @@ struct NotificationStoreSettingsTests {
         }
     }
 
-    /// 待っているポーラーを古い順に 1 つずつ起こし、起こしたポーラーが次の待ちに入るまで待ちながら、`condition` が満たされるまで進める
-    /// （作り直したポーラーの最初の取得の待ちを含む）。待っているポーラーがいて、起こしたポーラーが次の待ちに入る場面でだけ使う。
+    /// 待っているポーラーを古い順に 1 つずつ起こし、`sleeper` の待ちが 1 つ増える（ふつうは起こしたポーラーが次の待ちに入る）まで待ちながら、
+    /// `condition` が満たされるまで進める（作り直したポーラーの最初の取得の待ちを含む）。待っているポーラーがいる場面でだけ使う。
     /// 満たされないまま 6 回起こしたら、呼び出し元の位置に Issue を記録する。
     private func advance(
         until condition: @MainActor () -> Bool, sourceLocation: SourceLocation = #_sourceLocation

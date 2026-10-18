@@ -22,23 +22,24 @@
 
 ## Decisions
 
-### D1. 合流は `AccountDiscovery` のテスト用のフックで待つ（A10 の適用外、T6）
+### D1. 合流は `AccountDiscovery` の読み取りの口を `waitUntilAsync` で待つ（A10 の適用外、T6）
 
 合流（`fetchToken` で走っている取得を見つけて `isShared` を立て、その結果を待つこと）は gh も `CredentialStore` も呼ばない。fake の側からは見えず、actor の再入があるので、`AccountDiscovery` の別のメソッドを呼んでも順序は決まらない。待ちが短すぎると、`keepsGhRunningForAJoinedCallerWhenTheFirstIsCancelled` では合流の前に最初の呼び出し元を止めて gh ごと止まり、誤って落ちる。T6 の「起きないこと」の例外にも当たらない。
 
-そこで `AccountDiscovery` に次のフックを足す。
+そこで `AccountDiscovery` に、合流したかを返す読み取りの口を足し、テストは `waitUntilAsync` で待つ。
 
 ```swift
-/// `id` の走っている `gh auth token` に、ほかの呼び出し元が合流するまで待つ（テスト用）。
-func waitForJoinedTokenFetch(for id: AccountID) async
+/// `id` の走っている `gh auth token` に、ほかの呼び出し元が合流したか（テストが `waitUntil` で合流を待つため）。
+func hasJoinedTokenFetch(for id: AccountID) -> Bool
 ```
 
-actor の中で、`inFlightTokenFetches[id]` の `isShared` が立つまで、1ms ずつ待ちながら確かめ直す。止められたら返す。合流が起きないまま待ち続けたときにテストが止まらないよう、2 本のテストに `.timeLimit(.minutes(1))` を付ける。
-
-- `AccountStore.waitForReload` と `SystemNotifier.waitForPendingWork` と同じく、非同期の処理の区切りを待つフックなので、A10 の適用外に足す（手順は `update-architecture-doc`）。合流の有無を返す読み取りの口（`Bool` を返すメンバー）にはしない。A10 の適用外は待つフックに限っているため。
-- `sharesARunningTokenFetchBetweenReloadAndRefresh` の `#expect(gated.waitingCount == 1)` は残す。フックが返った後に 2 つ目の gh が門の前に並んでいないことを確かめる。
+- 待つループと期限はテストの側に置く。`waitUntilAsync`（`PollingFakes.swift`）は 30 秒で呼び出し元の位置に Issue を記録するので、合流が起きないときもどこで止まったかが分かる。`waitUntilAsync` は今 `private` なので、`sourceLocation` に既定値を付けてテストのターゲットの中で使えるようにする。
+- `AccountPoller.refreshWaitsForNextFetch` を `waitForPendingRefresh` で待つのと同じ形にする。`AccountStore.waitForReload` と `SystemNotifier.waitForPendingWork` は本体の Task を待つフックで、合流には待つ対象の Task が無い。
+- A10 の適用外を、待つ対象の Task が無い区切りについて `waitUntil` の条件にだけ使う読み取りの口まで広げる（手順は `update-architecture-doc`）。読み取りの口は `Bool` を返すだけにし、`#expect` で確かめない。
+- `sharesARunningTokenFetchBetweenReloadAndRefresh` の `#expect(gated.waitingCount == 1)` は残す。合流した後に 2 つ目の gh が門の前に並んでいないことを確かめる。
 - 採らなかった案:
-  - 合流のたびに continuation を起こす仕組みを `TokenFetch` に持たせる: 本番の型にテストのためだけの状態が増える。待つ時間が 1ms 単位で十分なテストのために要らない。
+  - actor の中で 1ms ごとに確かめ直す async のフック: 本体に期限の無いポーリングが入り、合流が起きないときは `.timeLimit` でしか止まらず、止まった位置も報告されない。
+  - 合流のたびに continuation を起こす仕組みを `TokenFetch` に持たせる: 本体のコードが最も増え（待ち手の管理、取得の終わりや待ち手を止めたときの扱い）、合流の分岐にテストのための処理が入る。期限も無いまま。
   - 固定の待ちを長くする: 遅くなるだけで、誤って落ちる可能性は消えない。
 
 ### D2. `advance(until:)` は、起こしたポーラーが次の待ちに入るまで待つ（T6）
@@ -73,14 +74,13 @@ for _ in 0..<6 where !condition() {
 
 ## Risks / Trade-offs
 
-- D1 のフックは、合流が起きないと 1ms ごとに確かめ続ける。テストでは `.timeLimit` で止める。本番からは呼ばない。
 - D2 で、起こしたポーラーが次の待ちに入らずに止まる場面（無効化など）で使うと、30 秒待って落ちる。今の呼び出しには無い。
 
 ## セキュリティ
 
 トークンの流れは変えない。トークンは `gh auth token` の標準出力から取得し、`CredentialStore` の actor の中にだけ持ち、リクエストごとにアカウントの API ベースへ送り、アカウントを外すときと終了時に破棄する。
 
-- D1 のフックは、`AccountDiscovery` の actor の中で `TokenFetch.isShared` を読むだけで、トークンを返さず、ログにも出さない。取得・保存・破棄の順序には関わらない。
+- D1 の読み取りの口は、`AccountDiscovery` の actor の中で `TokenFetch.isShared` を読むだけで、トークンを返さず、ログにも出さない。取得・保存・破棄の順序には関わらない。
 - `SubprocessRunner`（`Process` に絶対パスと引数配列を渡すこと、環境変数の除去、タイムアウトと出力の上限）には触れない。D4 はテストの中のシェルの引数だけを変える。
 - D3 は打ち切りの待ちの差し替えだけで、リクエスト先の検査とトークンの付け方には触れない。
 - security.md の性質を確かめるテストは削らない。
