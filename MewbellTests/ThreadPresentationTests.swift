@@ -181,7 +181,7 @@ struct ThreadWebURLTests {
         "https://api.github.com/repos/octo/app/discussions/abc",
         "https://api.github.com/repos/octo/app/pulls/42",
     ])
-    func opensTheDiscussionsPage(_ subjectURL: String?) throws {
+    func opensTheDiscussionsPage(_ subjectURL: String) throws {
         #expect(
             url(try thread(kind: .discussion, subjectURL: subjectURL), github)
                 == "https://github.com/octo/app/discussions")
@@ -259,7 +259,7 @@ struct ThreadDetailsSubjectTests {
         "https://evil.example.com/repos/octo/app/pulls/42",
         "https://api.github.com/repos/octo/app/commits/0123abcdef",
     ])
-    func readsNoNumberFromOtherSubjects(_ subjectURL: String?) throws {
+    func readsNoNumberFromOtherSubjects(_ subjectURL: String) throws {
         #expect(try subject(subjectURL: subjectURL, endpoints: github) == nil)
     }
 

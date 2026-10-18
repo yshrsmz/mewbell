@@ -55,8 +55,9 @@ struct NotificationStoreActionTests {
     }
 
     /// 通知の取り下げは `NotificationStoreNewThreadsTests` と `SystemNotifierTests` で確かめる
-    @Test(arguments: [(true, "DELETE", "PATCH"), (false, "PATCH", "DELETE")])
-    func marksAThreadWithoutOpeningIt(done: Bool, method: String, otherMethod: String) async throws {
+    @Test(arguments: [true, false])
+    func marksAThreadWithoutOpeningIt(done: Bool) async throws {
+        let (method, otherMethod) = done ? ("DELETE", "PATCH") : ("PATCH", "DELETE")
         let store = await loadedStore()
         let thread = try #require(store.feeds[alice]?.threads.first { $0.id == "2" })
         if done {
