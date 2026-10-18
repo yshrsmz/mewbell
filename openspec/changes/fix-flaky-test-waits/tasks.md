@@ -1,0 +1,35 @@
+# Tasks
+
+各グループの終わりに `xcodebuild test -only-testing:MewbellTests/<スイートの型名>` で触ったスイートを流し、結果のスイート数が渡した数と合うことを確かめる（ファイル名ではなくスイートの型名を渡す）。
+
+## 1. 合流の待ち（D1）
+
+- [ ] 1.1 `AccountDiscovery.waitForJoinedTokenFetch(for:)` を足す。
+- [ ] 1.2 `AccountDiscoveryTests.keepsGhRunningForAJoinedCallerWhenTheFirstIsCancelled` と `sharesARunningTokenFetchBetweenReloadAndRefresh` の 200ms の待ちをフックに置き換え、`.timeLimit(.minutes(1))` を付ける。`fetchToken` で `isShared` を立てる行を一時的に消して、`keepsGhRunning...` が落ちることを確かめてから戻す。
+- [ ] 1.3 スキル `update-architecture-doc` の手順で、`docs/architecture.md` の A10 の適用外に `AccountDiscovery.waitForJoinedTokenFetch` を足す。`bash scripts/check-architecture.sh` を流す。
+
+## 2. ポーラーを進める待ち（D2）
+
+- [ ] 2.1 `NotificationStoreSettingsTests.advance(until:)` を、起こしたポーラーが次の待ちに入るまで待つ形にし、前提を doc comment に書く。`restartsWithTheNewParticipatingSetting`、`dropsLateUpdatesFromTheStoppedPoller`、`letsAReloadSkipTheCarriedWait` が通ることを確かめる。
+
+## 3. 詳細の取得の打ち切り（D3）
+
+- [ ] 3.1 `ThreadDetailsFetcher` に `sleep` を足す（既定値は `Task.sleep`）。`AccountPoller+ThreadDetails.swift` の呼び出しは変えない。
+- [ ] 3.2 `ThreadDetailsFetcherTests.reportsTimedOutFetchesAsFailures` を `ManualSleeper` で打ち切らせる形にする。`doesNotReportCancelledFetchesAsFailures` は変えない。
+
+## 4. 孫プロセス（D4）
+
+- [ ] 4.1 `SubprocessRunnerTests.returnsWhenABackgroundChildKeepsThePipeOpenIfAllowed` と `failsWhenTheOutputMayBeIncomplete` で、孫の PID を一時ファイルに書かせ、テストの終わりに終了させる。テストの後に `pgrep -f "/bin/sleep 60"` で孫が残っていないことを確かめる。
+
+## 5. 文書
+
+- [ ] 5.1 `docs/testing.md` の「既知の逸脱」から、この change で直した 3 件を消す。
+
+## 6. 確認
+
+- [ ] 6.1 `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が通ることを確かめる。`bash scripts/lint.sh`、`MEWBELL_WARNINGS_AS_ERRORS=YES` の Debug と Release のビルド、`pnpm exec openspec validate --all --strict` が通ることを確かめる。本体の振る舞いは変えないので、手元での起動の確認は省く。
+
+## 7. レビュー
+
+- [ ] 7.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込む。
+- [ ] 7.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。
