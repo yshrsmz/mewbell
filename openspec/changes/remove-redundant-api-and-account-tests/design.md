@@ -78,7 +78,7 @@ gh・アカウント・設定・App・シェル:
 | `AccountStoreTests.stopsReportingStateChangesAfterTermination` | `closesCredentialsAndRefusesToReloadWhenTerminating` に統合 | T4 | 統合先 |
 | `AccountStoreSettingsTests.reloadsWhenAnAccountIsEnabledAgain` | 削除。状態の確認を `reloadsAfterTheDisableWhenEnabledRightAway` に移す | T4 | 移し先 |
 | `SingleInstanceLockTests.reportsFailureWhenTheLockFileCannotBeOpened` | 削除 | T4 | `doesNotFollowASymbolicLinkAtTheLockFile` |
-| `SettingsStorageTests.userDefaultsStorageReadsMalformedValuesAsDefaults` | 削除 | T1 | Foundation の保証。既定値が true なので見分けもつかない |
+| `SettingsStorageTests.userDefaultsStorageReadsMalformedValuesAsDefaults` | 形の崩れた値（`"YES"`）の確認だけを削り、`userDefaultsStorageKeepsTheSettings` として書いて読み直す確認を残す | T1 | 形の崩れた値は、既定値が true なので見分けがつかない。本物の `UserDefaults` に書いて読み直すテストはこれだけなので（A5 の適用外）、削除はしない |
 | `StatusItemMenuTests.attachesOnceToTheSameButton` | `opensSettingsThroughTheLatestAction` に統合。`scheme == "https"` の確認は削る | T4 | 統合先 |
 | `verify-app-test.sh` の署名の後の書き換えのケース | 削除 | T1 | 署名の無い `.app` のケースが `codesign --verify` の失敗を確かめる |
 | `check-architecture-test.sh` の unknown-id | 削除 | T4 | adjacent-ids |

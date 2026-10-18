@@ -24,9 +24,9 @@
 
 ## 3. gh・アカウント・設定・App
 
-- [ ] 3.1 `AccountDiscoveryTests.reportsMissingGh` を消す。`GhClientTests.tokenIsNilWhenGhDoesNotGiveOne` の `second-line` の行を消す。`doesNotFallBackFromAnUnusableConfigDirectory` を `GhDiagnosticsTests.forgetsTheConfigDirectoryWhenTheOverrideIsUnusable` に統合する。`publishesTheGhOfTheNewConfigDirectory` を消す。`doesNotPassGhConfigDirWithoutAnOverride` と `GhCommandTests` には触れない。
-- [ ] 3.2 `AccountStoreTests` の 2 か所（終了の統合、`reloadsWhenAnAccountIsEnabledAgain` の状態の確認の移動）を行う。
-- [ ] 3.3 `SingleInstanceLockTests`、`SettingsStorageTests`、`StatusItemMenuTests` を D2 のとおりに削除・統合する。
+- [x] 3.1 `AccountDiscoveryTests.reportsMissingGh` を消す。`GhClientTests.tokenIsNilWhenGhDoesNotGiveOne` の `second-line` の行を消す。`doesNotFallBackFromAnUnusableConfigDirectory` を `GhDiagnosticsTests.forgetsTheConfigDirectoryWhenTheOverrideIsUnusable` に統合する。`publishesTheGhOfTheNewConfigDirectory` を消す。`doesNotPassGhConfigDirWithoutAnOverride` と `GhCommandTests` には触れない。
+- [x] 3.2 `AccountStoreTests` の 2 か所（終了の統合、`reloadsWhenAnAccountIsEnabledAgain` の状態の確認の移動）を行う。
+- [x] 3.3 `SingleInstanceLockTests`、`SettingsStorageTests`、`StatusItemMenuTests` を D2 のとおりに削除・統合する。
 
 ## 4. シェルのテスト
 

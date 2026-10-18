@@ -78,15 +78,6 @@ struct AccountDiscoverySettingsTests {
         #expect(fixture.runner.requests.last?.environment["GH_CONFIG_DIR"] == resolved)
     }
 
-    @Test func doesNotFallBackFromAnUnusableConfigDirectory() async throws {
-        try fixture.writeHosts(twoAccounts)
-        let missing = fixture.directory.url.appending(path: "gh-old").path
-        let states = await reload(
-            fixture.discovery(), DiscoveryOptions(overrides: GhOverrides(configDirectory: missing)))
-        #expect(states.last == .hostsFileUnreadable(path: missing + "/hosts.yml"))
-        #expect(fixture.tokenRequests.isEmpty)
-    }
-
     @Test func doesNotPassGhConfigDirWithoutAnOverride() async throws {
         try fixture.writeHosts(twoAccounts)
         _ = await reload(fixture.discovery(), DiscoveryOptions())

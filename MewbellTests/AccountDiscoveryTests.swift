@@ -108,11 +108,6 @@ struct AccountDiscoveryTests {
         AccountStatus(account: Account(id: AccountID(host: host, user: user), isActive: active), tokenState: state)
     }
 
-    @Test func reportsMissingGh() async {
-        let states = await reload(fixture.discovery(candidates: ["/nonexistent/gh"]))
-        #expect(states.last == .ghNotFound)
-    }
-
     @Test func reportsAGhThatCannotRunAndChecksAgainNextTime() async throws {
         try fixture.writeHosts(twoAccounts)
         fixture.setVersion("")

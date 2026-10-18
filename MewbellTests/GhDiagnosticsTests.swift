@@ -67,8 +67,13 @@ struct GhDiagnosticsTests {
         try fixture.writeHosts(oneAccount)
         let discovery = fixture.discovery()
         _ = await reload(discovery)
+        let tokenRequests = fixture.tokenRequests.count
         let missing = fixture.directory.url.appending(path: "gh-old").path
-        _ = await reload(discovery, DiscoveryOptions(overrides: GhOverrides(configDirectory: missing)))
+        // 使えない上書きから既定の設定ディレクトリへ戻らない
+        #expect(
+            await reload(discovery, DiscoveryOptions(overrides: GhOverrides(configDirectory: missing)))
+                == .hostsFileUnreadable(path: missing + "/hosts.yml"))
+        #expect(fixture.tokenRequests.count == tokenRequests)
         let detection = await discovery.ghDiagnostics()
         #expect(detection.executable != nil)
         #expect(detection.configDirectory == nil)
@@ -118,23 +123,5 @@ struct AccountStoreGhDiagnosticsTests {
         store.reload()
         await store.waitForReload()
         #expect(store.ghDetection == detection)
-    }
-
-    @Test func publishesTheGhOfTheNewConfigDirectory() async {
-        let discovery = BlockingDiscovery()
-        discovery.ghDetection = detection
-        let settings = AppSettings(storage: InMemorySettingsStorage())
-        let store = AccountStore(discovery: discovery, options: { settings.discoveryOptions })
-        discovery.finish()
-        store.reload()
-        await store.waitForReload()
-        var work = detection
-        work.configDirectory = GhConfigDirectory.Resolved(
-            url: URL(filePath: "/Users/me/gh-work", directoryHint: .isDirectory), source: .override)
-        discovery.ghDetection = work
-        discovery.finish()
-        store.ghConfigDirectoryChanged()
-        await store.waitForReload()
-        #expect(store.ghDetection == work)
     }
 }
