@@ -16,6 +16,8 @@ struct ThreadDetailsFetcher: Sendable {
 
     let client: GitHubAPIClient
     let endpoints: APIEndpoints
+    /// 打ち切りまでの待ち
+    var sleep: AccountPoller.Sleep = { try await Task.sleep(for: $0) }
 
     private enum Outcome: Sendable {
         case fetched(NotificationThread, ThreadDetailsFetchResult)
@@ -31,10 +33,11 @@ struct ThreadDetailsFetcher: Sendable {
     ) async -> Results {
         let client = client
         let endpoints = endpoints
+        let sleep = sleep
         return await withTaskGroup(of: Outcome.self) { group in
             group.addTask {
                 // 止められたときは、打ち切りと区別する（始めた分を一時的な失敗にしない）
-                (try? await Task.sleep(for: timeout)) == nil ? .cancelled : .timedOut
+                (try? await sleep(timeout)) == nil ? .cancelled : .timedOut
             }
             var queue = threads[...]
             // 始めて、まだ終わっていないスレッド

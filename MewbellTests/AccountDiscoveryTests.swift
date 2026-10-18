@@ -232,7 +232,7 @@ struct AccountDiscoveryTests {
         #expect(await refresh.value == nil)
     }
 
-    @Test func keepsGhRunningForAJoinedCallerWhenTheFirstIsCancelled() async throws {
+    @Test(.timeLimit(.minutes(1))) func keepsGhRunningForAJoinedCallerWhenTheFirstIsCancelled() async throws {
         try fixture.writeHosts(twoAccounts)
         let gated = GatedProcessRunner(base: fixture.runner)
         let discovery = fixture.discovery(runner: gated)
@@ -241,7 +241,7 @@ struct AccountDiscoveryTests {
         let refresh = Task { await discovery.refreshToken(for: alice) }
         await gated.waitUntilWaiting(1)
         async let reloaded = reload(discovery)
-        try await Task.sleep(for: .milliseconds(200))
+        await discovery.waitForJoinedTokenFetch(for: alice)
         refresh.cancel()
         gated.open()
         let states = await reloaded
@@ -251,7 +251,7 @@ struct AccountDiscoveryTests {
         #expect(await fixture.credentials.token(for: alice)?.value == "test-token-alice")
     }
 
-    @Test func sharesARunningTokenFetchBetweenReloadAndRefresh() async throws {
+    @Test(.timeLimit(.minutes(1))) func sharesARunningTokenFetchBetweenReloadAndRefresh() async throws {
         try fixture.writeHosts(twoAccounts)
         let gated = GatedProcessRunner(base: fixture.runner)
         let discovery = fixture.discovery(runner: gated)
@@ -261,8 +261,8 @@ struct AccountDiscoveryTests {
         async let reloaded = reload(discovery)
         await gated.waitUntilWaiting(1)
         async let refreshed = discovery.refreshToken(for: alice)
-        // 取り直しが走っている取得に合流するまで待つ（合流しなければ 2 つ目の gh が門の前に並ぶ）
-        try await Task.sleep(for: .milliseconds(200))
+        await discovery.waitForJoinedTokenFetch(for: alice)
+        // 合流していれば、2 つ目の gh は門の前に並ばない
         #expect(gated.waitingCount == 1)
         gated.open()
         let (states, token) = await (reloaded, refreshed)

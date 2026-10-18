@@ -41,9 +41,24 @@ struct SubprocessRunnerTests {
         await waitUntil { kill(pid, 0) == -1 && errno == ESRCH }
     }
 
+    /// シェルはすぐ終わるが、バックグラウンドの sleep が標準出力を開いたまま残る。sleep の PID を `pidFile` に書く。
+    private func lingeringRequest(pidFile: URL) -> ProcessRequest {
+        request("/bin/sh", ["-c", "/bin/sleep 60 & echo $! > \"$0\"; echo done", pidFile.path], timeout: .seconds(30))
+    }
+
+    /// `lingeringRequest` が残した sleep を終了させ、`pidFile` を消す。
+    private func stopLingeringChild(pidFile: URL) {
+        defer { try? FileManager.default.removeItem(at: pidFile) }
+        guard let text = try? String(contentsOf: pidFile, encoding: .utf8),
+            let pid = pid_t(text.trimmingCharacters(in: .newlines))
+        else { return }
+        kill(pid, SIGTERM)
+    }
+
     @Test func returnsWhenABackgroundChildKeepsThePipeOpenIfAllowed() async throws {
-        // シェルはすぐ終わるが、バックグラウンドの sleep が標準出力を開いたまま残る
-        var lingering = request("/bin/sh", ["-c", "/bin/sleep 60 & echo done"], timeout: .seconds(30))
+        let pidFile = FileManager.default.temporaryDirectory.appending(path: "MewbellTests-\(UUID().uuidString).pid")
+        defer { stopLingeringChild(pidFile: pidFile) }
+        var lingering = lingeringRequest(pidFile: pidFile)
         lingering.allowsLingeringPipes = true
         let output = try await runner.run(lingering)
         #expect(output.exitCode == 0)
@@ -51,8 +66,10 @@ struct SubprocessRunnerTests {
     }
 
     @Test func failsWhenTheOutputMayBeIncomplete() async throws {
+        let pidFile = FileManager.default.temporaryDirectory.appending(path: "MewbellTests-\(UUID().uuidString).pid")
+        defer { stopLingeringChild(pidFile: pidFile) }
         await #expect(throws: ProcessRunError.outputIncomplete) {
-            try await runner.run(request("/bin/sh", ["-c", "/bin/sleep 60 & echo done"], timeout: .seconds(30)))
+            try await runner.run(lingeringRequest(pidFile: pidFile))
         }
     }
 

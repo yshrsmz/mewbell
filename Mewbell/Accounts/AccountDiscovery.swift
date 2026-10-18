@@ -215,6 +215,13 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         return await fetchToken(for: id, using: client)
     }
 
+    /// `id` の走っている `gh auth token` に、ほかの呼び出し元が合流するまで待つ（テスト用）。
+    func waitForJoinedTokenFetch(for id: AccountID) async {
+        while inFlightTokenFetches[id]?.isShared.withLock({ $0 }) != true, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
     /// `gh auth token` を実行して、取れたトークンを保存する。同じアカウントの取得が走っていれば、その結果を待つ。
     /// 取得を始めた呼び出し元がキャンセルされたら gh も止める（合流しただけの呼び出し元のキャンセルでは止めない）。
     private func fetchToken(for id: AccountID, using client: GhClient) async -> AccessToken? {

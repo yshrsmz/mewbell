@@ -80,6 +80,4 @@
 
 | テスト | 項目 | 合わないところ |
 | --- | --- | --- |
-| `AccountDiscoveryTests.keepsGhRunningForAJoinedCallerWhenTheFirstIsCancelled` | T6 | 合流が起きるのを、200ms の固定の待ちで待っている |
-| `AccountDiscoveryTests.sharesARunningTokenFetchBetweenReloadAndRefresh` | T6 | 合流が起きるのを、200ms の固定の待ちで待っている（後の `#expect` が合流を前提にしている） |
-| `NotificationStoreSettingsTests` の `advance(until:)` | T6 | ポーラーを進めるたびに 30ms の固定の待ちを挟み、試行の回数で諦める |
+| なし | | |

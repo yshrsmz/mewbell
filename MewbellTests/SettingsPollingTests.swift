@@ -81,14 +81,16 @@ struct NotificationStoreSettingsTests {
         }
     }
 
-    /// 待っているポーラーを古い順に進めながら、`condition` が満たされるまで待つ（作り直したポーラーの最初の取得の待ちを含む）。
-    /// 満たされないまま試行が尽きたら、呼び出し元の位置に Issue を記録する。
+    /// 待っているポーラーを古い順に 1 つずつ起こし、起こしたポーラーが次の待ちに入るまで待ちながら、`condition` が満たされるまで進める
+    /// （作り直したポーラーの最初の取得の待ちを含む）。待っているポーラーがいて、起こしたポーラーが次の待ちに入る場面でだけ使う。
+    /// 満たされないまま 6 回起こしたら、呼び出し元の位置に Issue を記録する。
     private func advance(
         until condition: @MainActor () -> Bool, sourceLocation: SourceLocation = #_sourceLocation
     ) async {
         for _ in 0..<6 where !condition() {
+            let sleeps = sleeper.durations.count
             sleeper.advance()
-            try? await Task.sleep(for: .milliseconds(30))
+            await sleeper.waitForSleeps(sleeps + 1, sourceLocation: sourceLocation)
         }
         if !condition() {
             Issue.record("待ちを 6 回進めても条件が満たされなかった", sourceLocation: sourceLocation)

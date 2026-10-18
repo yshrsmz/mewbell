@@ -118,8 +118,13 @@ struct ThreadDetailsFetcherTests {
         let token = try #require(AccessToken(ghOutput: Data("test-token-alice".utf8)))
         let json = FakeHTTPTransport.threadJSON(id: "1", subjectURL: "https://api.github.com/repos/octo/app/issues/1")
         let threads = try #require(NotificationThread.decodeList(from: Data("[\(json)]".utf8), endpoints: endpoints))
-        let fetcher = ThreadDetailsFetcher(client: GitHubAPIClient(transport: transport), endpoints: endpoints)
-        let results = await fetcher.fetch(threads, token: token, timeout: .milliseconds(50))
-        #expect(results.map(\.1) == [.failed(.network(code: URLError.Code.timedOut.rawValue))])
+        let sleeper = ManualSleeper()
+        let fetcher = ThreadDetailsFetcher(
+            client: GitHubAPIClient(transport: transport), endpoints: endpoints, sleep: sleeper.sleep)
+        let task = Task { await fetcher.fetch(threads, token: token, timeout: .seconds(20)) }
+        await sleeper.waitForSleeps(1)
+        #expect(sleeper.durations == [.seconds(20)])
+        sleeper.advance()
+        #expect(await task.value.map(\.1) == [.failed(.network(code: URLError.Code.timedOut.rawValue))])
     }
 }
