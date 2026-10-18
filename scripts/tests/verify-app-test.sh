@@ -129,11 +129,6 @@ else
   failures=$((failures + 1))
 fi
 
-app="$(make_app tampered)"
-sign -o runtime "$app"
-printf 'tampered' >>"$app/Contents/MacOS/Mewbell"
-expect fail "署名の後に書き換えると落ちる" "$app" 1.2.3 "codesign --verify"
-
 if ((failures > 0)); then
   echo "$failures 件が期待どおりではありませんでした" >&2
   exit 1

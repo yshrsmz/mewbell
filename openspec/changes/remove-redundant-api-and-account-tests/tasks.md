@@ -30,12 +30,12 @@
 
 ## 4. シェルのテスト
 
-- [ ] 4.1 `scripts/tests/verify-app-test.sh` から署名の後の書き換えのケースを消し、`bash scripts/tests/verify-app-test.sh` が通ることを確かめる。
-- [ ] 4.2 `scripts/tests/check-architecture-test.sh` の unknown-id を消し、廃止した ID の 2 本と重複の 2 本をそれぞれ 1 本に統合する。`bash scripts/tests/check-architecture-test.sh` が通ることを確かめる。統合したケースは、`scripts/check-architecture.sh` の該当の検査を一時的に外して落ちることを確かめる。
+- [x] 4.1 `scripts/tests/verify-app-test.sh` から署名の後の書き換えのケースを消し、`bash scripts/tests/verify-app-test.sh` が通ることを確かめる。
+- [x] 4.2 `scripts/tests/check-architecture-test.sh` の unknown-id を消し、廃止した ID の 2 本と重複の 2 本をそれぞれ 1 本に統合する。`bash scripts/tests/check-architecture-test.sh` が通ることを確かめる。統合したケースは、`scripts/check-architecture.sh` の該当の検査を一時的に外して落ちることを確かめる。
 
 ## 5. 確認
 
-- [ ] 5.1 `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が通り、テストの件数が減った分だけ減っていることを確かめる。`bash scripts/lint.sh`、`MEWBELL_WARNINGS_AS_ERRORS=YES` の Debug と Release のビルド、`pnpm exec openspec validate --all --strict` が通ることを確かめる。本体のコードは変えないので、手元での起動の確認は省く。
+- [x] 5.1 `xcodebuild -project Mewbell.xcodeproj -scheme Mewbell test` が通り、テストの件数が減った分だけ減っていることを確かめる。`bash scripts/lint.sh`、`MEWBELL_WARNINGS_AS_ERRORS=YES` の Debug と Release のビルド、`pnpm exec openspec validate --all --strict` が通ることを確かめる。本体のコードは変えないので、手元での起動の確認は省く。
 
 ## 6. レビュー
 
