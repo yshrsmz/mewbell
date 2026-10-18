@@ -15,7 +15,8 @@ description: Mewbell の設計方針 docs/architecture.md を更新する手順�
 | --- | --- |
 | 振る舞い（ユーザー・API から見えるもの） | `openspec/specs/` |
 | セキュリティの約束 | `.claude/rules/security.md` |
-| コードの構造の約束（層・依存の向き・状態の持ち方・境界・部品の足し方・テストの方針） | `docs/architecture.md` |
+| コードの構造の約束（層・依存の向き・状態の持ち方・境界・部品の足し方） | `docs/architecture.md` |
+| テストの方針（残す基準・確かめる場所・期待値・fake・待ち方） | `docs/testing.md`（項目の ID は T1 から） |
 | 開発の進め方、ビルドとテストの方法、ツールの癖 | `CLAUDE.md`、`.claude/rules/` |
 | artifact ごとの書き方の規則 | `openspec/config.yaml` |
 | 正規表現で守れる約束 | `.swiftlint.yml` の `custom_rules`（`message` に原則の ID を書き、原則の「根拠」にも lint の規則の名前を書く） |

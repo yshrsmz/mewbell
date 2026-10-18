@@ -34,7 +34,7 @@ custom_rules:
   no_thread_sleep:
     name: "No Thread.sleep"
     regex: '\bThread\.sleep\b'
-    message: "同期的に待たない。actor が塞がる。待たせるときは async で中断させる（A12）"
+    message: "同期的に待たない。actor が塞がる。待たせるときは async で中断させる（A12、docs/testing.md の T6）"
     severity: error
   no_shared_urlsession:
     name: "No URLSession.shared"
