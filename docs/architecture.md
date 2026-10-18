@@ -1,6 +1,6 @@
 # Mewbell の設計方針
 
-この文書は、Mewbell のコードの構造の約束（層・依存の向き・状態の持ち方・境界・部品の足し方など）を「今の形」として定める。振る舞い（ユーザーや API から見えること）は `openspec/specs/` が、セキュリティの約束は `.claude/rules/security.md` が受け持ち、この文書には書かない。
+この文書は、Mewbell のコードの構造の約束（層・依存の向き・状態の持ち方・境界・部品の足し方など）を「今の形」として定める。振る舞い（ユーザーや API から見えること）は `openspec/specs/` が、セキュリティの約束は `.claude/rules/security.md` が、テストの方針は `docs/testing.md` が受け持ち、この文書には書かない。
 
 設計・実装・レビューで判断が要るときに読む。この文書を変えるときは、プロジェクトのスキル `update-architecture-doc` の手順に従い、`bash scripts/check-architecture.sh` を通す。
 
@@ -23,6 +23,8 @@
 | 原則が「採らなかった案」に挙げた形を求めている | 直さない。理由は原則の ID |
 | 原則そのものへの異議（理由がその場面に当てはまらない、など） | AskUserQuestion で確かめる。採るなら原則を改める |
 | 方針が何も決めていない論点 | AskUserQuestion で確かめる。決めたことは change の design.md に書き、change をまたいで効くものは同じ change でこの文書にも足す |
+
+テストについての指摘も、`docs/testing.md` の項目に照らして同じ表で扱う。その場合は原則の ID の代わりに項目の ID（T3 など）を添え、方針を足す・改める先は `docs/testing.md` になる。
 
 ## 方針を足す・改める
 
@@ -146,14 +148,14 @@
 - **適用外**: なし
 - **根拠**: 今のコード（`Mewbell/Shared/Logging.swift`）の形を add-architecture-principles で原則にした。`print` を使わないことは add-gh-account-discovery と add-thread-latest-event のセキュリティの節。lint の `no_print` で守る
 
-### A12. テストは、削ったら見逃す不具合で残すかを決める
+### A12. テストの方針は `docs/testing.md` に置く
 
-- **原則**: テストは Swift Testing で書く。残すかどうかは「削ったら見逃す現実的な不具合」で決め、型や言語が保証することはテストしない。security.md の性質ごとに、確かめるテストの最後の 1 本は必ず残す。書体・ホバー・読み上げは単体テストせず、手元で確かめる項目として tasks に置く。SwiftUI の実際の寸法は `NSHostingView` で測る。偽物の中で同期的に待たず、待たせるときは async で中断させる。種類の一覧の漏れは、`default` の無い `switch` でコンパイラに気づかせる。
-- **理由**: 保証を足さないテストは、実行時間と実装を変えるたびの修正の手間だけを増やす。同期的な待ちは actor を塞ぎ、テストを止める。
+- **原則**: テストの方針（使うフレームワーク、残すかどうかの基準、どこで確かめるか、期待値の書き方、fake の作り方、待ち方など）は、`docs/testing.md` に ID（T1 から）を振った項目として置き、この文書には書かない。
+- **理由**: テストの方針は項目と例が多く、原則の 5 項目の書式に収まらない。1 か所にまとめれば、テストを書く・削るときにそこだけを読めば判断でき、レビューの指摘から項目を ID で引ける。
 - **採らなかった案**:
-  - カバレッジや件数を目標にする: 同じ分岐を確かめ直すテストが増える
+  - テストの方針をこの原則に書き足していく: 構造の原則の中でテストの項目が埋もれ、1 原則の書式にも収まらない
 - **適用外**: なし
-- **根拠**: add-project-skeleton D4、remove-redundant-tests、fix-thread-icon-column D3、update-list-readability（テストでの差し替えの節）、CLAUDE.md の「ビルドとテスト」。同期的な待ちは lint の `no_thread_sleep` で守る
+- **根拠**: add-testing-guide D1、add-project-skeleton D4、remove-redundant-tests。同期的な待ちは lint の `no_thread_sleep` で守る（`docs/testing.md` の T6）
 
 ### A13. 外部依存は最小限にする
 

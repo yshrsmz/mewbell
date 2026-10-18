@@ -97,7 +97,7 @@ retired_reference_allowed() {
 }
 reference_files="$(
   {
-    ls CLAUDE.md "$doc" openspec/config.yaml .swiftlint.yml 2>/dev/null || true
+    ls CLAUDE.md "$doc" docs/testing.md openspec/config.yaml .swiftlint.yml 2>/dev/null || true
     ls .claude/rules/*.md .claude/skills/*/SKILL.md 2>/dev/null || true
     find openspec/changes openspec/specs -name '*.md' 2>/dev/null || true
   } | sort -u
@@ -188,7 +188,7 @@ done < <(grep -n '' "$doc")
 # 原則の文（「。」で区切った 40 文字以上の 1 文）を、ほかの文書（archive を除く）がそのまま写していないかを見る
 # 対象のファイルが無いときに grep が標準入力を読まないよう、/dev/null を必ず渡す
 duplicate_targets="/dev/null"
-for file in CLAUDE.md openspec/config.yaml .claude/rules/*.md .claude/skills/*/SKILL.md openspec/changes/*/design.md; do
+for file in CLAUDE.md docs/testing.md openspec/config.yaml .claude/rules/*.md .claude/skills/*/SKILL.md openspec/changes/*/design.md; do
   [[ -f "$file" && "$file" != openspec/changes/archive/* ]] && duplicate_targets="$duplicate_targets $file"
 done
 while IFS=$'\t' read -r line text; do
