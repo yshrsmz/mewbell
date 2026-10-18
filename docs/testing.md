@@ -36,18 +36,20 @@
 ### T4. 同じ分岐を通る入力は代表に絞る
 
 - **方針**: `@Test(arguments:)` の引数や、よく似たテストは、通る分岐ごとの代表と、境界の両側に絞る。同じ分岐を通る入力を並べない。
-- **例外**: security.md の検証（伏せ字、ホスト名・ユーザー名の検証、オリジン検査、リダイレクト拒否など）は、攻撃の形ごとの引数を削らない。たとえば `APIEndpointsTests.checksTheRequestURL` の、符号化した `..` の書き方ごとの引数は残す。
+- **例外**: security.md で「ユニットテストで確かめる」とした検証は、攻撃の形ごとの引数を削らない。たとえば `APIEndpointsTests.checksTheRequestURL` の、符号化した `..` の書き方ごとの引数は残す。
 - **理由**: 同じ分岐の入力を並べても、実行時間と読む量が増えるだけになる。セキュリティの検証では、同じ分岐に見える形でも、デコードや正規化の段階ごとに別の箇所が拒んでいることがあり、1 つの形の取りこぼしがそのまま漏れになる。
 
 ### T5. fake は本物の契約どおりに振る舞わせる
 
-- **方針**: fake（`FakeHTTPTransport`、`FakeProcessRunner`、`FakeUserNotificationCenter` など）は、差し替えている本物（OS の API や本体の型）が保証する振る舞いに合わせる。本物と違う振る舞いをする fake を前提にしたテストを書かない。fake そのものを確かめるテストは書かない。fake に足す機能は、本体のテストで要るものだけにする。
+- **方針**: fake は、差し替えている本物（OS の API や本体の型）が保証する振る舞いに合わせる。本物と違う振る舞いをする fake を前提にしたテストを書かない。fake そのものを確かめるテストは書かない。fake に足す機能は、本体のテストで要るものだけにする。
+- **例**: `FakeHTTPTransport`、`FakeProcessRunner`、`FakeUserNotificationCenter`。
 - **理由**: 本物と違う fake の上で通るテストは、本番で起きない違いを確かめ、本番で起きる不具合を見逃す。fake を確かめるテストは、本体の保証を何も足さない。
 
 ### T6. 実時間と同期的な待ちに頼らない
 
-- **方針**: 時刻と待ちは注入したクロージャ（`now`、`sleep`）で制御し、テストでは `ManualSleeper` などで進める。非同期の処理の終わりは、テスト用のフック（`AccountStore.waitForReload`、`SystemNotifier.waitForPendingWork`）か、状態の変化を async で待って合わせる。固定の時間の `Task.sleep` や、`Task.yield()` の回数で合流を待たない。fake の中では同期的に待たず（`Thread.sleep`、セマフォ）、止めるときは async で中断させる（`FakeHTTPTransport` の `pausedMethod`）。
-- **理由**: 実時間の待ちは遅く、負荷の高い機械では落ちる。`SWIFT_APPROACHABLE_CONCURRENCY` のため、fake で同期的に待つと呼び出し元の actor が塞がり、テストが止まる（CLAUDE.md の「ビルドとテスト」）。
+- **方針**: 時刻と待ちは注入したクロージャ（`now`、`sleep`）で制御し、テストで進める。非同期の処理の終わりは、テスト用のフックか、状態の変化を async で待って合わせる。固定の時間の `Task.sleep` や、`Task.yield()` の回数で合流を待たない。fake の中では同期的に待たず（`Thread.sleep`、セマフォ）、止めるときは async で中断させる。
+- **例**: 時刻を進めるのは `ManualSleeper`、終わりを待つフックは `AccountStore.waitForReload` と `SystemNotifier.waitForPendingWork`、fake を async で止めるのは `FakeHTTPTransport` の `pausedMethod`。
+- **理由**: 実時間の待ちは遅く、負荷の高い機械では落ちる。`SWIFT_APPROACHABLE_CONCURRENCY` のため、fake で同期的に待つと呼び出し元の actor が塞がり、テストが止まる。
 - **守り方**: `Thread.sleep` は lint の `no_thread_sleep` が止める。
 
 ### T7. 単体テストで確かめないものは、手元の確認として tasks に置く
@@ -66,6 +68,6 @@
   1. 削るテストの `#expect` ごとに、ほかのテストが同じ不具合を拾うか、統合先に移したかを確かめる。2 つのテストが互いに「もう一方で拾える」とされたら、残す側を先に決める。
   2. 残す側は、速い単体テスト、仕様を直接表すテスト、T2 の正本の順で選ぶ。
   3. 移した `#expect` は、実装を一時的に壊して落ちることを確かめる。
-  4. `-only-testing` で対象のスイートを流し、結果のスイート数を確かめる。
+  4. `-only-testing` で対象のスイートを流す（渡し方と結果の確かめ方は CLAUDE.md の「ビルドとテスト」）。
   5. security.md の性質を確かめるテストを削るときは、性質ごとに残るテストを change の design.md に書く。
 - **理由**: 統合のときに元のテストにしか無かった `#expect` を落としたり、互いを当てにした 2 本を両方消したりすると、気づかないまま保証が消える。
