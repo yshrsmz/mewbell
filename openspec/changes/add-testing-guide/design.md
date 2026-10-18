@@ -63,6 +63,8 @@ A12 の ID は CLAUDE.md と lint から引かれているので、廃止せず�
 | T7 | 単体テストで確かめないものは、手元の確認として tasks に置く | 確かめられない読み上げのテスト |
 | T8 | テストを足す・削るときの手順 | 統合で `#expect` を落とすこと、両方を消すこと |
 
+T6 では、起きないことの確認だけは、区切りが無ければ短い固定の待ちを許す。短すぎても見逃すだけで、誤って落ちないためである。起きるはずのことを固定の待ちで待つ今のテストは、`docs/testing.md` の「既知の逸脱」に書く。`docs/testing.md` の項目を改めるときの参照の確かめ方と逸脱の扱いは、`update-architecture-doc` の手順ではなく `docs/testing.md` の「項目の足し方」に置く（検査の対象外なので、手順も文書の中で閉じる）。
+
 T6 の同期的な待ちの理由（`SWIFT_APPROACHABLE_CONCURRENCY` で nonisolated の async 関数が呼び出し元の actor で動くこと）は、ビルド設定の癖として CLAUDE.md にも残す。CLAUDE.md からは `docs/testing.md` の T6 を引く。
 
 ### D4. 参照の付け替え
