@@ -16,7 +16,7 @@
 
 **Non-Goals:**
 
-- 起きないことを確かめるための短い固定の待ち（`SettingsPollingTests`・`NotificationStoreOpenTests`・`PollingTests`・`RefreshNowTests` の 20〜50ms）。T6 が許す形で、短すぎても見逃すだけで誤って落ちない。
+- 起きないことを確かめるための短い固定の待ち（`SettingsPollingTests`・`NotificationStoreOpenTests`・`PollingTests`・`RefreshNowTests` の 20〜50ms と、`AccountStoreTests.doesNotRunTwoReloadsAtOnce` の `Task.yield()` 5 回）。どれも、起きるならその前に来る区切りが無い（止めたポーラーの遅れた更新、走らないはずの 2 回目の読み込み、など）。T6 が許す形で、短すぎても見逃すだけで誤って落ちない。
 - `SubprocessRunner` が、終わった子プロセスの残した孫プロセスを止めないこと。本番の振る舞いで、この change では変えない。
 - spec の要件と、本体の振る舞いの変更。
 
@@ -29,34 +29,36 @@
 そこで `AccountDiscovery` に、合流したかを返す読み取りの口を足し、テストは `waitUntilAsync` で待つ。
 
 ```swift
-/// `id` の走っている `gh auth token` に、ほかの呼び出し元が合流したか（テストが `waitUntil` で合流を待つため）。
+/// `id` の走っている `gh auth token` に、ほかの呼び出し元が合流したか（テストが `waitUntilAsync` で合流を待つため）。
 func hasJoinedTokenFetch(for id: AccountID) -> Bool
 ```
 
 - 待つループと期限はテストの側に置く。`waitUntilAsync`（`PollingFakes.swift`）は 30 秒で呼び出し元の位置に Issue を記録するので、合流が起きないときもどこで止まったかが分かる。`waitUntilAsync` は今 `private` なので、`sourceLocation` に既定値を付けてテストのターゲットの中で使えるようにする。
 - `AccountPoller.refreshWaitsForNextFetch` を `waitForPendingRefresh` で待つのと同じ形にする。`AccountStore.waitForReload` と `SystemNotifier.waitForPendingWork` は本体の Task を待つフックで、合流には待つ対象の Task が無い。
-- A10 の適用外を、待つ対象の Task が無い区切りについて `waitUntil` の条件にだけ使う読み取りの口まで広げる（手順は `update-architecture-doc`）。読み取りの口は `Bool` を返すだけにし、`#expect` で確かめない。
+- A10 の適用外を、待つ対象の Task が無い区切りについて `waitUntilAsync` の条件にだけ使う読み取りの口まで広げる（手順は `update-architecture-doc`）。読み取りの口は `Bool` を返すだけにし、`#expect` で確かめない。
 - `sharesARunningTokenFetchBetweenReloadAndRefresh` の `#expect(gated.waitingCount == 1)` は残す。合流した後に 2 つ目の gh が門の前に並んでいないことを確かめる。
 - 採らなかった案:
   - actor の中で 1ms ごとに確かめ直す async のフック: 本体に期限の無いポーリングが入り、合流が起きないときは `.timeLimit` でしか止まらず、止まった位置も報告されない。
   - 合流のたびに continuation を起こす仕組みを `TokenFetch` に持たせる: 本体のコードが最も増え（待ち手の管理、取得の終わりや待ち手を止めたときの扱い）、合流の分岐にテストのための処理が入る。期限も無いまま。
   - 固定の待ちを長くする: 遅くなるだけで、誤って落ちる可能性は消えない。
 
-### D2. `advance(until:)` は、起こしたポーラーが次の待ちに入るまで待つ（T6）
+### D2. `NotificationStoreSettingsTests` はアカウントごとの `ManualSleeper` で、目的のポーラーを起こして次の待ちまで進める（T6）
 
-`ManualSleeper.advance()` は最も古い待ちを 1 つ起こす。起こしたポーラーは取得を終えると次の待ちに入るので、それを区切りにする。
+`advance(until:)` を消し、このスイートだけアカウントごとに `ManualSleeper` を持たせる（`makePoller` は `account` を受け取るので、その sleeper の `sleep` を渡す）。呼び出し元は、目的のアカウントの sleeper で `advance()` し、同じ sleeper の `waitForSleeps(n + 1)` で次の待ちを待つ。
 
 ```swift
-for _ in 0..<6 where !condition() {
-    let sleeps = sleeper.durations.count
-    sleeper.advance()
-    await sleeper.waitForSleeps(sleeps + 1, sourceLocation: sourceLocation)
-}
+sleeper(alice).advance()
+await sleeper(alice).waitForSleeps(3)
+#expect(store.feeds[alice]?.threads.map(\.id) == ["4", "5"])
 ```
 
-- 6 回の上限は、時間ではなく起こす回数の上限なので残す。
-- 待ちが 1 つも無いときに呼ぶと、`waitForSleeps` が 30 秒待って Issue を記録する。今の 3 か所の呼び出しは、どれも待っているポーラーがいる。前提を doc comment に書く。
-- ポーラーは store への反映（`onUpdate` を await し、`@MainActor` の `apply` が終わる）を済ませてから次の待ちに入る。次の待ちに入った時点で、起こした取得の結果は store に出ているので、そこで条件を確かめ直せばよい。
+- ポーラーは、取得の結果を store に出して（`onUpdate` を await し、`@MainActor` の `apply` が終わって）から次の待ちに入る。次の待ちに入った時点で、起こした取得の結果は store に出ている。
+- 共有の sleeper では、古い順に起こすので目的でないポーラーを起こすことがあり、待ちの数も全ポーラーの合計になる。呼んだ時点で待ち手がいなければ `advance()` は空振りし、どの待ちが目的のポーラーのものかも決まらない（`letsAReloadSkipTheCarriedWait` の下限の待ち）。アカウントごとにすると、どれも「alice の何回目の待ちか」で決まり、上限の回数と繰り返しが要らなくなる。失敗すると `waitForSleeps` が 30 秒で呼び出し元の行に Issue を 1 件だけ記録する。
+- 待ちの回数には、作り直す前のポーラーの待ちも含む（`ManualSleeper` は止めた待ちを `durations` から消さない）。
+- 作り直しで 1 つのアカウントのポーラーが入れ替わるのはこのスイートだけなので、共有の sleeper で両方を進める兄弟のスイート（`NotificationStoreActionTests` など）とは形を揃えない。
+- 採らなかった案:
+  - 補助関数の中だけで直す（待ち手の数を読む口を `ManualSleeper` に足し、起こす前に待ち手を待ち、期限が切れたら抜ける）: どのポーラーの待ちかは分からないまま、上限と繰り返しと期限切れの扱いが残り、共有の fake も変わる。
+  - 共有の sleeper のまま呼び出し元で待ちの合計を数える: bob の振る舞いに依存して壊れやすく、どの待ちを確かめているかもあいまいなまま。
 
 ### D3. `ThreadDetailsFetcher` の打ち切りの待ちをクロージャで注入する（A5、T6）
 
@@ -74,7 +76,7 @@ for _ in 0..<6 where !condition() {
 
 ## Risks / Trade-offs
 
-- D2 で、起こしたポーラーが次の待ちに入らずに止まる場面（無効化など）で使うと、30 秒待って落ちる。今の呼び出しには無い。
+- D2 の待ちの回数は、作り直す前のポーラーの待ちを含めて数える。作り直しの回数が変わるテストでは数え直しが要る。
 
 ## セキュリティ
 

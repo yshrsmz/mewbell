@@ -10,7 +10,7 @@
 
 ## 2. ポーラーを進める待ち（D2）
 
-- [x] 2.1 `NotificationStoreSettingsTests.advance(until:)` を、起こしたポーラーが次の待ちに入るまで待つ形にし、前提を doc comment に書く。`restartsWithTheNewParticipatingSetting`、`dropsLateUpdatesFromTheStoppedPoller`、`letsAReloadSkipTheCarriedWait` が通ることを確かめる。
+- [x] 2.1 `NotificationStoreSettingsTests` にアカウントごとの `ManualSleeper` を持たせ、`advance(until:)` を消して、呼び出し元で目的のアカウントの sleeper を起こし次の待ちを待つ形にする。スイートの 7 本が通り、`-test-iterations 30` で繰り返しても落ちないことを確かめる。
 
 ## 3. 詳細の取得の打ち切り（D3）
 

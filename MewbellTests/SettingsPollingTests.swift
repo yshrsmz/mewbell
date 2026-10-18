@@ -47,7 +47,9 @@ struct NotificationStoreSettingsTests {
         return PollerFixture.ok(participating ? 4...5 : 1...3)
     }
     private let tokens = FakeTokenProvider()
-    private let sleeper = ManualSleeper()
+    /// アカウントごとの待ち（作り直したポーラーの何回目の待ちかを、ほかのアカウントの待ちと混ぜずに数えるため）
+    private let aliceSleeper = ManualSleeper()
+    private let bobSleeper = ManualSleeper()
     private let notifier = RecordingNotifier()
     private let settings = AppSettings(storage: InMemorySettingsStorage())
     /// ポーラーを作ったときの (アカウント, participating)
@@ -60,13 +62,15 @@ struct NotificationStoreSettingsTests {
         let client = GitHubAPIClient(transport: transport)
         return NotificationStore(
             makePoller: {
-                [tokens, sleeper, made] account, endpoints, participating, initialPhase, carriedWait, onUpdate
+                [tokens, alice, aliceSleeper, bobSleeper, made]
+                account, endpoints, participating, initialPhase, carriedWait, onUpdate
                 in
                 made.withLock { $0.append("\(account.id) \(participating)") }
                 return AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
                     participating: participating, initialPhase: initialPhase,
-                    carriedWait: carriedWait, sleep: sleeper.sleep, onUpdate: onUpdate)
+                    carriedWait: carriedWait, sleep: (account.id == alice ? aliceSleeper : bobSleeper).sleep,
+                    onUpdate: onUpdate)
             }, notifier: notifier, openURL: { [opened] url in opened.withLock { $0.append(url) } },
             preferences: { [settings] in settings.preferences(for: $0) })
     }
@@ -81,26 +85,16 @@ struct NotificationStoreSettingsTests {
         }
     }
 
-    /// 待っているポーラーを古い順に 1 つずつ起こし、`sleeper` の待ちが 1 つ増える（ふつうは起こしたポーラーが次の待ちに入る）まで待ちながら、
-    /// `condition` が満たされるまで進める（作り直したポーラーの最初の取得の待ちを含む）。待っているポーラーがいる場面でだけ使う。
-    /// 満たされないまま 6 回起こしたら、呼び出し元の位置に Issue を記録する。
-    private func advance(
-        until condition: @MainActor () -> Bool, sourceLocation: SourceLocation = #_sourceLocation
-    ) async {
-        for _ in 0..<6 where !condition() {
-            let sleeps = sleeper.durations.count
-            sleeper.advance()
-            await sleeper.waitForSleeps(sleeps + 1, sourceLocation: sourceLocation)
-        }
-        if !condition() {
-            Issue.record("待ちを 6 回進めても条件が満たされなかった", sourceLocation: sourceLocation)
-        }
+    /// アカウントのポーラーの待ち。待ちの回数には、作り直す前のポーラーの待ちも含む。
+    private func sleeper(_ id: AccountID) -> ManualSleeper {
+        id == alice ? aliceSleeper : bobSleeper
     }
 
     private func loadedStore() async -> NotificationStore {
         let store = makeStore()
         store.sync(with: .accounts([status(alice, .ready), status(bob, .ready)]))
-        await sleeper.waitForSleeps(2)
+        await sleeper(alice).waitForSleeps(1)
+        await sleeper(bob).waitForSleeps(1)
         await waitUntil {
             MainActor.assumeIsolated { store.feeds[alice]?.threads.count == 3 && store.feeds[bob]?.threads.count == 3 }
         }
@@ -116,9 +110,8 @@ struct NotificationStoreSettingsTests {
         #expect(store.unreadCount == 3)
         #expect(notifier.events == ["retractAll github.com/bob", "retainOnly github.com/alice"])
         let bobGets = gets("bob").count
-        sleeper.advance()
-        sleeper.advance()
-        await sleeper.waitForSleeps(3)
+        sleeper(alice).advance()
+        await sleeper(alice).waitForSleeps(2)
         #expect(gets("bob").count == bobGets)
         store.stopAll()
     }
@@ -132,9 +125,9 @@ struct NotificationStoreSettingsTests {
         store.sync(with: .checking)
         store.openFromNotification(request)
         store.sync(with: .accounts([status(alice, .ready), status(bob, .disabled)]))
-        await sleeper.waitForSleeps(1)
+        await sleeper(alice).waitForSleeps(1)
         store.sync(with: .accounts([status(alice, .ready), status(bob, .ready)]))
-        await sleeper.waitForSleeps(2)
+        await sleeper(bob).waitForSleeps(1)
         #expect(opened.value.map(\.absoluteString) == ["https://github.com/octo/app"])
         #expect(transport.requests.allSatisfy { $0.httpMethod != "PATCH" })
         store.stopAll()
@@ -151,11 +144,13 @@ struct NotificationStoreSettingsTests {
         #expect(notifier.events.isEmpty)
         #expect(made.value.last == "github.com/alice true")
         // 前の取得から再読み込みと同じ下限（10 秒）がたつまで、最初の取得を待つ
-        await sleeper.waitForSleeps(3)
+        await sleeper(alice).waitForSleeps(2)
         #expect(gets("alice").count == aliceGets)
-        let wait = sleeper.durations.last ?? .zero
+        let wait = sleeper(alice).durations.last ?? .zero
         #expect(wait > .seconds(5) && wait <= .seconds(10))
-        await advance(until: { store.feeds[alice]?.threads.map(\.id) == ["4", "5"] })
+        // ポーラーは取得の結果を store に出してから次の待ちに入る
+        sleeper(alice).advance()
+        await sleeper(alice).waitForSleeps(3)
         #expect(store.feeds[alice]?.threads.map(\.id) == ["4", "5"])
         // 作り直した後の最初の取得は基準
         #expect(notifier.events.filter { $0.contains("alice") } == ["baselineSet github.com/alice 4,5"])
@@ -172,15 +167,17 @@ struct NotificationStoreSettingsTests {
         let store = await loadedStore()
         // 前のポーラーの取得の途中で作り直す
         transport.pausedMethod.value = "GET"
-        // alice と bob のどちらが先に寝たかは決まらないので、両方を起こす
-        sleeper.advance()
-        sleeper.advance()
+        sleeper(alice).advance()
+        sleeper(bob).advance()
         await waitUntil { self.gets("alice").count == 2 }
         settings.setParticipatingOnly(true, for: alice)
         store.restart(alice)
         notifier.feeds[alice] = []
         transport.pausedMethod.value = nil
-        await advance(until: { store.feeds[alice]?.threads.map(\.id) == ["4", "5"] })
+        // 作り直したポーラーが最初の取得の待ちに入ってから起こし、取得の後の待ちまで進める
+        await sleeper(alice).waitForSleeps(2)
+        sleeper(alice).advance()
+        await sleeper(alice).waitForSleeps(3)
         try? await Task.sleep(for: .milliseconds(50))
         #expect(notifier.feeds[alice]?.allSatisfy { $0 == ["4", "5"] } == true)
         #expect(store.feeds[alice]?.threads.map(\.id) == ["4", "5"])
@@ -221,12 +218,12 @@ struct NotificationStoreSettingsTests {
         await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.phase.isRateLimited == true } }
         let count = transport.requests.count
         store.sync(with: .accounts([status(alice, .disabled)]))
-        let sleeps = sleeper.durations.count
+        let sleeps = sleeper(alice).durations.count
         store.sync(with: .accounts([status(alice, .ready)]))
         // 有効に戻しても、無効にする前の再試行の時刻まで取得せず、レート制限の待ちとして表示する
-        await sleeper.waitForSleeps(sleeps + 1)
+        await sleeper(alice).waitForSleeps(sleeps + 1)
         #expect(transport.requests.count == count)
-        let carried = sleeper.durations.last ?? .zero
+        let carried = sleeper(alice).durations.last ?? .zero
         #expect(carried > .seconds(100) && carried <= .seconds(120))
         #expect(store.feeds[alice]?.phase.isRateLimited == true)
         // 再読み込みでも早めない
@@ -237,9 +234,9 @@ struct NotificationStoreSettingsTests {
         settings.setParticipatingOnly(true, for: alice)
         store.restart(alice)
         #expect(store.feeds[alice]?.phase.isRateLimited == true)
-        await sleeper.waitForSleeps(sleeps + 2)
+        await sleeper(alice).waitForSleeps(sleeps + 2)
         #expect(transport.requests.count == count)
-        let again = sleeper.durations.last ?? .zero
+        let again = sleeper(alice).durations.last ?? .zero
         #expect(again > .seconds(100) && again <= .seconds(120))
         store.stopAll()
     }
@@ -249,15 +246,16 @@ struct NotificationStoreSettingsTests {
         let aliceGets = gets("alice").count
         settings.setParticipatingOnly(true, for: alice)
         store.restart(alice)
-        await sleeper.waitForSleeps(3)
+        await sleeper(alice).waitForSleeps(2)
         #expect(gets("alice").count == aliceGets)
         // 作り直したポーラーが最初の取得を待っている間でも、再読み込みで取得する。ただし前の取得の開始から 10 秒は空ける
         store.refresh()
-        await sleeper.waitForSleeps(4)
+        await sleeper(alice).waitForSleeps(3)
         #expect(gets("alice").count == aliceGets)
-        let floor = sleeper.durations.last ?? .zero
+        let floor = sleeper(alice).durations.last ?? .zero
         #expect(floor > .zero && floor <= .seconds(10))
-        await advance(until: { self.gets("alice").count > aliceGets })
+        sleeper(alice).advance()
+        await sleeper(alice).waitForSleeps(4)
         #expect(gets("alice").count > aliceGets)
         store.stopAll()
     }

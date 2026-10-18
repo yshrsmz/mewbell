@@ -12,7 +12,7 @@
 ## What Changes
 
 - `AccountDiscovery` に、走っている `gh auth token` にほかの呼び出し元が合流したかを返す読み取りの口を足し、合流の 2 本の 200ms の待ちを、これを `waitUntilAsync` で待つ形に置き換える。`docs/architecture.md` の A10 の適用外に、この口を足す。
-- `NotificationStoreSettingsTests.advance(until:)` を、起こしたポーラーが次の待ちに入るまで待つ形にする（30ms の待ちを消す）。
+- `NotificationStoreSettingsTests` にアカウントごとの `ManualSleeper` を持たせ、`advance(until:)` を消す。目的のポーラーを起こし、そのポーラーが次の待ちに入るまで待つ（30ms の待ちを消す）。
 - `ThreadDetailsFetcher` に打ち切りの待ちのクロージャ（`sleep`）を注入できるようにし、テストでは `ManualSleeper` で進める。本番の呼び出し元は既定の `Task.sleep` のままにする。
 - `SubprocessRunnerTests` の 2 本で、孫プロセスの PID をファイルに書かせ、テストの終わりに終了させる。
 - `docs/testing.md` の「既知の逸脱」から 3 件を消す。

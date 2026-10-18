@@ -215,7 +215,7 @@ actor AccountDiscovery: AccountDiscovering, TokenProviding {
         return await fetchToken(for: id, using: client)
     }
 
-    /// `id` の走っている `gh auth token` に、ほかの呼び出し元が合流したか（テストが `waitUntil` で合流を待つため）。
+    /// `id` の走っている `gh auth token` に、ほかの呼び出し元が合流したか（テストが `waitUntilAsync` で合流を待つため）。
     func hasJoinedTokenFetch(for id: AccountID) -> Bool {
         inFlightTokenFetches[id]?.isShared.withLock { $0 } == true
     }
