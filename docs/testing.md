@@ -8,7 +8,7 @@
 
 - ID は `T1` からの通し番号で、再利用しない。廃止した項目は見出しを残す。
 - 各項目には「方針」と「理由」を必ず書き、必要なら例を添える。例に書く型名やテスト名は、改名で古くなっても方針が読めるように、例の中だけに置く。
-- 項目を足す・改めるときは、そのための change を起こす（振る舞いが変わらなければ `skip_specs: true`）。改めたときは `grep -rnw 'T<番号>' CLAUDE.md .claude openspec .swiftlint.yml docs` で引いている箇所をすべて開き、新しい形と食い違わないかを確かめる。archive の design.md は当時の記録なので直さない。
+- 項目を足す・改めるときは、そのための change を起こす（振る舞いが変わらなければ `skip_specs: true`）。改めたときは `grep -rnw 'T<番号>' CLAUDE.md .claude openspec .swiftlint.yml docs scripts MewbellTests` で引いている箇所をすべて開き、新しい形と食い違わないかを確かめる。archive の design.md は当時の記録なので直さない。
 - 今のテストが項目に合わなくなったら「既知の逸脱」に足し、直したら消す。
 
 ## 項目
@@ -81,5 +81,5 @@
 | テスト | 項目 | 合わないところ |
 | --- | --- | --- |
 | `AccountDiscoveryTests.keepsGhRunningForAJoinedCallerWhenTheFirstIsCancelled` | T6 | 合流が起きるのを、200ms の固定の待ちで待っている |
-| `NotificationStoreTests.keepsStoppedPollersWhileTheTokenIsFetchedAgain` | T6 | 取り直しの後の状態を、50ms の固定の待ちで待っている |
+| `AccountDiscoveryTests.sharesARunningTokenFetchBetweenReloadAndRefresh` | T6 | 合流が起きるのを、200ms の固定の待ちで待っている（後の `#expect` が合流を前提にしている） |
 | `NotificationStoreSettingsTests` の `advance(until:)` | T6 | ポーラーを進めるたびに 30ms の固定の待ちを挟み、試行の回数で諦める |

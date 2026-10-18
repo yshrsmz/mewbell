@@ -47,6 +47,6 @@ A12 は「何を残すか」の基準しか言っておらず、「どこで確�
 ## Impact
 
 - マイルストーン: 特定のマイルストーンには属さない保守の change。続く 2 つのテストの整理の change（GitHubAPI・gh・アカウント・App の側と、Polling・store・通知・UI の側）の前に入れる。
-- 変更するもの: `docs/testing.md`（新設）、`docs/architecture.md`、`.claude/skills/update-architecture-doc/SKILL.md`、`.claude/rules/review-process.md`、`CLAUDE.md`、`.swiftlint.yml` の `message`。
+- 変更するもの: `docs/testing.md`（新設）、`docs/architecture.md`、`.claude/skills/update-architecture-doc/SKILL.md`、`.claude/rules/review-process.md`、`CLAUDE.md`、`.swiftlint.yml` の `message`、`scripts/check-architecture.sh`（ID の参照と重複を探す先に `docs/testing.md` を足す）。
 - トークン・gh サブプロセス・ネットワーク・URL を開く処理: 触れない。ただし `docs/testing.md` には、security.md の「ユニットテストで確かめる」性質ごとに最後の 1 本を残すことと、その検証の引数は削らないことを書く。
 - トークンの永続化に関わる変更は無い。

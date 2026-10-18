@@ -26,7 +26,7 @@ A12 を ID で引いているのは次の 2 か所。
 **Non-Goals:**
 
 - テストのコードを変えること。整理は続く 2 つの change で行う。
-- `scripts/check-architecture.sh` の検査を `docs/testing.md` に広げること。今の検査は原則の 5 項目の書式に依存しているので、`docs/testing.md` には合わない。
+- `docs/testing.md` そのものの書式・コードの名前・T の ID を `scripts/check-architecture.sh` で検査すること。今の検査は原則の 5 項目の書式に依存しているので、`docs/testing.md` には合わない。ただし、`docs/testing.md` は A の ID を引き、原則の文を写すおそれもあるので、ID の参照と重複を探す先には足す。
 
 ## Decisions
 
@@ -35,7 +35,7 @@ A12 を ID で引いているのは次の 2 か所。
 `docs/testing.md` を新設し、テストの方針の本文はそこにだけ書く。A12 は次の形に改める。
 
 - 見出し: 「テストの方針は `docs/testing.md` に置く」
-- 原則: Swift Testing で書くこと、残すかどうかは削ったら見逃す不具合で決めること、を 1 文で示し、詳細は `docs/testing.md` に任せる
+- 原則: テストの方針は `docs/testing.md` に項目として置く、という置き場所だけを示す。T1 の要約も書かない（`docs/testing.md` は `update-architecture-doc` の手順を通らないので、要約を置くと 2 つの言い回しがずれる）
 
 A12 の ID は CLAUDE.md と lint から引かれているので、廃止せずに残す。
 
@@ -95,4 +95,4 @@ T6 の同期的な待ちの理由（`SWIFT_APPROACHABLE_CONCURRENCY` で nonisol
 ## Risks / Trade-offs
 
 - [`docs/testing.md` は検査の対象外なので、書いたコードの名前が改名で古くなる] → 型名を書くのは例に限り、例が古くなっても方針は読めるようにする。レビューで直す。
-- [A12 と `docs/testing.md` の T1 に同じ文が並ぶ] → A12 には 1 文の要約と参照だけを置き、本文は `docs/testing.md` に書く。
+- [A12 と `docs/testing.md` の T1 に同じ文が並ぶ] → A12 には置き場所だけを書き、T1 の要約も置かない。
