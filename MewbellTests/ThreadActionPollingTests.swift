@@ -119,6 +119,7 @@ struct MarkAllReadPollingTests {
         #expect(lastIDs.isEmpty)
         #expect(fixture.updates.value.count > updates)
         #expect(puts.map(Self.lastReadAt) == [Self.half])
+        #expect(puts.first?.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
         // 成功は失敗として記録しない
         #expect(fixture.last?.actionFailure == nil)
         #expect(fixture.last?.diagnostics.lastActionFailure == nil)

@@ -8,11 +8,10 @@ import Testing
 struct AccountDisclosureTests {
     private static let loaded = FeedPhase.loaded(updatedAt: Date(timeIntervalSince1970: 0))
 
-    private func feed(_ phase: FeedPhase = loaded, threads count: Int)
-        throws -> FeedState
-    {
+    /// 3 件のスレッドを持つ一覧（一覧を出すかどうかは、件数ではなく状態で決まる）
+    private func feed(_ phase: FeedPhase) throws -> FeedState {
         let repository = try #require(RepositoryName(fullName: "octo/app"))
-        let threads = (0..<count).map { index in
+        let threads = (0..<3).map { index in
             NotificationThread(
                 id: "\(index + 1)", reason: "subscribed", updatedAt: Date(timeIntervalSince1970: Double(index)),
                 title: "Thread \(index + 1)", kind: .issue, subjectURL: nil, repository: repository,
@@ -26,24 +25,25 @@ struct AccountDisclosureTests {
     @Test(arguments: [
         (
             TokenState.fetching,
-            FeedPhase?.some(.retrying(nextAttempt: Date(timeIntervalSince1970: 0), rateLimited: false)),
-            3, false, true
+            FeedPhase?.some(.retrying(nextAttempt: Date(timeIntervalSince1970: 0), rateLimited: false)), true, true,
+            true
         ),
-        (.ready, loaded, 3, true, true),
-        (.unavailable, loaded, 3, true, false),
-        (.ready, nil, 0, true, false),
-        (.ready, .unauthorized, 0, true, false),
-        (.ready, .scopeInsufficient, 0, true, false),
-        (.ready, .loading, 0, true, false),
+        (.ready, loaded, false, true, false),
+        (.unavailable, loaded, true, false, false),
+        (.ready, nil, true, false, false),
+        (.ready, .unauthorized, true, false, false),
+        (.ready, .scopeInsufficient, true, false, false),
+        (.ready, .loading, true, false, false),
     ])
     func collapsesOnlyWhileShowingThreads(
-        _ tokenState: TokenState, _ phase: FeedPhase?, _ count: Int, _ isStoredCollapsed: Bool, _ showsThreads: Bool
+        _ tokenState: TokenState, _ phase: FeedPhase?, _ isStoredCollapsed: Bool, _ showsThreads: Bool,
+        _ isCollapsed: Bool
     ) throws {
         let disclosure = AccountDisclosure(
-            tokenState: tokenState, feed: try phase.map { try feed($0, threads: count) },
+            tokenState: tokenState, feed: try phase.map(feed),
             isStoredCollapsed: isStoredCollapsed)
         #expect(disclosure.showsThreads == showsThreads)
-        #expect(disclosure.isCollapsed == (showsThreads && isStoredCollapsed))
+        #expect(disclosure.isCollapsed == isCollapsed)
     }
 }
 

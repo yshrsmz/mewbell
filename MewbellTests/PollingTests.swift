@@ -10,6 +10,7 @@ struct PollScheduleTests {
         #expect(PollSchedule.afterRateLimit(retryAt: now.addingTimeInterval(10), now: now) == .seconds(60))
         #expect(PollSchedule.afterRateLimit(retryAt: now.addingTimeInterval(-100), now: now) == .seconds(60))
         #expect(PollSchedule.afterRateLimit(retryAt: now.addingTimeInterval(86_400), now: now) == .seconds(3600))
+        #expect(PollSchedule.afterRateLimit(retryAt: Date(timeIntervalSince1970: 1e300), now: now) == .seconds(3600))
         #expect(PollSchedule.afterRateLimit(retryAt: Date(timeIntervalSince1970: .nan), now: now) == .seconds(3600))
     }
 

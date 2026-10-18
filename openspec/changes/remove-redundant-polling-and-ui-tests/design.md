@@ -74,7 +74,7 @@ Polling:
 | `ActionFailurePollingTests.recordsAReadThatWasNotSentForLackOfAToken` | 削除 | T4 | `GroupActionPollingTests.sendsNothingWithoutAToken` |
 | `ActionFailurePollingTests.doesNotRecordSuccesses` | 削除。`MarkReadPollingTests.removesTheThreadAndSendsTheRequest` と `MarkAllReadPollingTests.clearsTheListAndSendsThePut` に、操作の直後（取得を進める前）の `actionFailure == nil` と `diagnostics.lastActionFailure == nil` を足す | T4 | 足し先 |
 | `MarkReadPollingTests.bringsTheThreadBackWhenTheRequestFailed` | 削除 | T4 | `GroupActionPollingTests.stopsSendingAfterAnAuthErrorOrARateLimit`（Done）、`ThreadDetailsPollingTests.keepsDetailsOfThreadsHiddenForAWhile`（既読） |
-| `MarkReadPollingTests.removesTheThreadAndSendsTheRequest` の URL の確認、`MarkAllReadPollingTests.clearsTheListAndSendsThePut` の URL と `Authorization` の確認 | URL の確認を、送るメソッドだけの確認にする。`removesTheThreadAndSendsTheRequest` の `Authorization` の 1 行と、`last_read_at` の確認は残す | T2 | API の層の `buildsThePatchRequest`・`buildsTheDeleteRequest`・`buildsThePutRequest`、`NotificationStoreActionTests` の DELETE の完全な URL |
+| `MarkReadPollingTests.removesTheThreadAndSendsTheRequest` と `MarkAllReadPollingTests.clearsTheListAndSendsThePut` の URL の確認 | URL の確認を削る（`removesTheThreadAndSendsTheRequest` は送るメソッドだけを確かめる）。`Authorization` の確認は両方に残す（すべて既読はトークンを別の経路で読み、API の層の `buildsThePutRequest` は `Authorization` を見ない）。`last_read_at` の確認も残す | T2 | API の層の `buildsThePatchRequest`・`buildsTheDeleteRequest`・`buildsThePutRequest`、`NotificationStoreActionTests` の DELETE の完全な URL |
 | `GroupActionPollingTests.stopsSendingWhenThePollerIsStoppedMidway` | 削除。`diagnostics.lastActionFailure == nil` の確認を `sendsNoMoreAfterTheWaitWhenThePollerIsStoppedDuringIt` に移す | T4 | 移し先（確認を待ちの前に移す並べ替えまで拾う） |
 | `GroupActionPollingTests.stopsSendingWhenTheTokenIsDiscardedMidway` | 削除 | T4 | `sendsNoMoreAfterTheWaitWhenTheTokenIsDiscardedDuringIt` |
 | `GroupActionPollingTests.doesNotWaitForASingleThread` | 削除 | T4 | `waitsOneSecondAfterEachResultBeforeTheNextRequest`（1 件目の前に待たない、最後の後に待たない） |
@@ -90,7 +90,7 @@ store・通知:
 |---|---|---|---|
 | `NotificationStoreRepositoriesTests.groupsTheThreadsOfAnArrivedFeed` | 削除 | T2 | `RepositoryGroupTests.ordersRepositoriesAndThreadsByTheNewestUpdate`、`forgetsTheGroupsOfADisabledAccount` |
 | `NotificationStoreOpenTests.doesNothingWhenTheURLCannotBeBuilt` | 削除 | T1 | 検証済みのホストからは URL が必ず作れるので、本番が通らない経路。50ms の固定の待ちも無くなる |
-| `NotificationStoreOpenTests.opensTheWebNotificationsPageWithoutMarkingAnythingRead`、`opensTheWebNotificationsPageForAccountsWithoutAPoller`、`doesNotOpenTheWebNotificationsPageForAnInvalidHost` | 3→1。ポーラーのあるアカウントと `.unavailable` のアカウントを 1 つの store で開き、一覧と未読数が変わらないこと、GET 以外を送らないことを確かめる | T1・T2 | `openWebNotifications` は `pollers` を見ない。GHES の URL は `APIEndpointsTests.derivesBaseURLs` と `ThreadWebURLTests.opensTheWebNotificationsPageOfTheHost` |
+| `NotificationStoreOpenTests.opensTheWebNotificationsPageWithoutMarkingAnythingRead`、`opensTheWebNotificationsPageForAccountsWithoutAPoller`、`doesNotOpenTheWebNotificationsPageForAnInvalidHost` | 3→1。ポーラーのある github.com のアカウントと、`.unavailable` の GHES のアカウントを 1 つの store で開き、それぞれのホストのページを開くこと、一覧と未読数が変わらないこと、GET 以外を送らないことを確かめる | T1・T2 | `openWebNotifications` は `pollers` を見ない。GHES の URL は `APIEndpointsTests.derivesBaseURLs` と `ThreadWebURLTests.opensTheWebNotificationsPageOfTheHost` |
 | `NotificationStoreOpenTests.dropsAPendingReadWhenTheAccountCannotBeUsed` の `.accounts([])` | 引数 2→1（`.unavailable` を残す） | T4 | `NotificationStoreSettingsTests.dropsPendingReadsOfADisabledAccount`（同じ「`active` に無い」の分岐） |
 | `NotificationStoreActionTests.marksAThreadDoneWithoutOpeningIt` と `marksAThreadReadWithoutOpeningIt` | パラメタライズで 2→1。通知センターの確認を外し、一覧、未読数、開かないこと、送るメソッドと URL、もう一方のメソッドを送らないことを残す | T2・T4 | 取り下げは `NotificationStoreNewThreadsTests.ignoresAThreadThatCameBackUnchangedAfterLeavingTheList` と `SystemNotifierTests.retractsThreadsMarkedDoneTogetherInOneCall` |
 | `NotificationStoreActionTests.marksTheThreadsOfARepositoryGroupDone` の通知センターの確認 | 確認を削る | T2 | `NotificationStoreNewThreadsTests.removesTheThreadsOfAGroupMarkedDoneTogether` |
@@ -105,7 +105,7 @@ store・通知:
 | `ThreadOpenRequestTests.fallsBackToTheRepositoryPageWithoutAURL` | `replacesAnUnsafeURLWithTheRepositoryPage` の引数を `String?` にして nil を足し、統合する | T4 | 統合先。`rejectsAnUnsafeURLWithAnInvalidRepository` は結果が違う（nil）ので残す |
 | `SystemNotifierTests.doesNotRetractForNewThreadsAlone`、`doesNothingForNoThreads` | 削除（fake を直すことが前提。D5） | T5 | 直した fake では落ちようがない。post は `postsNewThreadsAndRetractsGoneOnes` |
 | `SystemNotifierTests.retractsAThreadMarkedRead` | 削除 | T4 | `retractsThreadsMarkedDoneTogetherInOneCall`（2 件を 1 回で取り下げ、ほかが残る） |
-| `UnreadBadgeTests.formats` | 6→4（`-1` と `1_000` を消し、`0`・`1`・`99`・`100` を残す） | T4 | 境界（0 と 1、99 と 100）の両側 |
+| `UnreadBadgeTests.formats` | 6→4（`-1` と `1_000` を消し、`0`・`1`・`99`・`100` を残す） | T4 | 境界（0 と 1、99 と 100）の両側。未読の件数は一覧の件数の和で、負にならない |
 | `MenuBarIconTests.widensWithTheBadge` | 縮小。「バッジがあれば猫だけより広い」を削り、「1 桁より 99+ が広い」を残す | T2 | `drawsAGreenCatAndALabelColoredBadge`（幅が広がらなければ件数の列の画素の確認で落ちる） |
 | `SystemNotifierSettingsTests.skipsPostingForAnAccountWithNotificationsOff` と `postsAgainWhenTurnedBackOn` | 2→1。アカウントごとに判定し、途中で切り替わる closure にして、アカウントが渡ることと呼ぶたびに読み直すこと（オフの間の分をためない）の両方を残す | T4 | 統合先 |
 
@@ -121,7 +121,7 @@ UI:
 | `ThreadDetailsSubjectTests.readsNoReleaseIDFromOtherSubjects` | 5→3（nil、他人のホスト、`releases/v1.0.0`） | T2 | `fallsBackToTheRepositoryPage`、21 桁は `ThreadIDTests.rejects`。nil の行は、`ThreadDetailsCacheTests.picksReleasesWithAnID` を消した後の種類ごとの nil の確認として残す |
 | `ThreadIconTests.showsOnlyTheKindWithoutAState` | 3→1（`.pullRequest`） | T3・T4 | 同じ else を通り、名前は実装の表の写し |
 | `ListExpansionTests.observesOnlyTheAccountThatChanged` | 削除（`ChangeFlag` と `import Observation` も） | T1 | 想定する後退が起きても落ちない。取り違えは `expandsOnlyTheAccountAndTheRepositoriesWithNewThreads` と `forgetsAccountsThatAreNoLongerShown` |
-| `AccountDisclosureTests.collapsesWhileShowingThreads`、`doesNotCollapseWithoutThreadsShown`、`staysExpandedWhenNotStoredCollapsed` | 1 つの表にまとめて 9→7。true の側は 2 行（覚えていない／覚えている）、false の側は、ほかの条件を満たしたまま 1 つずつ外す 5 行（`unavailable`、phase が nil、`unauthorized`、`scopeInsufficient`、`loading`） | T4 | 統合先。spec が畳まない条件を 1 つずつ挙げているので 5 行にはしない（T3） |
+| `AccountDisclosureTests.collapsesWhileShowingThreads`、`doesNotCollapseWithoutThreadsShown`、`staysExpandedWhenNotStoredCollapsed` | 1 つの表にまとめて 9→7。一覧を出す側は 2 行（トークンの取り直し中・再試行中で畳んだ状態を覚えている、取得できた・覚えていない）、出さない側は、ほかの条件を満たしたまま 1 つずつ外す 5 行（`unavailable`、phase が nil、`unauthorized`、`scopeInsufficient`、`loading`）。畳むかどうかは列に具体的な値で書く（T3） | T4 | 統合先。spec が畳まない条件を 1 つずつ挙げているので 5 行にはしない（T3） |
 | `MarkAllDoneLabelsTests.namesTheCount` | `confirmation` の確認だけにする | T3 | ほかの 5 つの文字列は spec で決まっていない |
 | `RepositoryActionLabelsTests.namesTheRepositoryAndTheCount` | 文字列の完全一致をやめ、`confirmation` の完全一致と、ほかのすべての返り値が `octo/app` を含むことにする | T3 | spec が決めているのは「どのリポジトリへの操作かが分かる」こと |
 | `EnabledStatusesTests.keepsNothingWithoutAccounts` | 3→1 | T4 | 同じ guard |
@@ -130,7 +130,8 @@ UI:
 ### D3. 採らなかった候補
 
 - `ThreadListMergeTests` のファイルごとの削除: `ThreadListMerge.merge` は純粋な関数（A7）で、`replacesTheSameIDAddsNewOnesAndKeepsTheRest` が重ね方の正本になる。代わりとされた `ConditionalFetchTests` は上の層。
-- `PollScheduleTests.waitsUntilTheRateLimitResets` の `1e300` の行の削除: 「`Int` に直してから丸める」並べ替えを拾うのはこの行だけ。D4 で `.nan` に差し替える。
+- `PollScheduleTests.waitsUntilTheRateLimitResets` の `1e300` の行の削除: 有限の大きな値を先に `Int` に直す並べ替えを拾うのはこの行だけ。D4 の `.nan` の行は、これに足す。
+- `ThreadDetailsPollingTests.stopsWaitingAtTheTimeLimit` を残すこと（code-review の指摘）: 打ち切りの上限はフェッチャーが受け持ち、`reportsTimedOutFetchesAsFailures` が確かめている。ポーラーはその値を渡すだけで、上限を渡さなくなる退行はこのテストでしか拾えないが、実時間の待ちを使う（T6）。保証の割に費用が大きいので消す。
 - `FeedDiagnosticsTests` を `.network` と 422 だけにする縮小: `FailureKind` の init は値の対応表で、どの行も別々に間違えうる（T3）。代わりとされた各ポーラーのテストは上の層（T2）。
 - `ThreadOpenRequestTests.rejectsAnUnsafeURLWithAnInvalidRepository` を `replacesAnUnsafeURLWithTheRepositoryPage` に統合すること: 結果が違う（nil とリポジトリのページ）。`replacesAnUnsafeURLWithTheRepositoryPage` の 5 つの引数は、security.md の「ブラウザで開く URL」の攻撃の形なので削らない（T4 の例外）。
 - `MenuBarIconTests.widensWithTheBadge` の削除: 99+ が 1 桁より広いことは、ほかのテストが拾わない（spec の「100 件以上は 99+」）。
@@ -142,7 +143,7 @@ UI:
 ### D4. 整理の途中で見つかった確認の穴を埋める（T1・T2、ユーザーと決めた）
 
 - **書き込みのトークンの取り違え**: ポーラーの層で書き込みの `Authorization` を確かめるのは `MarkReadPollingTests.removesTheThreadAndSendsTheRequest` の 1 行だけになる。この fixture は alice しか持たないので、拾えるのはトークンの付け忘れまでで、複数のアカウントで取り違える不具合（Gitify #2176、CLAUDE.md）は拾えない。2 つのアカウントが 1 つの `GitHubAPIClient` を共有してポーリングしている `NotificationStoreActionTests.marksAllThreadsOfOneAccountDoneNewestFirst` に、DELETE のすべてが alice のトークンで送られることの確認を足す。トークンを付けるのは `APIGateway.send` だけで、lint の `authorization_header_outside_gateway` が守っているが、どのアカウントのトークンを渡すかは呼び出し側が決める。
-- **`X-RateLimit-Reset` が NaN のとき**: `PollScheduleTests.waitsUntilTheRateLimitResets` の `1e300` の行を `.nan` に差し替える。`isFinite` の分岐を外すと `Int(nan)` で落ちる不具合と、先に `Int` に直す不具合の両方を 1 行で拾う。`.infinity` は `min` で上限に収まるので、この分岐を拾わない。
+- **`X-RateLimit-Reset` が NaN のとき**: `PollScheduleTests.waitsUntilTheRateLimitResets` に `.nan` の行を足す。`isFinite` の分岐を外すと `Int(nan)` で落ちる不具合を拾う。`1e300` の行は `isFinite` を外しても上限に収まるので、これを拾わない。逆に `.nan` は有限の分岐を通らないので、先に `Int` に直す不具合は `1e300` の行が拾う（code-review の指摘で、差し替えではなく足す形にした）。
 
 ### D5. fake を本物に合わせる（T5、A5）
 

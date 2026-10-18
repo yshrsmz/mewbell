@@ -8,7 +8,7 @@
 
 ## 1. Polling: 取得と間隔
 
-- [x] 1.1 `PollingTests.swift`: `waitsForThePollInterval` と `sendsIfModifiedSinceFromTheSecondFetch` を消し、backsOff の 2 本をパラメタライズする。`waitsUntilTheRateLimitResets` の `1e300` の行を `.nan` に差し替え、`isFinite` の分岐を外すと落ちることを確かめる（D4）。
+- [x] 1.1 `PollingTests.swift`: `waitsForThePollInterval` と `sendsIfModifiedSinceFromTheSecondFetch` を消し、backsOff の 2 本をパラメタライズする。`waitsUntilTheRateLimitResets` に `.nan` の行を足し（`1e300` の行は残す）、`isFinite` の分岐を外すと落ちることを確かめる（D4）。
 - [x] 1.2 `ThreadListMergeTests` の空配列の 2 本を消す（ファイルは残す）。
 - [x] 1.3 `ConditionalFetchTests.swift`: `replacesTheListWithAnUnconditional200`、`keepsThreadsMarkedAllReadOutOfTheMergedList`、`fetchedAgain: false` の引数、`NotificationStoreConditionalFetchTests` を消す。`ifModifiedSince == [nil, "LM-1"]` の確認を `MarkAllReadPollingTests.keepsTheThreadsOutOfAFetchThatEndsWhileThePutIsInFlight` に移す。
 - [x] 1.4 `RefreshNowTests` の rateLimited の 2 本をパラメタライズする。
@@ -47,4 +47,4 @@
 ## 7. レビュー
 
 - [x] 7.1 別コンテキストの opus サブエージェントで `simplify` を実行する。変更を確かめてから取り込む。
-- [ ] 7.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。
+- [x] 7.2 別コンテキストの opus サブエージェントで `code-review` を effort medium で実行する。指摘ごとに直すか直さないかを決め、直さないものは理由を PR 本文に書く。

@@ -23,7 +23,7 @@
 - fake を 1 つ直す: `FakeUserNotificationCenter.removeDelivered` が、本物の `LiveUserNotificationCenter` と同じく空の配列を無視するようにする（T5）。
 - 確認の穴を埋める（ユーザーと決めた）:
   - 複数のアカウントが 1 つの `GitHubAPIClient` を共有するときに、書き込みのリクエストにそのアカウントのトークンが付くことを、store のテストで確かめる（Gitify #2176 の取り違え）。
-  - `X-RateLimit-Reset` が NaN のときに落ちないことを確かめる行を足す（`1e300` の行を差し替える）。
+  - `X-RateLimit-Reset` が NaN のときに落ちないことを確かめる行を足す。
 - 本体のコードは変えない。
 
 削る量は約 600 行の見込み。
