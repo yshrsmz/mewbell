@@ -5,17 +5,6 @@ import Testing
 @testable import Mewbell
 
 struct AccountTests {
-    @Test(arguments: [
-        ("github.com", HostKind.gitHubDotCom),
-        ("GitHub.com", .gitHubDotCom),
-        ("acme.ghe.com", .gheCloud),
-        ("github.example.com", .enterpriseServer),
-        ("ghe.com", .enterpriseServer),
-    ])
-    func classifiesHosts(_ host: String, _ kind: HostKind) {
-        #expect(HostKind(host: host) == kind)
-    }
-
     @Test func lowercasesTheHostInTheID() {
         #expect(AccountID(host: "GHE.Example.com", user: "Dave").description == "ghe.example.com/Dave")
     }

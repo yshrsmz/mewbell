@@ -8,19 +8,19 @@
 
 ## 1. GitHubAPI: 共有の取得の分岐（security.md のオリジン検査・ID の検証・リダイレクトの拒否を含む）
 
-- [ ] 1.1 `ThreadDetailsRequestTests`（本体・`+Release`・`+Actions`）を D2 のとおりに削除・統合・縮小する。`Authorization` の確認 3 か所も削る。次のものは残す。
+- [x] 1.1 `ThreadDetailsRequestTests`（本体・`+Release`・`+Actions`）を D2 のとおりに削除・統合・縮小する。`Authorization` の確認 3 か所も削る。次のものは残す。
   - `fetchesTheTag`
   - `takesTheOnlyWaitingRunTheUserCanApprove`
   - `findsNoWaitingRun` の `[true, true]` の行
 
   固定データ `release()` の `htmlURL` の既定値を攻撃者のホストにする。`escapesTheBranch` に `;` の行を、`treatsAMissingIssueAsUnavailable` に 403 を足す。
-- [ ] 1.2 `URLQueryValueTests.swift` を消す。1.1 で `;` の行を足した後に行う。
-- [ ] 1.3 `MarkThreadReadTests`（`classifiesTheStatus`、`ThreadIDTests`）を縮小し、`Retry-After: soon` の行を `GitHubAPIClientTests.classifiesStatusCodes` に移す。
+- [x] 1.2 `URLQueryValueTests.swift` を消す。1.1 で `;` の行を足した後に行う。
+- [x] 1.3 `MarkThreadReadTests`（`classifiesTheStatus`、`ThreadIDTests`）を縮小し、`Retry-After: soon` の行を `GitHubAPIClientTests.classifiesStatusCodes` に移す。
 
 ## 2. GitHubAPI: モデルと文言
 
-- [ ] 2.1 `CheckSuiteTitleTests`、`GitHubAPIModelTests`（`NotificationThreadTests`、`LinkHeaderTests`）、`ThreadEventResolverTests` を D2 のとおりに縮小・削除する。
-- [ ] 2.2 `APIEndpointsTests.derivesBaseURLs` に `ghe.com` の行を足してから、`AccountTests.classifiesHosts` を消す。
+- [x] 2.1 `CheckSuiteTitleTests`、`GitHubAPIModelTests`（`NotificationThreadTests`、`LinkHeaderTests`）、`ThreadEventResolverTests` を D2 のとおりに縮小・削除する。
+- [x] 2.2 `APIEndpointsTests.derivesBaseURLs` に `ghe.com` の行を足してから、`AccountTests.classifiesHosts` を消す。
 
 ## 3. gh・アカウント・設定・App
 

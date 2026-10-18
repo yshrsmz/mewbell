@@ -146,11 +146,8 @@ struct ThreadEventResolverTests {
         #expect(event == ThreadEvent(kind: kind, actor: "bob"))
     }
 
-    @Test(arguments: [
-        ("reopened", ThreadEvent.Kind.reopened), ("ready_for_review", .readyForReview),
-        ("convert_to_draft", .convertedToDraft), ("review_requested", .reviewRequested), ("assigned", .assigned),
-        ("head_ref_force_pushed", .forcePushed),
-    ])
+    /// イベント名と種類の対応は 1 つの表なので、名前と種類の名前が食い違うものだけを並べる
+    @Test(arguments: [("convert_to_draft", ThreadEvent.Kind.convertedToDraft), ("head_ref_force_pushed", .forcePushed)])
     func actorEvents(_ name: String, _ kind: ThreadEvent.Kind) throws {
         let event = try resolve(
             created: "2026-10-08T10:00:00Z", updated: "2026-10-08T12:00:00Z",
@@ -190,13 +187,6 @@ struct ThreadEventResolverTests {
                 TimelineJSON.event("closed", at: "2026-10-08T11:59:50Z", actor: "alice"),
             ])
         #expect(event == ThreadEvent(kind: .closed, actor: "alice"))
-    }
-
-    @Test func doesNotKeepCommentBodies() throws {
-        let items = try #require(
-            TimelineItem.decodePage(
-                from: TimelineJSON.page([TimelineJSON.commented(at: "2026-10-08T12:00:00Z", by: "bob")])))
-        #expect(!String(describing: items).contains("hello"))
     }
 
     @Test func skipsMalformedItemsAndRejectsNonArrays() throws {

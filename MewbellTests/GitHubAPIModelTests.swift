@@ -9,6 +9,7 @@ struct APIEndpointsTests {
         ("GitHub.com", "https://api.github.com", "https://github.com"),
         ("acme.ghe.com", "https://api.acme.ghe.com", "https://acme.ghe.com"),
         ("github.example.com", "https://github.example.com/api/v3", "https://github.example.com"),
+        ("ghe.com", "https://ghe.com/api/v3", "https://ghe.com"),
     ])
     func derivesBaseURLs(_ host: String, _ api: String, _ web: String) throws {
         let endpoints = try #require(APIEndpoints(host: host))
@@ -82,18 +83,10 @@ struct NotificationThreadTests {
         #expect(thread.detailsSubject == .number("42"))
     }
 
-    @Test(arguments: [
-        ("WorkflowRun", SubjectKind.workflowRun), ("CheckSuite", .checkSuite), ("CheckRun", .other("CheckRun")),
-    ])
-    func readsTheKind(_ type: String, _ kind: SubjectKind) throws {
-        let threads = try #require(try decode([Self.thread(subjectURL: nil, type: type)]))
-        #expect(threads.first?.kind == kind)
-    }
-
-    @Test func acceptsANullSubjectURL() throws {
-        let threads = try #require(try decode([Self.thread(subjectURL: nil)]))
-        #expect(threads.count == 1)
-        #expect(threads.first?.subjectURL == nil)
+    /// 知っている種類は、その種類のスレッドを扱うテスト（`ThreadDetailsRequestTests` など）が decode を通して確かめる
+    @Test func keepsAnUnknownKind() throws {
+        let threads = try #require(try decode([Self.thread(subjectURL: nil, type: "CheckRun")]))
+        #expect(threads.first?.kind == .other("CheckRun"))
     }
 
     @Test func skipsMalformedThreadsOnly() throws {
@@ -144,11 +137,5 @@ struct LinkHeaderTests {
         #expect(
             LinkHeader.lastURL(in: header)?.absoluteString
                 == "https://api.github.com/repositories/1/issues/7/timeline?page=5")
-        #expect(LinkHeader.lastURL(in: #"<https://x.test/9>; rel="last""#)?.absoluteString == "https://x.test/9")
-    }
-
-    @Test func returnsNilWithoutALastLink() {
-        #expect(LinkHeader.lastURL(in: #"<https://x.test/2>; rel="next""#) == nil)
-        #expect(LinkHeader.lastURL(in: nil) == nil)
     }
 }

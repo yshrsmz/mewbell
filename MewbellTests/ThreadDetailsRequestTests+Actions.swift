@@ -95,16 +95,6 @@ extension ThreadDetailsRequestTests {
                 "https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=6",
                 "https://api.github.com/repos/octo/app/actions/runs/38692691414/pending_deployments",
             ])
-        #expect(transport.requests.first?.value(forHTTPHeaderField: "Authorization") == "Bearer test-token-alice")
-    }
-
-    @Test func buildsTheWaitingRunsURLOnGHES() async throws {
-        let (thread, endpoints) = try approvalThread(host: "ghe.example.com", repository: "team/svc")
-        let transport = transport(list: Self.waiting(["1"])) { _ in Self.pending(canApprove: true) }
-        _ = await fetch(thread, endpoints, transport)
-        #expect(
-            transport.requests.first?.url?.absoluteString
-                == "https://ghe.example.com/api/v3/repos/team/svc/actions/runs?status=waiting&per_page=6")
     }
 
     @Test func takesTheOnlyRunTheUserCanApprove() async throws {
@@ -116,16 +106,6 @@ extension ThreadDetailsRequestTests {
                 "https://api.github.com/repos/octo/app/actions/runs/101/pending_deployments",
                 "https://api.github.com/repos/octo/app/actions/runs/102/pending_deployments",
             ])
-    }
-
-    /// 承認できる run が複数あるときは、承認待ちになった時刻が通知（12:00）に最も近いものにする。
-    @Test func takesTheApprovableRunClosestToTheNotification() async throws {
-        let (thread, endpoints) = try approvalThread()
-        let list = Self.runs([
-            Run("101", "Deploy", "2026-10-08T11:50:30Z"), Run("102", "Deploy", "2026-10-08T12:01:00Z"),
-        ])
-        let both = transport(list: list) { _ in Self.pending(canApprove: true) }
-        #expect(await fetch(thread, endpoints, both) == Self.found("102"))
     }
 
     /// 承認できても通知（12:00）から 10 分より離れて待ち始めた run は選ばない（通知の run が承認された後に待ち始めた
@@ -159,8 +139,6 @@ extension ThreadDetailsRequestTests {
         ([String](), Int?.none, [Bool]()),
         (["103"], nil, [false]),
         (["101", "102"], nil, [true, true]),
-        (["101", "102"], nil, [false, false]),
-        (["101", "102", "103", "104", "105", "106"], nil, []),
         (["101"], 8, []),
     ])
     func findsNoWaitingRun(_ ids: [String], _ totalCount: Int?, _ approvable: [Bool]) async throws {
@@ -191,15 +169,6 @@ extension ThreadDetailsRequestTests {
                 "https://api.github.com/repos/octo/app/actions/runs?status=waiting&per_page=6",
                 "https://api.github.com/repos/octo/app/actions/runs?created=%3C%3D2026-10-08T12:00:00Z&per_page=30",
             ])
-    }
-
-    @Test func findsNoRunWhenTwoRunsSpanTheNotification() async throws {
-        let (thread, endpoints) = try approvalThread()
-        let created = Self.created([
-            ("1", ("2026-10-08T11:50:00Z", "2026-10-08T12:10:00Z")),
-            ("2", ("2026-10-08T11:55:00Z", "2026-10-08T12:01:00Z")),
-        ])
-        #expect(await fetch(thread, endpoints, transport(list: Self.waiting([]), created: created)) == .unavailable)
     }
 
     /// 通知の前に作られた run の一覧を取るまでに承認を待ち始めた run は、通知の時刻に動いていても数えない。
@@ -245,24 +214,15 @@ extension ThreadDetailsRequestTests {
         let decided = transport(list: Self.waiting(["1"]), created: created) { _ in Self.pending(canApprove: true) }
         #expect(await fetch(thread, endpoints, decided) == Self.found("1"))
         #expect(decided.requests.count == 2)
-        for (response, result) in [
-            (HTTPResponse(statusCode: 502), ThreadDetailsFetchResult.failed(.unexpectedStatus(502))),
-            (HTTPResponse(statusCode: 401), .unauthorized),
-            (FakeHTTPTransport.secondaryRateLimit(), .rateLimited(retryAt: now)),
-        ] {
-            let failing = transport(list: response, created: created)
-            #expect(await fetch(thread, endpoints, failing) == result)
-            #expect(failing.requests.count == 1)
-        }
+        let failing = transport(list: FakeHTTPTransport.secondaryRateLimit(), created: created)
+        #expect(await fetch(thread, endpoints, failing) == .rateLimited(retryAt: now))
+        #expect(failing.requests.count == 1)
     }
 
-    /// 1〜20 桁の数字でない ID は受け付けない（`Int64` に入らない 21 桁は、形の崩れたボディになる）
+    /// 1〜20 桁の数字でない ID は受け付けない
     @Test func rejectsInvalidRunIDs() async throws {
         let (thread, endpoints) = try approvalThread()
         #expect(await fetch(thread, endpoints, transport(list: Self.waiting(["-5"]))) == .unavailable)
-        #expect(
-            await fetch(thread, endpoints, transport(list: Self.waiting(["123456789012345678901"])))
-                == .failed(.malformedBody))
     }
 
     @Test func stopsAtAFailedPendingDeploymentsRequest() async throws {
@@ -270,23 +230,18 @@ extension ThreadDetailsRequestTests {
         let failing = transport(list: Self.waiting(["101", "102"])) { _ in HTTPResponse(statusCode: 502) }
         #expect(await fetch(thread, endpoints, failing) == .failed(.unexpectedStatus(502)))
         #expect(failing.requests.count == 2)
-        let limited = transport(list: Self.waiting(["101", "102"])) { _ in FakeHTTPTransport.secondaryRateLimit() }
-        #expect(await fetch(thread, endpoints, limited) == .rateLimited(retryAt: now))
     }
 
-    @Test(arguments: [404, 403, 422])
-    func findsNoRunWhenTheRunsCannotBeRead(_ status: Int) async throws {
+    /// 共通の取得の失敗は Issue の経路で確かめる
+    @Test func findsNoRunWhenTheRunsCannotBeRead() async throws {
         let (thread, endpoints) = try approvalThread()
-        #expect(await fetch(thread, endpoints, transport(list: HTTPResponse(statusCode: status))) == .unavailable)
+        #expect(await fetch(thread, endpoints, transport(list: HTTPResponse(statusCode: 404))) == .unavailable)
     }
 
-    @Test func failsOnUnauthorizedMalformedAndRedirectedLists() async throws {
+    @Test func failsOnAMalformedList() async throws {
         let (thread, endpoints) = try approvalThread()
-        #expect(await fetch(thread, endpoints, transport(list: HTTPResponse(statusCode: 401))) == .unauthorized)
         let malformed = HTTPResponse(statusCode: 200, body: Data(#"{"total_count": 1}"#.utf8))
         #expect(await fetch(thread, endpoints, transport(list: malformed)) == .failed(.malformedBody))
-        let redirect = HTTPResponse(statusCode: 302, headers: ["Location": "https://evil.example.com/"])
-        #expect(await fetch(thread, endpoints, transport(list: redirect)) == .failed(.redirect))
     }
 
     // MARK: CheckSuite
@@ -308,6 +263,7 @@ extension ThreadDetailsRequestTests {
     @Test(arguments: [
         ("feat/a+b", "branch=feat/a%2Bb"),
         ("x&per_page=1", "branch=x%26per_page%3D1"),
+        ("feat;x", "branch=feat%3Bx"),
     ])
     func escapesTheBranch(_ branch: String, _ query: String) async throws {
         let (thread, endpoints) = try checkSuiteThread(
@@ -319,15 +275,10 @@ extension ThreadDetailsRequestTests {
                 == "https://api.github.com/repos/octo/app/actions/runs?\(query)&per_page=30")
     }
 
-    @Test func findsNoRunOfTheWorkflowAndDoesNotKeepTheHTMLURL() async throws {
+    @Test func findsNoRunOfTheWorkflow() async throws {
         let (thread, endpoints) = try checkSuiteThread()
         let list = Self.runs([Run("200", "CI", "2026-10-08T11:30:00Z"), Run("202", "Release", "2026-10-08T12:00:00Z")])
         #expect(await fetch(thread, endpoints, transport(list: list)) == .unavailable)
-        // 選んだ run の ID だけが結果に入り、`html_url` は残らない
-        let found = Self.runs([Run("201", "CI", "2026-10-08T12:00:00Z")])
-        let result = await fetch(thread, endpoints, transport(list: found))
-        #expect(result == Self.found("201"))
-        #expect(!String(describing: result).contains("evil.example.com"))
     }
 
     /// 件名の結果と違う結果の run は、時刻が近くても選ばない。
@@ -343,10 +294,5 @@ extension ThreadDetailsRequestTests {
             Run("304", "CI", "2026-10-08T11:59:00Z", "startup_failure"),
         ])
         #expect(await fetch(startup, endpoints, transport(list: startupList)) == Self.found("304"))
-    }
-
-    @Test func findsNoRunWhenTheBranchRunsCannotBeRead() async throws {
-        let (thread, endpoints) = try checkSuiteThread()
-        #expect(await fetch(thread, endpoints, transport(list: HTTPResponse(statusCode: 404))) == .unavailable)
     }
 }
