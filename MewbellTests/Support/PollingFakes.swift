@@ -121,14 +121,14 @@ final class PollerFixture: Sendable {
     let poller: AccountPoller
 
     /// `actionSpacing` を渡さなければ、まとめた操作のリクエストの間の待ちは長さを `spacings` に記録してすぐ返す。
-    init(detailsTimeout: Duration = .seconds(20), actionSpacing: AccountPoller.Sleep? = nil) throws {
+    init(actionSpacing: AccountPoller.Sleep? = nil) throws {
         let updates = updates
         let clock = clock
         let spacings = spacings
         poller = AccountPoller(
             accountID: Self.alice, endpoints: try #require(APIEndpoints(host: "github.com")),
             client: GitHubAPIClient(transport: transport, now: { clock.value }), tokens: tokens,
-            detailsTimeout: detailsTimeout, sleep: sleeper.sleep,
+            sleep: sleeper.sleep,
             actionSpacing: actionSpacing ?? { duration in spacings.withLock { $0.append(duration) } },
             now: { clock.value },
             onUpdate: { state in updates.withLock { $0.append(state) } })

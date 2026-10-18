@@ -3,30 +3,6 @@ import Testing
 
 @testable import Mewbell
 
-/// `participating` を付けた取得。
-struct ParticipatingPollerTests {
-    private let transport = FakeHTTPTransport()
-    private let sleeper = ManualSleeper()
-
-    private func poller(host: String, participating: Bool) throws -> AccountPoller {
-        let id = AccountID(host: host, user: "dave")
-        return AccountPoller(
-            accountID: id, endpoints: try #require(APIEndpoints(host: host)),
-            client: GitHubAPIClient(transport: transport), tokens: FakeTokenProvider([id: "test-token-dave"]),
-            participating: participating, sleep: sleeper.sleep, onUpdate: { _ in })
-    }
-
-    @Test func sendsParticipatingTrue() async throws {
-        let poller = try poller(host: "acme.ghe.com", participating: true)
-        poller.start()
-        await waitUntil { !self.transport.requests.isEmpty }
-        poller.stop()
-        #expect(
-            transport.requests.first?.url?.absoluteString
-                == "https://api.acme.ghe.com/notifications?all=false&participating=true&per_page=50")
-    }
-}
-
 /// `ThreadNotifying` への呼び出しを記録する。
 @MainActor
 final class RecordingNotifier: ThreadNotifying {
@@ -187,26 +163,6 @@ struct NotificationStoreSettingsTests {
         #expect(first.url?.query?.contains("participating=true") == true)
         #expect(tokens.refreshCount.value == 0)
         #expect(store.feeds[bob]?.threads.count == 3)
-        store.stopAll()
-    }
-
-    @Test func restartingDropsTheNoticeAndTheDiagnostics() async throws {
-        let store = await loadedStore()
-        // このフェイクは PATCH にも 200 を返すので、既読化は失敗になる
-        let thread = try #require(store.feeds[alice]?.threads.first)
-        store.markRead(thread, in: alice)
-        await waitUntil { MainActor.assumeIsolated { store.feeds[alice]?.actionFailure != nil } }
-        #expect(store.feeds[alice]?.diagnostics.lastActionFailure?.kind == .httpStatus(200))
-        #expect(store.feeds[alice]?.diagnostics.pollInterval != nil)
-        settings.setParticipatingOnly(true, for: alice)
-        store.restart(alice)
-        #expect(store.feeds[alice] == .loading)
-        await advance(until: { store.feeds[alice]?.threads.map(\.id) == ["4", "5"] })
-        let feed = store.feeds[alice]
-        #expect(feed?.actionFailure == nil)
-        #expect(feed?.isTruncated == false)
-        #expect(feed?.diagnostics.lastActionFailure == nil)
-        #expect(feed?.diagnostics.lastFetchFailure == nil)
         store.stopAll()
     }
 

@@ -1,5 +1,4 @@
 import Foundation
-import Observation
 import Testing
 
 @testable import Mewbell
@@ -72,28 +71,4 @@ struct ListExpansionTests {
         #expect(!newBobState.isCollapsed)
         #expect(!newBobState.isRepositoryCollapsed(app))
     }
-
-    /// 各区画は自分のアカウントの状態だけを読むので、ほかのアカウントの開閉では描き直されない。
-    @Test func observesOnlyTheAccountThatChanged() {
-        let expansion = ListExpansion()
-        let aliceState = expansion.state(for: alice)
-        let bobState = expansion.state(for: bob)
-        let changes = ChangeFlag()
-        withObservationTracking {
-            _ = aliceState.isCollapsed
-        } onChange: {
-            MainActor.assumeIsolated { changes.changed = true }
-        }
-
-        bobState.toggle()
-        #expect(!changes.changed)
-
-        aliceState.toggle()
-        #expect(changes.changed)
-    }
-}
-
-@MainActor
-private final class ChangeFlag {
-    var changed = false
 }

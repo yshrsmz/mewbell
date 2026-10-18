@@ -17,22 +17,16 @@ struct SystemNotifierSettingsTests {
     private let center = FakeUserNotificationCenter()
     private let dave = AccountID(host: "acme.ghe.com", user: "dave")
 
+    /// 通知のオフはアカウントごとに、呼ぶたびに読み直す。オフの間の新着はためず、オンに戻しても出さない
     @Test func skipsPostingForAnAccountWithNotificationsOff() async throws {
-        let notifier = SystemNotifier(center: center, notifies: { $0 != alice })
-        notifier.threadsChanged(for: alice, posted: [try thread("2")], retracted: [])
-        notifier.threadsChanged(for: dave, posted: [try thread("3")], retracted: [])
-        await notifier.waitForPendingWork()
-        #expect(center.added.value.map(\.identifier) == ["acme.ghe.com/dave/3"])
-    }
-
-    @Test func postsAgainWhenTurnedBackOn() async throws {
-        let enabled = LockedValue(false)
-        let notifier = SystemNotifier(center: center, notifies: { _ in enabled.value })
+        let aliceEnabled = LockedValue(false)
+        let notifier = SystemNotifier(center: center, notifies: { $0 != alice || aliceEnabled.value })
         notifier.threadsChanged(for: alice, posted: (2...6).compactMap { try? thread(String($0)) }, retracted: [])
-        enabled.value = true
+        notifier.threadsChanged(for: dave, posted: [try thread("3")], retracted: [])
+        aliceEnabled.value = true
         notifier.threadsChanged(for: alice, posted: [try thread("789")], retracted: [])
         await notifier.waitForPendingWork()
-        #expect(center.added.value.map(\.identifier) == ["github.com/alice/789"])
+        #expect(center.added.value.map(\.identifier) == ["acme.ghe.com/dave/3", "github.com/alice/789"])
     }
 
     @Test func stillRetractsGoneThreadsWhileOff() async throws {

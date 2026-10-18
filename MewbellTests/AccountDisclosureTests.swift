@@ -21,38 +21,29 @@ struct AccountDisclosureTests {
         return FeedState(phase: phase, threads: threads)
     }
 
-    /// トークンの取り直し中や、取得の失敗の後の再試行中も、それまでの一覧を畳んだままにする
-    @Test(arguments: [
-        (TokenState.ready, loaded),
-        (.fetching, loaded),
-        (.ready, .retrying(nextAttempt: Date(timeIntervalSince1970: 0), rateLimited: false)),
-    ])
-    func collapsesWhileShowingThreads(_ tokenState: TokenState, _ phase: FeedPhase) throws {
-        let disclosure = AccountDisclosure(
-            tokenState: tokenState, feed: try feed(phase, threads: 3), isStoredCollapsed: true)
-        #expect(disclosure.showsThreads)
-        #expect(disclosure.isCollapsed)
-    }
-
+    /// 一覧を出しているときだけ、覚えている開閉で畳む。トークンの取り直し中や、取得の失敗の後の再試行中も一覧を出す。
     /// トークンを取れない、最初の取得の前、止まった、取得中（参加のみの切り替えや再開の後）は、畳むものが無い
     @Test(arguments: [
-        (TokenState.unavailable, FeedPhase?.some(loaded), 3),
-        (.ready, nil, 0),
-        (.ready, .unauthorized, 0),
-        (.ready, .scopeInsufficient, 0),
-        (.ready, .loading, 0),
+        (
+            TokenState.fetching,
+            FeedPhase?.some(.retrying(nextAttempt: Date(timeIntervalSince1970: 0), rateLimited: false)),
+            3, false, true
+        ),
+        (.ready, loaded, 3, true, true),
+        (.unavailable, loaded, 3, true, false),
+        (.ready, nil, 0, true, false),
+        (.ready, .unauthorized, 0, true, false),
+        (.ready, .scopeInsufficient, 0, true, false),
+        (.ready, .loading, 0, true, false),
     ])
-    func doesNotCollapseWithoutThreadsShown(_ tokenState: TokenState, _ phase: FeedPhase?, _ count: Int) throws {
+    func collapsesOnlyWhileShowingThreads(
+        _ tokenState: TokenState, _ phase: FeedPhase?, _ count: Int, _ isStoredCollapsed: Bool, _ showsThreads: Bool
+    ) throws {
         let disclosure = AccountDisclosure(
-            tokenState: tokenState, feed: try phase.map { try feed($0, threads: count) }, isStoredCollapsed: true)
-        #expect(!disclosure.showsThreads)
-        #expect(!disclosure.isCollapsed)
-    }
-
-    @Test func staysExpandedWhenNotStoredCollapsed() throws {
-        let disclosure = AccountDisclosure(tokenState: .ready, feed: try feed(threads: 3), isStoredCollapsed: false)
-        #expect(disclosure.showsThreads)
-        #expect(!disclosure.isCollapsed)
+            tokenState: tokenState, feed: try phase.map { try feed($0, threads: count) },
+            isStoredCollapsed: isStoredCollapsed)
+        #expect(disclosure.showsThreads == showsThreads)
+        #expect(disclosure.isCollapsed == (showsThreads && isStoredCollapsed))
     }
 }
 

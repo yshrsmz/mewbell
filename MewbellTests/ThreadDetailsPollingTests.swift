@@ -84,7 +84,6 @@ struct ThreadDetailsPollingTests {
         #expect(first.threads.allSatisfy { $0.details == nil })
         #expect(fixture.last?.threads.count == 12)
         #expect(fixture.last?.threads.allSatisfy { $0.details == Self.commented } == true)
-        #expect(detailsRequests(fixture).count == 24)
         fixture.poller.stop()
     }
 
@@ -207,23 +206,6 @@ struct ThreadDetailsPollingTests {
             !fixture.updates.value.contains { state in
                 state.threads.map(\.id) == ["1", "2"] || state.threads.map(\.id) == ["2", "1"]
             })
-        fixture.poller.stop()
-    }
-
-    @Test func stopsWaitingAtTheTimeLimit() async throws {
-        let fixture = try PollerFixture(detailsTimeout: .milliseconds(100))
-        respond(fixture, notifications: [Self.list([1]), Self.list([1, 2])])
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
-        fixture.transport.pausedWhere.value = { Self.isDetails($0) }
-        fixture.advance(by: 60)
-        await waitUntil { firstUpdate(containing: "2", fixture) != nil }
-        let published = try #require(firstUpdate(containing: "2", fixture))
-        #expect(published.threads.first { $0.id == "2" }?.details == nil)
-        fixture.transport.pausedWhere.value = nil
-        // 打ち切った分は一時的な失敗として扱い、同じ回には取り直さない
-        await fixture.sleeper.waitForSleeps(2)
-        #expect(fixture.last?.threads.first { $0.id == "2" }?.details == nil)
         fixture.poller.stop()
     }
 

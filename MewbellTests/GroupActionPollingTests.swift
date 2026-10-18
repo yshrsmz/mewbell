@@ -102,40 +102,6 @@ struct GroupActionPollingTests {
         fixture.poller.stop()
     }
 
-    @Test func stopsSendingWhenThePollerIsStoppedMidway() async {
-        fixture.route(gets: [PollerFixture.ok(1...4)], ["DELETE": HTTPResponse(statusCode: 500)])
-        await startAndLoad()
-        fixture.transport.pausedWhere.value = Self.isThread("1")
-        let done = Task {
-            await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2"), .done(threadID: "3")])
-        }
-        await waitUntil { self.requests("DELETE").count == 1 }
-        // アカウントの無効化・削除・終了で止めたら、残りは送らず、止まる前の失敗も知らせない
-        fixture.poller.stop()
-        fixture.transport.pausedWhere.value = nil
-        await done.value
-        #expect(requests("DELETE").count == 1)
-        #expect(fixture.last?.actionFailure == nil)
-        #expect(fixture.last?.diagnostics.lastActionFailure == nil)
-    }
-
-    @Test func stopsSendingWhenTheTokenIsDiscardedMidway() async {
-        fixture.route(gets: [PollerFixture.ok(1...4)])
-        await startAndLoad()
-        fixture.transport.pausedWhere.value = Self.isThread("1")
-        let done = Task {
-            await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2"), .done(threadID: "3")])
-        }
-        await waitUntil { self.requests("DELETE").count == 1 }
-        // 送っている間に捨てたトークンで、残りを送らない
-        await fixture.tokens.discardToken(for: PollerFixture.alice)
-        fixture.transport.pausedWhere.value = nil
-        await done.value
-        #expect(requests("DELETE").count == 1)
-        #expect(fixture.last?.actionFailure == ActionFailure(action: .done, kind: .noToken, occurredAt: now))
-        fixture.poller.stop()
-    }
-
     @Test func showsAThreadThatArrivesWhileTheRequestsAreInFlight() async {
         fixture.route(gets: [PollerFixture.ok(1...2), PollerFixture.ok(1...3)])
         await startAndLoad()
@@ -176,15 +142,6 @@ struct GroupActionPollingTests {
         fixture.poller.stop()
     }
 
-    @Test func doesNotWaitForASingleThread() async {
-        fixture.route(gets: [PollerFixture.ok(1...2)])
-        await startAndLoad()
-        await fixture.poller.perform([.read(threadID: "1")])
-        #expect(requests("PATCH").count == 1)
-        #expect(fixture.spacings.value.isEmpty)
-        fixture.poller.stop()
-    }
-
     @Test func sendsNoMoreAfterTheWaitWhenThePollerIsStoppedDuringIt() async throws {
         let (fixture, spacer) = try await Self.loadedWithManualSpacing(["DELETE": HTTPResponse(statusCode: 500)])
         let done = Task { await fixture.poller.perform([.done(threadID: "1"), .done(threadID: "2")]) }
@@ -195,6 +152,7 @@ struct GroupActionPollingTests {
         await done.value
         #expect(fixture.requests("DELETE").count == 1)
         #expect(fixture.last?.actionFailure == nil)
+        #expect(fixture.last?.diagnostics.lastActionFailure == nil)
     }
 
     @Test func sendsNoMoreAfterTheWaitWhenTheTokenIsDiscardedDuringIt() async throws {

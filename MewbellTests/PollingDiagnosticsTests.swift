@@ -200,16 +200,6 @@ struct ActionFailurePollingTests {
         fixture.poller.stop()
     }
 
-    @Test func recordsAReadThatWasNotSentForLackOfAToken() async {
-        fixture.route(gets: [PollerFixture.ok(1...3)])
-        await startAndLoad()
-        await fixture.tokens.discardToken(for: PollerFixture.alice)
-        await fixture.poller.perform([.read(threadID: "2")])
-        #expect(fixture.requests("PATCH").isEmpty)
-        #expect(fixture.last?.actionFailure?.kind == .noToken)
-        fixture.poller.stop()
-    }
-
     @Test func neitherSendsNorRecordsWhileStopped() async {
         fixture.route(gets: [PollerFixture.ok(1...3, scopes: "gist")], [:])
         fixture.poller.start()
@@ -220,17 +210,6 @@ struct ActionFailurePollingTests {
         #expect(fixture.transport.requests.allSatisfy { $0.httpMethod == "GET" })
         #expect(fixture.last?.actionFailure == nil)
         #expect(fixture.last?.diagnostics.lastActionFailure == nil)
-    }
-
-    @Test func doesNotRecordSuccesses() async {
-        fixture.route(gets: [PollerFixture.ok(1...3)])
-        await startAndLoad()
-        await fixture.poller.perform([.read(threadID: "1")])
-        await fixture.poller.perform([.done(threadID: "2")])
-        await fixture.poller.markAllRead(through: now)
-        #expect(fixture.last?.actionFailure == nil)
-        #expect(fixture.last?.diagnostics.lastActionFailure == nil)
-        fixture.poller.stop()
     }
 
     @Test func clearsTheNoticeWhenStopped() async {

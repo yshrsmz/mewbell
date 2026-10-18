@@ -18,11 +18,10 @@ struct ThreadIconTests {
         #expect(ThreadIcon(kind: .issue, state: .closedNotPlanned).label == "Issue, closed as not planned")
     }
 
-    @Test(arguments: [(SubjectKind.pullRequest, "Pull request"), (.issue, "Issue"), (.workflowRun, "Workflow run")])
-    func showsOnlyTheKindWithoutAState(_ kind: SubjectKind, _ name: String) {
-        let unknown = ThreadIcon(kind: kind, state: nil)
+    @Test func showsOnlyTheKindWithoutAState() {
+        let unknown = ThreadIcon(kind: .pullRequest, state: nil)
         #expect(unknown.color == nil)
-        #expect(unknown.label == name)
+        #expect(unknown.label == "Pull request")
     }
 
     /// 状態が分からなくても、記号で Pull request と Issue を見分けられる

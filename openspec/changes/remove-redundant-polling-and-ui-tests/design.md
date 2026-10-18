@@ -74,14 +74,14 @@ Polling:
 | `ActionFailurePollingTests.recordsAReadThatWasNotSentForLackOfAToken` | 削除 | T4 | `GroupActionPollingTests.sendsNothingWithoutAToken` |
 | `ActionFailurePollingTests.doesNotRecordSuccesses` | 削除。`MarkReadPollingTests.removesTheThreadAndSendsTheRequest` と `MarkAllReadPollingTests.clearsTheListAndSendsThePut` に、操作の直後（取得を進める前）の `actionFailure == nil` と `diagnostics.lastActionFailure == nil` を足す | T4 | 足し先 |
 | `MarkReadPollingTests.bringsTheThreadBackWhenTheRequestFailed` | 削除 | T4 | `GroupActionPollingTests.stopsSendingAfterAnAuthErrorOrARateLimit`（Done）、`ThreadDetailsPollingTests.keepsDetailsOfThreadsHiddenForAWhile`（既読） |
-| `MarkReadPollingTests.removesTheThreadAndSendsTheRequest` の URL の確認、`MarkAllReadPollingTests.clearsTheListAndSendsThePut` の URL と `Authorization` の確認 | 確認を削る。`removesTheThreadAndSendsTheRequest` の `Authorization` の 1 行と、`last_read_at` の確認は残す | T2 | API の層の `buildsThePatchRequest`・`buildsTheDeleteRequest`・`buildsThePutRequest`、`NotificationStoreActionTests` の DELETE の完全な URL |
+| `MarkReadPollingTests.removesTheThreadAndSendsTheRequest` の URL の確認、`MarkAllReadPollingTests.clearsTheListAndSendsThePut` の URL と `Authorization` の確認 | URL の確認を、送るメソッドだけの確認にする。`removesTheThreadAndSendsTheRequest` の `Authorization` の 1 行と、`last_read_at` の確認は残す | T2 | API の層の `buildsThePatchRequest`・`buildsTheDeleteRequest`・`buildsThePutRequest`、`NotificationStoreActionTests` の DELETE の完全な URL |
 | `GroupActionPollingTests.stopsSendingWhenThePollerIsStoppedMidway` | 削除。`diagnostics.lastActionFailure == nil` の確認を `sendsNoMoreAfterTheWaitWhenThePollerIsStoppedDuringIt` に移す | T4 | 移し先（確認を待ちの前に移す並べ替えまで拾う） |
 | `GroupActionPollingTests.stopsSendingWhenTheTokenIsDiscardedMidway` | 削除 | T4 | `sendsNoMoreAfterTheWaitWhenTheTokenIsDiscardedDuringIt` |
 | `GroupActionPollingTests.doesNotWaitForASingleThread` | 削除 | T4 | `waitsOneSecondAfterEachResultBeforeTheNextRequest`（1 件目の前に待たない、最後の後に待たない） |
 | `ThreadDetailsPollingTests+Release.swift`（`fetchesTheTagOfNewReleasesBeforePublishing`、`tagsTheFirstListAfterPublishing`）と `+Actions.swift`（`findsTheRunOfNewApprovalsBeforePublishing`） | ファイルごと削除 | T2 | 流れは `fetchesNewThreadsBeforePublishing` と `publishesTheFirstListWithoutWaiting`（ポーラーは種類で分岐しない）、種類ごとの対象は `ThreadDetailsSubjectTests.readsTheReleaseID` と `searchesTheRunOfActionsThreads`、リクエストは `ThreadDetailsRequestTests+Release.fetchesTheTag` と `+Actions.takesTheOnlyWaitingRunTheUserCanApprove`、探し直さないことは `doesNotRefetchUnchangedThreads` |
-| `ThreadDetailsPollingTests.stopsWaitingAtTheTimeLimit` | 削除 | T2・T6 | `ThreadDetailsFetcherTests.reportsTimedOutFetchesAsFailures`、`doesNotRetryAPrefetchFailureInTheSameCycle`。実時間の 100ms の待ちが無くなる |
+| `ThreadDetailsPollingTests.stopsWaitingAtTheTimeLimit` | 削除（`PollerFixture` の、使われなくなる `detailsTimeout` の引数も消す） | T2・T6 | `ThreadDetailsFetcherTests.reportsTimedOutFetchesAsFailures`、`doesNotRetryAPrefetchFailureInTheSameCycle`。実時間の 100ms の待ちが無くなる |
 | `ThreadDetailsPollingTests.publishesTheFirstListWithoutWaiting` の `detailsRequests == 24` | 1 行削除 | T3 | 1 件に 2 回というクライアントの手順の写し。同じテストの `allSatisfy { $0.details == … }`、`doesNotRefetchUnchangedThreads` |
-| `ThreadDetailsCacheTests.picksReleasesWithAnID` | 削除 | T2 | `picksPendingThreadsNewestFirst`（キャッシュは `detailsSubject != nil` しか見ない） |
+| `ThreadDetailsCacheTests.picksReleasesWithAnID` | 削除（テストの `thread` の、使われなくなる `kind` と `releaseID` の引数も消す） | T2 | `picksPendingThreadsNewestFirst`（キャッシュは `detailsSubject != nil` しか見ない） |
 | `ThreadDetailsCacheTests.pausesUntilTheRateLimitEnds` | 削除。`pausesAtLeastAMinuteOnRateLimits` に `retryAt` が勝つ側（`now + 600`）の引数を足す | T4 | 足し先（1 分の下限と `retryAt` の境界の両側） |
 
 store・通知:
@@ -94,14 +94,14 @@ store・通知:
 | `NotificationStoreOpenTests.dropsAPendingReadWhenTheAccountCannotBeUsed` の `.accounts([])` | 引数 2→1（`.unavailable` を残す） | T4 | `NotificationStoreSettingsTests.dropsPendingReadsOfADisabledAccount`（同じ「`active` に無い」の分岐） |
 | `NotificationStoreActionTests.marksAThreadDoneWithoutOpeningIt` と `marksAThreadReadWithoutOpeningIt` | パラメタライズで 2→1。通知センターの確認を外し、一覧、未読数、開かないこと、送るメソッドと URL、もう一方のメソッドを送らないことを残す | T2・T4 | 取り下げは `NotificationStoreNewThreadsTests.ignoresAThreadThatCameBackUnchangedAfterLeavingTheList` と `SystemNotifierTests.retractsThreadsMarkedDoneTogetherInOneCall` |
 | `NotificationStoreActionTests.marksTheThreadsOfARepositoryGroupDone` の通知センターの確認 | 確認を削る | T2 | `NotificationStoreNewThreadsTests.removesTheThreadsOfAGroupMarkedDoneTogether` |
-| `NotificationStoreActionTests.marksAllThreadsOfOneAccountDoneNewestFirst` の間隔と通知センターの確認 | 確認を削る（新しい順は残す）。`actionSpacing` の注入は `{ _ in }` のまま残す | T2 | `waitsOneSecondAfterEachResultBeforeTheNextRequest`、`removesTheThreadsOfAGroupMarkedDoneTogether` |
+| `NotificationStoreActionTests.marksAllThreadsOfOneAccountDoneNewestFirst` の間隔と通知センターの確認 | 確認を削る（新しい順は残す）。`actionSpacing` の注入は `{ _ in }` にして残す（記録する `spacings` は消す） | T2 | `waitsOneSecondAfterEachResultBeforeTheNextRequest`、`removesTheThreadsOfAGroupMarkedDoneTogether` |
 | `NotificationStoreActionTests.marksAllThreadsOfOneAccountRead` の `waitUntil` の直後の `#expect` | 1 行削除 | T1 | 直前の `waitUntil` と同じ条件 |
 | `NotificationStoreNewThreadsTests.staysQuietForTheBaseline` | 削除 | T4 | `staysQuietForTheFirstFetchAfterStoppingAll`（`stopAll` は追跡を最初に戻すだけで、同じ経路） |
 | `NotificationStoreNewThreadsTests.removesAllThreadsMarkedDoneTogether` | 削除（`removesTheThreadsOfAGroupMarkedDoneTogether` を残す） | T4 | 残す側。markAllDone がすべての ID を渡すことは `marksAllThreadsOfOneAccountDoneNewestFirst` の DELETE |
 | `NotificationStoreNewThreadsTests.treatsTheFirstFetchAfterARestartAsTheBaseline` | 削除 | T2 | `restartsWithTheNewParticipatingSetting` の `notifier.events.isEmpty` と `baselineSet`、`SystemNotifierTests.postsNothingForTheBaselineAndClearsStaleNotifications`（この組は、片方だけを消すと決めている） |
 | `NotificationTrackerTests.postsNothingForTheBaseline` | 削除 | T4 | `postsNewAndAdvancedThreadsOnly` |
 | `NotificationTrackerTests.startsOverAfterReset` | 削除 | T1 | 本番の `ThreadChangeDispatcher` は先に `hasBaseline` を見るので、`update` の「基準が無ければ基準にする」分岐を通らない。reset が効くことは `NotificationStoreNewThreadsTests.removesTheAccountWhenItStopsAndStartsOver` |
-| `ThreadNotificationContentTests.opensTheReleaseOfTheTag`、`opensTheWorkflowRun` | 削除 | T2 | 中身の URL は `ThreadWebURL.make` をそのまま呼ぶ。URL は `ThreadWebURLTests.opensTheReleaseOfTheTag` と `ActionsThreadWebURLTests.opensTheRunOfActionsThreads`、配線は `describesTheThread` |
+| `ThreadNotificationContentTests.opensTheWorkflowRun` | 削除（`opensTheReleaseOfTheTag` は、詳細の付いたスレッドを `ThreadWebURL.make` に渡す配線の代表として残す） | T2 | 中身の URL は `ThreadWebURL.make` をそのまま呼ぶ。URL は `ActionsThreadWebURLTests.opensTheRunOfActionsThreads` |
 | `ThreadOpenRequestTests.fallsBackToTheRepositoryPageWithoutAURL` | `replacesAnUnsafeURLWithTheRepositoryPage` の引数を `String?` にして nil を足し、統合する | T4 | 統合先。`rejectsAnUnsafeURLWithAnInvalidRepository` は結果が違う（nil）ので残す |
 | `SystemNotifierTests.doesNotRetractForNewThreadsAlone`、`doesNothingForNoThreads` | 削除（fake を直すことが前提。D5） | T5 | 直した fake では落ちようがない。post は `postsNewThreadsAndRetractsGoneOnes` |
 | `SystemNotifierTests.retractsAThreadMarkedRead` | 削除 | T4 | `retractsThreadsMarkedDoneTogetherInOneCall`（2 件を 1 回で取り下げ、ほかが残る） |
@@ -132,7 +132,7 @@ UI:
 - `ThreadListMergeTests` のファイルごとの削除: `ThreadListMerge.merge` は純粋な関数（A7）で、`replacesTheSameIDAddsNewOnesAndKeepsTheRest` が重ね方の正本になる。代わりとされた `ConditionalFetchTests` は上の層。
 - `PollScheduleTests.waitsUntilTheRateLimitResets` の `1e300` の行の削除: 「`Int` に直してから丸める」並べ替えを拾うのはこの行だけ。D4 で `.nan` に差し替える。
 - `FeedDiagnosticsTests` を `.network` と 422 だけにする縮小: `FailureKind` の init は値の対応表で、どの行も別々に間違えうる（T3）。代わりとされた各ポーラーのテストは上の層（T2）。
-- `NotificationStoreOpenTests` の統合を 3→1 より先へ進めること、`ThreadOpenRequestTests.rejectsAnUnsafeURLWithAnInvalidRepository` の統合: 結果が違う（nil）。`replacesAnUnsafeURLWithTheRepositoryPage` の 5 つの引数は、security.md の「ブラウザで開く URL」の攻撃の形（T4 の例外）。
+- `ThreadOpenRequestTests.rejectsAnUnsafeURLWithAnInvalidRepository` を `replacesAnUnsafeURLWithTheRepositoryPage` に統合すること: 結果が違う（nil とリポジトリのページ）。`replacesAnUnsafeURLWithTheRepositoryPage` の 5 つの引数は、security.md の「ブラウザで開く URL」の攻撃の形なので削らない（T4 の例外）。
 - `MenuBarIconTests.widensWithTheBadge` の削除: 99+ が 1 桁より広いことは、ほかのテストが拾わない（spec の「100 件以上は 99+」）。
 - `AccountDisclosureTests` の 9→5、`isReadyUnlessStopped` の 4→1: spec が条件を 1 つずつ挙げていて、どの値も別々に間違えうる（T3）。
 - `NotificationStoreOpenTests.passesFeedChangesToTheNotifier`: remove-redundant-tests で残すと決めた理由が今も当てはまる。

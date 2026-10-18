@@ -4,18 +4,13 @@ import Testing
 @testable import Mewbell
 
 struct PollScheduleTests {
-    @Test(arguments: [(Int?.some(120), 120), (10, 60), (nil, 60), (60, 60)])
-    func waitsForThePollInterval(_ interval: Int?, _ seconds: Int) {
-        #expect(PollSchedule.afterSuccess(pollInterval: interval) == .seconds(seconds))
-    }
-
     @Test func waitsUntilTheRateLimitResets() {
         let now = Date(timeIntervalSince1970: 1_000)
         #expect(PollSchedule.afterRateLimit(retryAt: now.addingTimeInterval(300), now: now) == .seconds(300))
         #expect(PollSchedule.afterRateLimit(retryAt: now.addingTimeInterval(10), now: now) == .seconds(60))
         #expect(PollSchedule.afterRateLimit(retryAt: now.addingTimeInterval(-100), now: now) == .seconds(60))
         #expect(PollSchedule.afterRateLimit(retryAt: now.addingTimeInterval(86_400), now: now) == .seconds(3600))
-        #expect(PollSchedule.afterRateLimit(retryAt: Date(timeIntervalSince1970: 1e300), now: now) == .seconds(3600))
+        #expect(PollSchedule.afterRateLimit(retryAt: Date(timeIntervalSince1970: .nan), now: now) == .seconds(3600))
     }
 
     @Test func backsOffUpToFifteenMinutes() {
@@ -31,46 +26,15 @@ struct AccountPollerTests {
         fixture = try PollerFixture()
     }
 
-    @Test func sendsIfModifiedSinceFromTheSecondFetch() async {
-        fixture.respond([PollerFixture.ok(1...3), PollerFixture.notModified])
-        fixture.poller.start()
-        await fixture.sleeper.waitForSleeps(1)
-        #expect(fixture.last?.phase == .loaded(updatedAt: PollerFixture.now))
-        #expect(fixture.last?.threads.count == 3)
-        fixture.sleeper.advance()
-        await fixture.sleeper.waitForSleeps(2)
-        #expect(fixture.ifModifiedSince == [nil, "LM-1"])
-        // 304 では一覧を変えない
-        #expect(fixture.last?.threads.count == 3)
-        #expect(fixture.sleeper.durations == [.seconds(60), .seconds(60)])
-        fixture.poller.stop()
-    }
-
-    @Test func backsOffAndKeepsTheThreadsWhileFailing() async {
-        fixture.respond([PollerFixture.ok(1...2)])
-        fixture.poller.start()
-        for count in 1...3 {
-            await fixture.sleeper.waitForSleeps(count)
-            fixture.sleeper.advance()
-        }
-        await fixture.sleeper.waitForSleeps(4)
-        #expect(fixture.sleeper.durations == [60, 60, 120, 240].map { .seconds($0) })
-        #expect(fixture.last?.threads.count == 2)
-        #expect(
-            fixture.last?.phase
-                == .retrying(nextAttempt: PollerFixture.now.addingTimeInterval(240), rateLimited: false))
-        // 応答を差し替えてから待ちを進める（先に進めると、次の取得が前の応答を受け取ることがある）
-        fixture.respond([PollerFixture.ok(1...1)])
-        fixture.sleeper.advance()
-        await fixture.sleeper.waitForSleeps(5)
-        #expect(fixture.sleeper.durations.last == .seconds(60))
-        fixture.poller.stop()
-    }
-
-    /// 待ち時間のヘッダーが無い二次レート制限は、失敗と同じく延ばしながら待ち、レート制限として扱う
-    @Test func backsOffASecondaryRateLimitWithoutAWait() async {
-        let secondary = FakeHTTPTransport.secondaryRateLimit(headers: ["X-OAuth-Scopes": "repo"])
-        fixture.respond([PollerFixture.ok(1...2), secondary, secondary, PollerFixture.ok(1...1)])
+    /// 失敗の間は延ばしながら待ち、一覧を残す。待ち時間のヘッダーが無い二次レート制限も同じく延ばし、レート制限として扱う
+    @Test(arguments: [
+        (HTTPResponse(statusCode: 500), false, FailureKind.httpStatus(500)),
+        (FakeHTTPTransport.secondaryRateLimit(headers: ["X-OAuth-Scopes": "repo"]), true, .rateLimited),
+    ])
+    func backsOffAndKeepsTheThreadsWhileFailing(_ failure: HTTPResponse, _ rateLimited: Bool, _ kind: FailureKind)
+        async
+    {
+        fixture.respond([PollerFixture.ok(1...2), failure, failure, PollerFixture.ok(1...1)])
         fixture.poller.start()
         for count in 1...2 {
             await fixture.sleeper.waitForSleeps(count)
@@ -81,8 +45,8 @@ struct AccountPollerTests {
         #expect(fixture.last?.threads.count == 2)
         #expect(
             fixture.last?.phase
-                == .retrying(nextAttempt: PollerFixture.now.addingTimeInterval(120), rateLimited: true))
-        #expect(fixture.last?.diagnostics.lastFetchFailure?.kind == .rateLimited)
+                == .retrying(nextAttempt: PollerFixture.now.addingTimeInterval(120), rateLimited: rateLimited))
+        #expect(fixture.last?.diagnostics.lastFetchFailure?.kind == kind)
         // 成功の後は 60 秒からに戻る
         fixture.sleeper.advance()
         await fixture.sleeper.waitForSleeps(4)

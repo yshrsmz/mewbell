@@ -26,14 +26,4 @@ struct ThreadListMergeTests {
         #expect(replaced.updatedAt == Date(timeIntervalSince1970: 400))
         #expect(replaced.title == "Thread 2 at 400.0")
     }
-
-    @Test func keepsTheCurrentListWhenNothingIsFetched() throws {
-        let current = [try thread("1"), try thread("2")]
-        #expect(ThreadListMerge.merge([], into: current) == current)
-    }
-
-    @Test func returnsTheFetchedThreadsWhenTheListIsEmpty() throws {
-        let fetched = [try thread("1"), try thread("2")]
-        #expect(ThreadListMerge.merge(fetched, into: []) == fetched)
-    }
 }

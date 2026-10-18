@@ -24,7 +24,9 @@ final class FakeUserNotificationCenter: UserNotificationCenter {
         delivered.withLock { _ = $0.insert(content.identifier) }
     }
 
+    /// 本物（`LiveUserNotificationCenter`）と同じく、空の配列では何もしない
     func removeDelivered(identifiers: [String]) async {
+        guard !identifiers.isEmpty else { return }
         removals.withLock { $0.append(Set(identifiers)) }
         delivered.withLock { $0.subtract(identifiers) }
     }

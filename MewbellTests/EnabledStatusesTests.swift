@@ -22,9 +22,8 @@ struct EnabledStatusesTests {
         #expect(DiscoveryState.checking.retainedAccountIDs == nil)
     }
 
-    @Test(arguments: [DiscoveryState.notLoggedIn, .ghNotFound, .hostsFileUnreadable(path: "/tmp/hosts.yml")])
-    func keepsNothingWithoutAccounts(_ state: DiscoveryState) {
-        #expect(state.enabledStatuses.isEmpty)
-        #expect(state.retainedAccountIDs == [])
+    @Test func keepsNothingWithoutAccounts() {
+        #expect(DiscoveryState.notLoggedIn.enabledStatuses.isEmpty)
+        #expect(DiscoveryState.notLoggedIn.retainedAccountIDs == [])
     }
 }

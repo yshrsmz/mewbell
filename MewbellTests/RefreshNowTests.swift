@@ -66,39 +66,24 @@ struct RefreshNowTests {
         fixture.poller.stop()
     }
 
-    @Test func doesNotHastenARateLimitedWait() async {
-        fixture.respond([
-            PollerFixture.ok(1...1), HTTPResponse(statusCode: 403, headers: ["Retry-After": "300"]),
-            PollerFixture.notModified,
-        ])
+    /// レート制限の待ちは早めない。待ち時間のヘッダーが無い二次レート制限（失敗と同じく延ばした待ち）も同じ
+    @Test(arguments: [
+        (HTTPResponse(statusCode: 403, headers: ["Retry-After": "300"]), 300),
+        (FakeHTTPTransport.secondaryRateLimit(), 60),
+    ])
+    func doesNotHastenARateLimitedWait(_ rateLimit: HTTPResponse, _ wait: Int) async {
+        fixture.respond([PollerFixture.ok(1...1), rateLimit, PollerFixture.notModified])
         await startAndWait()
         fixture.advance(by: 60)
         await fixture.sleeper.waitForSleeps(2)
         fixture.moveClock(by: 20)
         await fixture.poller.refreshNow()
         #expect(fixture.transport.requests.count == 2)
-        #expect(fixture.sleeper.durations == [.seconds(60), .seconds(300)])
+        #expect(fixture.sleeper.durations == [.seconds(60), .seconds(wait)])
         // 早めはしないが、次の取得は条件なしになる
-        fixture.advance(by: 280)
+        fixture.advance(by: TimeInterval(wait - 20))
         await fixture.sleeper.waitForSleeps(3)
         #expect(fixture.ifModifiedSince == [nil, "LM-1", nil])
-        fixture.poller.stop()
-    }
-
-    /// 待ち時間のヘッダーが無い二次レート制限の待ちも早めない
-    @Test func doesNotHastenASecondaryRateLimitWithoutAWait() async {
-        fixture.respond([
-            PollerFixture.ok(1...1),
-            FakeHTTPTransport.secondaryRateLimit(),
-            PollerFixture.notModified,
-        ])
-        await startAndWait()
-        fixture.advance(by: 60)
-        await fixture.sleeper.waitForSleeps(2)
-        fixture.moveClock(by: 20)
-        await fixture.poller.refreshNow()
-        #expect(fixture.transport.requests.count == 2)
-        #expect(fixture.sleeper.durations == [.seconds(60), .seconds(60)])
         fixture.poller.stop()
     }
 

@@ -27,10 +27,6 @@ struct RepositoryGroupTests {
         #expect(groups.map(\.id) == ["octo/lib", "octo/app", "acme/web"])
         #expect(groups[1].threads.map(\.id) == ["3", "1"])
     }
-
-    @Test func returnsNoGroupsForNoThreads() {
-        #expect(RepositoryGroup.groups(from: []).isEmpty)
-    }
 }
 
 struct ThreadReasonTests {
@@ -64,7 +60,10 @@ struct TokenStateIconTests {
     /// 記号が nil なのは取得中だけ（`ProgressView` を出す）
     @Test(arguments: [
         (TokenState.fetching, FeedPhase?.none, String?.none, Color?.none, "Getting token"),
+        (.ready, nil, "checkmark.circle.fill", .green, "Ready"),
+        (.ready, .loading, "checkmark.circle.fill", .green, "Ready"),
         (.ready, .loaded(updatedAt: .distantPast), "checkmark.circle.fill", .green, "Ready"),
+        (.ready, .retrying(nextAttempt: .distantFuture, rateLimited: true), "checkmark.circle.fill", .green, "Ready"),
         (.ready, .scopeInsufficient, "exclamationmark.triangle.fill", .yellow, "Stopped"),
         (.ready, .unauthorized, "exclamationmark.triangle.fill", .yellow, "Stopped"),
         (.unavailable, nil, "exclamationmark.triangle.fill", .yellow, "No token"),
@@ -77,14 +76,6 @@ struct TokenStateIconTests {
         #expect(icon.symbol == symbol)
         #expect(icon.color == color)
         #expect(icon.label == label)
-    }
-
-    @Test(arguments: [
-        FeedPhase?.none, .loading, .loaded(updatedAt: .distantPast),
-        .retrying(nextAttempt: .distantFuture, rateLimited: true),
-    ])
-    func isReadyUnlessStopped(_ phase: FeedPhase?) {
-        #expect(TokenStateIcon(tokenState: .ready, phase: phase).label == "Ready")
     }
 }
 
@@ -158,9 +149,11 @@ struct ThreadWebURLTests {
         #expect(opened.host() == "github.com")
     }
 
-    @Test(arguments: ["", "../../settings", "v1 0", "a//b"])
-    func opensTheReleasesPageForAnInvalidTag(_ tag: String) throws {
-        #expect(url(try thread(kind: .release, releaseTag: tag), github) == "https://github.com/octo/app/releases")
+    /// タグの検証は `ReleaseTagTests.rejectsTags` で確かめる
+    @Test func opensTheReleasesPageForAnInvalidTag() throws {
+        #expect(
+            url(try thread(kind: .release, releaseTag: "../../settings"), github)
+                == "https://github.com/octo/app/releases")
     }
 
     @Test func opensTheDiscussionOfTheNumber() throws {
@@ -182,12 +175,10 @@ struct ThreadWebURLTests {
                 == "https://ghe.example.com/team/svc/discussions/3")
     }
 
+    /// `subject.url` のオリジンとリポジトリの検査は `fallsBackToTheRepositoryPage`、ID の境界は `ThreadIDTests` で確かめる
     @Test(arguments: [
-        nil,
         "https://evil.example.com/repos/octo/app/discussions/9",
-        "https://api.github.com/repos/other/repo/discussions/9",
         "https://api.github.com/repos/octo/app/discussions/abc",
-        "https://api.github.com/repos/octo/app/discussions/123456789012345678901",
         "https://api.github.com/repos/octo/app/pulls/42",
     ])
     func opensTheDiscussionsPage(_ subjectURL: String?) throws {
@@ -263,11 +254,9 @@ struct ThreadDetailsSubjectTests {
                 == .number("42"))
     }
 
+    /// `subject.url` の検査は `ThreadWebURLTests.fallsBackToTheRepositoryPage` で確かめる
     @Test(arguments: [
-        nil,
         "https://evil.example.com/repos/octo/app/pulls/42",
-        "https://api.github.com/repos/other/app/pulls/42",
-        "https://api.github.com/repos/octo/app/pulls/abc",
         "https://api.github.com/repos/octo/app/commits/0123abcdef",
     ])
     func readsNoNumberFromOtherSubjects(_ subjectURL: String?) throws {
@@ -309,12 +298,11 @@ struct ThreadDetailsSubjectTests {
                 == .release(id: "12"))
     }
 
+    /// `subject.url` の検査は `ThreadWebURLTests.fallsBackToTheRepositoryPage`、ID の境界は `ThreadIDTests` で確かめる
     @Test(arguments: [
         nil,
         "https://evil.example.com/repos/octo/app/releases/1",
-        "https://api.github.com/repos/other/repo/releases/1",
         "https://api.github.com/repos/octo/app/releases/v1.0.0",
-        "https://api.github.com/repos/octo/app/releases/123456789012345678901",
     ])
     func readsNoReleaseIDFromOtherSubjects(_ subjectURL: String?) throws {
         #expect(try subject(kind: .release, subjectURL: subjectURL, endpoints: github) == nil)

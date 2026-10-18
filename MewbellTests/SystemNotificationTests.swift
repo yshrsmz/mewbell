@@ -17,12 +17,6 @@ private func thread(
 }
 
 struct NotificationTrackerTests {
-    @Test func postsNothingForTheBaseline() throws {
-        var tracker = NotificationTracker()
-        tracker.baseline([try thread("1"), try thread("2")], for: alice)
-        #expect(tracker.update([try thread("1"), try thread("2")], for: alice) == .init())
-    }
-
     @Test func postsNewAndAdvancedThreadsOnly() throws {
         var tracker = NotificationTracker()
         tracker.baseline([try thread("1"), try thread("2")], for: alice)
@@ -41,16 +35,6 @@ struct NotificationTrackerTests {
         #expect(tracker.update([try thread("1"), try thread("2")], for: alice) == .init())
         // 動きがあって戻った
         #expect(tracker.update([try thread("1"), try thread("2", updatedAt: 5)], for: alice).post.map(\.id) == ["2"])
-    }
-
-    @Test func startsOverAfterReset() throws {
-        var tracker = NotificationTracker()
-        tracker.baseline([try thread("1")], for: alice)
-        tracker.reset(alice)
-        // 基準が無いときの更新は基準になる
-        #expect(tracker.update([try thread("1"), try thread("2")], for: alice) == .init())
-        #expect(
-            tracker.update([try thread("1"), try thread("2"), try thread("3")], for: alice).post.map(\.id) == ["3"])
     }
 
     @Test func keepsAccountsApart() throws {
@@ -111,14 +95,6 @@ struct ThreadNotificationContentTests {
         let content = ThreadNotificationContent(thread: release, account: alice)
         #expect(content.userInfo["url"] == "https://github.com/octo/app/releases/tag/rust-v1.0.0")
     }
-
-    /// run を見つけた新着の承認リクエストの通知は、その run を開く。
-    @Test func opensTheWorkflowRun() throws {
-        var approval = try thread("8", kind: .workflowRun, subjectURL: nil)
-        approval.details = ThreadDetails(state: nil, event: nil, resource: .workflowRun(id: "38692691414"))
-        let content = ThreadNotificationContent(thread: approval, account: alice)
-        #expect(content.userInfo["url"] == "https://github.com/octo/app/actions/runs/38692691414")
-    }
 }
 
 struct ThreadOpenRequestTests {
@@ -152,22 +128,17 @@ struct ThreadOpenRequestTests {
 
     @Test(arguments: [
         "https://evil.example.com/octo/app/pull/42", "http://github.com/octo/app/pull/42",
-        "https://github.com:8443/octo/app/pull/42", "https://user@github.com/octo/app/pull/42", "not a url",
+        "https://github.com:8443/octo/app/pull/42", "https://user@github.com/octo/app/pull/42", "not a url", nil,
     ])
-    func replacesAnUnsafeURLWithTheRepositoryPage(_ url: String) throws {
+    func replacesAnUnsafeURLWithTheRepositoryPage(_ url: String?) throws {
         let request = try #require(request(["url": url]))
         #expect(request.url.absoluteString == "https://github.com/octo/app")
-    }
-
-    @Test func fallsBackToTheRepositoryPageWithoutAURL() throws {
-        #expect(try #require(request(["url": nil])).url.absoluteString == "https://github.com/octo/app")
     }
 
     @Test(arguments: ["../../etc", "octo", "octo/app/extra"])
     func rejectsAnUnsafeURLWithAnInvalidRepository(_ repository: String) {
         #expect(request(["url": "https://evil.example.com/", "repository": repository]) == nil)
     }
-
 }
 
 /// `SystemNotifier` の、通知センターへの操作（新着の判定は `NotificationStoreNewThreadsTests`）。
@@ -200,35 +171,12 @@ struct SystemNotifierTests {
         #expect(center.delivered.value == ["github.com/alice/3"])
     }
 
-    @Test func doesNotRetractForNewThreadsAlone() async throws {
-        notifier.threadsChanged(for: alice, posted: [try thread("3")], retracted: [])
-        await notifier.waitForPendingWork()
-        #expect(center.removals.value.isEmpty)
-        #expect(center.delivered.value == ["github.com/alice/3"])
-    }
-
-    @Test func retractsAThreadMarkedRead() async {
-        center.delivered.value = ["github.com/alice/1", "github.com/alice/2"]
-        notifier.threadsRemoved(["1"], for: alice)
-        await notifier.waitForPendingWork()
-        #expect(center.removals.value == [["github.com/alice/1"]])
-        #expect(center.delivered.value == ["github.com/alice/2"])
-    }
-
     @Test func retractsThreadsMarkedDoneTogetherInOneCall() async {
         center.delivered.value = ["github.com/alice/1", "github.com/alice/2", "github.com/alice/3", "github.com/bob/1"]
         notifier.threadsRemoved(["1", "2"], for: alice)
         await notifier.waitForPendingWork()
         #expect(center.removals.value == [["github.com/alice/1", "github.com/alice/2"]])
         #expect(center.delivered.value == ["github.com/alice/3", "github.com/bob/1"])
-    }
-
-    @Test func doesNothingForNoThreads() async {
-        center.delivered.value = ["github.com/alice/1"]
-        notifier.threadsRemoved([], for: alice)
-        await notifier.waitForPendingWork()
-        #expect(center.removals.value.isEmpty)
-        #expect(center.delivered.value == ["github.com/alice/1"])
     }
 
     @Test func retractsTheAccountWhenItStopsOrIsRemoved() async {
@@ -255,7 +203,7 @@ struct SystemNotifierTests {
 }
 
 struct UnreadBadgeTests {
-    @Test(arguments: [(0, String?.none), (-1, nil), (1, "1"), (99, "99"), (100, "99+"), (1_000, "99+")])
+    @Test(arguments: [(0, String?.none), (1, "1"), (99, "99"), (100, "99+")])
     func formats(_ count: Int, _ text: String?) {
         #expect(UnreadBadge.text(for: count) == text)
     }
@@ -273,12 +221,9 @@ struct MenuBarIconTests {
         #expect(MenuBarIcon.image(badge: "5").accessibilityDescription == "Mewbell, 5 unread")
     }
 
+    /// 猫だけより広がることは `drawsAGreenCatAndALabelColoredBadge` の件数の列で確かめる
     @Test func widensWithTheBadge() {
-        let cat = MenuBarIcon.image(badge: nil).size.width
-        let one = MenuBarIcon.image(badge: "1").size.width
-        let many = MenuBarIcon.image(badge: "99+").size.width
-        #expect(cat < one)
-        #expect(one < many)
+        #expect(MenuBarIcon.image(badge: "1").size.width < MenuBarIcon.image(badge: "99+").size.width)
     }
 
     /// 猫（左）は緑で、件数（右）は外観に合った文字の色で描かれる。
