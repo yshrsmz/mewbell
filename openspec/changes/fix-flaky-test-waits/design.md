@@ -74,6 +74,12 @@ await sleeper(alice).waitForSleeps(3)
 - 寝る時間を短くする案は採らない。`SubprocessRunner` は子の終了から `drainTimeout` の後に EOF の有無を判定するので、孫がそれより先に終わると、確かめたい「パイプが開いたまま」の状態にならない。
 - `echo $!` は `echo done` より前に一時ファイルへ書くので、標準出力（`done\n`）は変わらない。
 
+### D5. `ManualSleeper` は、待つ前に止められていたらすぐ投げる（T5）
+
+本物の `Task.sleep` は、止められたタスクで呼ぶとすぐ `CancellationError` を投げる。`ManualSleeper` は、`withTaskCancellationHandler` の `onCancel` が待ちの登録より先に走ると、登録した待ちを誰も起こさず、`durations` にも数えていた。`AccountPoller.pause` は待ち用の Task を作ってから待つので、その Task が動き出す前に作り直しや無効化で止められると、この状態になる。D2 でアカウントごとに「何回目の待ちか」を数えるので、この待ちが数に紛れ込むと、目的の待ちを取り違える。
+
+待ちを登録するロックの中で `Task.isCancelled` を確かめ、止められていれば登録せずに投げる。`onCancel` はキャンセルの印が立った後に走るので、登録の前に印を見るか、登録した後に `onCancel` が待ちを外すかのどちらかになる。
+
 ## Risks / Trade-offs
 
 - D2 の待ちの回数は、作り直す前のポーラーの待ちを含めて数える。作り直しの回数が変わるテストでは数え直しが要る。

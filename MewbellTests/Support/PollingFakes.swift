@@ -23,9 +23,15 @@ final class ManualSleeper: Sendable {
         let id = UUID()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                state.withLock {
-                    $0.durations.append(duration)
-                    $0.waiters.append(Waiter(id: id, continuation: continuation))
+                // 本物の `Task.sleep` と同じく、待つ前に止められていたらすぐ投げる（`onCancel` が先に走ると、登録した待ちを誰も起こさない）
+                let registered = state.withLock { state -> Bool in
+                    guard !Task.isCancelled else { return false }
+                    state.durations.append(duration)
+                    state.waiters.append(Waiter(id: id, continuation: continuation))
+                    return true
+                }
+                if !registered {
+                    continuation.resume(throwing: CancellationError())
                 }
             }
         } onCancel: {

@@ -62,14 +62,12 @@ struct NotificationStoreSettingsTests {
         let client = GitHubAPIClient(transport: transport)
         return NotificationStore(
             makePoller: {
-                [tokens, alice, aliceSleeper, bobSleeper, made]
-                account, endpoints, participating, initialPhase, carriedWait, onUpdate
-                in
+                [tokens, made, self] account, endpoints, participating, initialPhase, carriedWait, onUpdate in
                 made.withLock { $0.append("\(account.id) \(participating)") }
                 return AccountPoller(
                     accountID: account.id, endpoints: endpoints, client: client, tokens: tokens,
                     participating: participating, initialPhase: initialPhase,
-                    carriedWait: carriedWait, sleep: (account.id == alice ? aliceSleeper : bobSleeper).sleep,
+                    carriedWait: carriedWait, sleep: sleeper(account.id).sleep,
                     onUpdate: onUpdate)
             }, notifier: notifier, openURL: { [opened] url in opened.withLock { $0.append(url) } },
             preferences: { [settings] in settings.preferences(for: $0) })
@@ -86,8 +84,15 @@ struct NotificationStoreSettingsTests {
     }
 
     /// アカウントのポーラーの待ち。待ちの回数には、作り直す前のポーラーの待ちも含む。
-    private func sleeper(_ id: AccountID) -> ManualSleeper {
-        id == alice ? aliceSleeper : bobSleeper
+    private nonisolated func sleeper(_ id: AccountID) -> ManualSleeper {
+        switch id {
+        case alice: return aliceSleeper
+        case bob: return bobSleeper
+        default:
+            // 知らないアカウントに sleeper を共有させない
+            Issue.record("\(id) の sleeper が無い")
+            return ManualSleeper()
+        }
     }
 
     private func loadedStore() async -> NotificationStore {
@@ -110,9 +115,13 @@ struct NotificationStoreSettingsTests {
         #expect(store.unreadCount == 3)
         #expect(notifier.events == ["retractAll github.com/bob", "retainOnly github.com/alice"])
         let bobGets = gets("bob").count
+        let bobSleeps = sleeper(bob).durations.count
+        // bob のポーラーが止まっていなければ、起こすと取得して次の待ちに入る
+        sleeper(bob).advance()
         sleeper(alice).advance()
         await sleeper(alice).waitForSleeps(2)
         #expect(gets("bob").count == bobGets)
+        #expect(sleeper(bob).durations.count == bobSleeps)
         store.stopAll()
     }
 
@@ -168,7 +177,6 @@ struct NotificationStoreSettingsTests {
         // 前のポーラーの取得の途中で作り直す
         transport.pausedMethod.value = "GET"
         sleeper(alice).advance()
-        sleeper(bob).advance()
         await waitUntil { self.gets("alice").count == 2 }
         settings.setParticipatingOnly(true, for: alice)
         store.restart(alice)

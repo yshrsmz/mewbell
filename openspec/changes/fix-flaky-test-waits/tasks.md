@@ -12,6 +12,8 @@
 
 - [x] 2.1 `NotificationStoreSettingsTests` にアカウントごとの `ManualSleeper` を持たせ、`advance(until:)` を消して、呼び出し元で目的のアカウントの sleeper を起こし次の待ちを待つ形にする。スイートの 7 本が通り、`-test-iterations 30` で繰り返しても落ちないことを確かめる。
 
+- [x] 2.2 `ManualSleeper` で、待つ前に止められていたら登録せずに `CancellationError` を投げる（D5）。`stopsADisabledAccount` で bob の sleeper も起こし、bob のポーラーを止めないように本体を一時的に壊すと落ちることを確かめる。全体を `-test-iterations 10` で流して落ちないことを確かめる。
+
 ## 3. 詳細の取得の打ち切り（D3）
 
 - [x] 3.1 `ThreadDetailsFetcher` に `sleep` を足す（既定値は `Task.sleep`）。`AccountPoller+ThreadDetails.swift` の呼び出しは変えない。
