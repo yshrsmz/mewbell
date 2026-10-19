@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/yshrsmz/mewbell/compare/v0.6.0...v0.7.0) (2026-10-19)
+
+
+### Features
+
+* add the app icon ([#80](https://github.com/yshrsmz/mewbell/issues/80)) ([9effbd7](https://github.com/yshrsmz/mewbell/commit/9effbd73e6113d3f599569cdcaab9de59484e683))
+
 ## [0.6.0](https://github.com/yshrsmz/mewbell/compare/v0.5.0...v0.6.0) (2026-10-17)
 
 
