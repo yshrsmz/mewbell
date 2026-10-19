@@ -57,11 +57,12 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Debug MEWBE
 xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEWBELL_WARNINGS_AS_ERRORS=YES build
 ```
 
-- 確認は `bash scripts/lint.sh`（`swift-format lint`、`swiftlint`、`docs/architecture.md` の検査）。整形は `bash scripts/format.sh`。CI（GitHub Actions）は macOS ランナーが高価なので ubuntu だけを使い、lint（`docs/architecture.md` の検査とそのテストを含む）と `openspec validate` だけを回す。macOS ランナーを使うのはリリースに関わるワークフロー（mewbell の `release.yml` と、homebrew-tap の Cask の PR の CI。`brew audit --cask` を確実に動かすため）だけ。`xcodebuild` のビルドとテストは PR の CI で回らないので、push 前に手元で必ず通す（テスト、lint、警告をエラー扱いにした Debug と Release のビルド）
+- 確認は `bash scripts/lint.sh`（`swift-format lint`、`swiftlint`、`docs/architecture.md` の検査）。整形は `bash scripts/format.sh`。CI（GitHub Actions）は macOS ランナーが高価なので ubuntu だけを使い、lint（`docs/architecture.md` の検査とそのテストを含む）と `openspec validate`、OpenSpec の生成物の検査だけを回す。macOS ランナーを使うのはリリースに関わるワークフロー（mewbell の `release.yml` と、homebrew-tap の Cask の PR の CI。`brew audit --cask` を確実に動かすため）だけ。`xcodebuild` のビルドとテストは PR の CI で回らないので、push 前に手元で必ず通す（テスト、lint、警告をエラー扱いにした Debug と Release のビルド）
 - プロジェクトは Xcode 27.2 以降の JSON 形式（`project.xcproj`）。`project.pbxproj` には戻さない。ターゲット追加・ビルド設定の変更は `project.xcproj` を直接編集してよいが、編集後は必ず `xcodebuild` で開けることを確認する
 - `DerivedData`・`build/`・`xcuserdata/` はコミットしない
 - `SWIFT_APPROACHABLE_CONCURRENCY` が有効なので、nonisolated の async 関数は呼び出し元の actor の上で動く。テストの fake で同期的に待つと、その actor（`AccountPoller` など）が塞がり、テストが止まる（待たせ方は `docs/testing.md` の T6）
 - `openspec` は PATH に無い。プロジェクトの devDependency を `pnpm exec openspec ...` で動かす
+- `.claude/skills/openspec-*/` と `.claude/commands/opsx/` は OpenSpec の CLI の生成物で、手で直さない。CLI の版を上げたら（Renovate の PR も）`pnpm exec openspec update` を実行して生成物もコミットする。CI は固定した版で生成し直して差分が出ないことを確かめ、ずれていれば落ちる
 - `xcodebuild test -only-testing:MewbellTests/<名前>` にはファイル名ではなくスイートの型名を渡す（`ThreadActionPollingTests.swift` の中は `DonePollingTests` と `MarkAllReadPollingTests`）。無い名前を渡してもエラーにならずに飛ばすので、結果の「N tests in M suites」のスイート数を確かめる
 - SwiftUI の `Text` に `.font(.body)` を明示すると、既定の書体と同じ 13pt でも折り返し方が変わる（短い最後の行を避けるように折り返す）。スレッドの件名の `Text` には書体を付けない
 - ユニットテストの `NSHostingView` では SwiftUI のアクセシビリティの要素が作られず、`accessibilityLabel` や `accessibilityHidden` の効き目は確かめられない（読み上げの確かめ方は `docs/testing.md` の T7）
