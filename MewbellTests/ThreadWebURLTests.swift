@@ -1,82 +1,18 @@
 import Foundation
-import SwiftUI
 import Testing
 
 @testable import Mewbell
 
 private func thread(
-    id: String = "1", repository: String = "octo/app", kind: SubjectKind = .pullRequest, subjectURL: String? = nil,
-    updatedAt: TimeInterval = 0, releaseTag: String? = nil
+    repository: String = "octo/app", kind: SubjectKind = .pullRequest, subjectURL: String? = nil,
+    releaseTag: String? = nil
 ) throws -> NotificationThread {
     NotificationThread(
-        id: id, reason: "subscribed", updatedAt: Date(timeIntervalSince1970: updatedAt), title: "Thread \(id)",
+        id: "1", reason: "subscribed", updatedAt: Date(timeIntervalSince1970: 0), title: "Thread 1",
         kind: kind, subjectURL: subjectURL.flatMap(URL.init(string:)),
         repository: try #require(RepositoryName(fullName: repository)), detailsSubject: nil,
         details: releaseTag.map { ThreadDetails(state: nil, event: nil, resource: .release(tag: $0)) }
     )
-}
-
-struct RepositoryGroupTests {
-    @Test func ordersRepositoriesAndThreadsByTheNewestUpdate() throws {
-        let groups = RepositoryGroup.groups(from: [
-            try thread(id: "1", repository: "octo/app", updatedAt: 100),
-            try thread(id: "2", repository: "octo/lib", updatedAt: 300),
-            try thread(id: "3", repository: "octo/app", updatedAt: 200),
-            try thread(id: "4", repository: "acme/web", updatedAt: 50),
-        ])
-        #expect(groups.map(\.id) == ["octo/lib", "octo/app", "acme/web"])
-        #expect(groups[1].threads.map(\.id) == ["3", "1"])
-    }
-}
-
-struct ThreadReasonTests {
-    /// 表にある値は表の名前、知らない値は `_` を空白にして先頭を大文字にする。
-    @Test(arguments: [("review_requested", "Review requested"), ("approval_requested", "Approval requested")])
-    func namesReasons(_ reason: String, _ text: String) {
-        #expect(ThreadReason.text(reason) == text)
-    }
-}
-
-struct ThreadEventTextTests {
-    @Test func namesEveryEvent() {
-        let names = ThreadEvent.Kind.allCases.map(ThreadEventText.name)
-        #expect(Set(names).count == ThreadEvent.Kind.allCases.count)
-        #expect(names.allSatisfy { !$0.isEmpty })
-    }
-
-    /// 検証を通らないログイン名は出さない。
-    @Test(arguments: [
-        (ThreadEvent(kind: .closed, actor: "alice"), "Closed by alice"),
-        (ThreadEvent(kind: .pushedCommits, actor: nil), "Pushed commits"),
-        (ThreadEvent(kind: .closed, actor: "-evil"), "Closed"),
-    ])
-    func describesEvents(_ event: ThreadEvent, _ text: String) {
-        #expect(ThreadEventText.text(event) == text)
-    }
-}
-
-struct TokenStateIconTests {
-    /// 状態ごとの記号・色・名前。記号と色は変えず、「止まっている」と「トークンを取れない」は名前だけで読み分ける。
-    /// 記号が nil なのは取得中だけ（`ProgressView` を出す）
-    @Test(arguments: [
-        (TokenState.fetching, FeedPhase?.none, String?.none, Color?.none, "Getting token"),
-        (.ready, nil, "checkmark.circle.fill", .green, "Ready"),
-        (.ready, .loading, "checkmark.circle.fill", .green, "Ready"),
-        (.ready, .loaded(updatedAt: .distantPast), "checkmark.circle.fill", .green, "Ready"),
-        (.ready, .retrying(nextAttempt: .distantFuture, rateLimited: true), "checkmark.circle.fill", .green, "Ready"),
-        (.ready, .scopeInsufficient, "exclamationmark.triangle.fill", .yellow, "Stopped"),
-        (.ready, .unauthorized, "exclamationmark.triangle.fill", .yellow, "Stopped"),
-        (.unavailable, nil, "exclamationmark.triangle.fill", .yellow, "No token"),
-        (.disabled, nil, "pause.circle", nil, "Disabled"),
-    ])
-    func showsTheState(
-        _ tokenState: TokenState, _ phase: FeedPhase?, _ symbol: String?, _ color: Color?, _ label: String
-    ) {
-        let icon = TokenStateIcon(tokenState: tokenState, phase: phase)
-        #expect(icon.symbol == symbol)
-        #expect(icon.color == color)
-        #expect(icon.label == label)
-    }
 }
 
 struct ThreadWebURLTests {

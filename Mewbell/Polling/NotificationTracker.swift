@@ -22,12 +22,10 @@ struct NotificationTracker {
         current[account] = Set(threads.map(\.id))
     }
 
-    /// 基準の後の取得の結果から、新着と一覧から消えたものを決める。基準がまだ無ければ基準にする。
+    /// 基準の後の取得の結果から、新着と一覧から消えたものを決める。基準がまだ無ければ何も決めない
+    /// （基準は呼び出し元が `hasBaseline` を見て `baseline` で覚える）。
     mutating func update(_ threads: [NotificationThread], for account: AccountID) -> Changes {
-        guard var seenThreads = seen[account], let previous = current[account] else {
-            baseline(threads, for: account)
-            return Changes()
-        }
+        guard var seenThreads = seen[account], let previous = current[account] else { return Changes() }
         var changes = Changes()
         for thread in threads {
             if let date = seenThreads[thread.id], date >= thread.updatedAt { continue }
