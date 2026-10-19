@@ -136,8 +136,8 @@
 - **理由**: 公開されている経路だけをテストすれば、実装を変えてもテストが壊れにくい。
 - **採らなかった案**:
   - テストから呼ぶために内部の関数を公開する: 実装の形にテストが縛られる
-- **適用外**: 非同期の処理の終わりを待つテスト用のフック（`AccountStore.waitForReload`、`SystemNotifier.waitForPendingWork`）。テストが時間で待たずに済むため
-- **根拠**: add-notification-fetch D1、add-thread-latest-event §3、remove-redundant-tests
+- **適用外**: 非同期の処理の終わりを待つテスト用のフック（`AccountStore.waitForReload`、`SystemNotifier.waitForPendingWork`）。本体の Task を待つだけのもの。また、待つ対象の Task が無い区切り（合流など、fake から見えないもの）について、テストが `waitUntilAsync` の条件にだけ使う読み取りの口（`AccountDiscovery.hasJoinedTokenFetch`）。どちらも、テストが時間で待たずに済み、期限を過ぎると呼び出し元の位置で失敗するため。読み取りの口は `Bool` を返すだけにし、`#expect` で確かめない。区切りを待つ以外の目的で状態を返す読み取りの口は、適用外に含めない
+- **根拠**: add-notification-fetch D1、add-thread-latest-event §3、remove-redundant-tests、fix-flaky-test-waits D1
 
 ### A11. ログは Logger だけで、カテゴリはモジュール名にする
 
