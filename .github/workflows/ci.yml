@@ -72,7 +72,42 @@ jobs:
           sha256: b6f8757201f6a2ee799f45f3f52ef7ca0b4071523637dc3b0b24264dd3333518 # mise-v2026.9.16-linux-x64
           install_args: node pnpm
 
+      - name: Install the OpenSpec CLI
+        id: install
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
       - name: Validate OpenSpec
+        run: pnpm exec openspec validate --all --strict
+
+      # .claude/ の OpenSpec のスキルとコマンドは CLI が生成する。Renovate が CLI だけを上げると生成物が古い版のまま残るので、
+      # 固定した版で生成し直して差分が出ないことを確かめる。validate が落ちても回す
+      - name: Check the generated OpenSpec files
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        env:
+          OPENSPEC_NO_UPDATE_CHECK: "1"
+          DO_NOT_TRACK: "1"
         run: |
-          pnpm install --frozen-lockfile --ignore-scripts
-          pnpm exec openspec validate --all --strict
+          pnpm exec openspec update --force
+          # CLI が .claude/ の外に書くようになっても拾えるよう、パスで絞らない
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git status --short
+            # 未追跡のファイルも中身ごと出す
+            git add -N .
+            git diff
+            echo "::error::OpenSpec の生成物が CLI の出力と一致しません。手元で pnpm exec openspec update を実行してコミットします（生成物を手で直さない）"
+            exit 1
+          fi
+          # CLI が生成物を見つけられずに何も書かずに終わると、上の検査は通ってしまう。版でも確かめる（コマンドは版を持たない）
+          shopt -s nullglob
+          skills=(.claude/skills/openspec-*/SKILL.md)
+          if [[ "${#skills[@]}" -eq 0 ]]; then
+            echo "::error::OpenSpec のスキルが .claude/skills/openspec-*/ に見つかりません"
+            exit 1
+          fi
+          version="$(pnpm exec openspec --version)"
+          stale="$(grep -L -F "generatedBy: \"$version\"" "${skills[@]}" || true)"
+          if [[ -n "$stale" ]]; then
+            echo "$stale"
+            echo "::error::OpenSpec のスキルが CLI $version で生成されていません。手元で pnpm exec openspec update を実行してコミットします"
+            exit 1
+          fi
