@@ -28,7 +28,7 @@ env:
 jobs:
   release-please:
     if: github.event_name == 'push'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     environment: release
     # 待っている実行が新しい push で置き換えられても、マージ済みで未リリースの Release PR は次の実行が拾う
@@ -65,7 +65,7 @@ jobs:
           needs.release-please.outputs.release_created == 'true') ||
         github.event_name == 'workflow_dispatch'
       )
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       # draft の Release は書き込み権限が無いと読めない。このジョブはコードを checkout しない
@@ -190,7 +190,7 @@ jobs:
       !cancelled() && needs.prepare.result == 'success' && (
         needs.build.result == 'success' || needs.prepare.outputs.published == 'true'
       )
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     environment: release
     concurrency:
