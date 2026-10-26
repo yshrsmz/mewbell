@@ -3,6 +3,6 @@
   "private": true,
   "description": "Dev tooling for Mewbell (OpenSpec CLI). Not part of the app.",
   "devDependencies": {
-    "@fission-ai/openspec": "1.14.2"
+    "@fission-ai/openspec": "1.14.3"
   }
 }
