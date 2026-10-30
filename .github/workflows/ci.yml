@@ -68,7 +68,9 @@ jobs:
 
       - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
-          version: 2026.9.16
+          # タグと同じ v 付きで書く。Renovate は sha256 の更新でこの値をそのままタグ名にしてリリースを引くので、
+          # v が無いと 404 になる。mise-action は先頭の v を取り除いてから使う
+          version: v2026.9.16
           sha256: b6f8757201f6a2ee799f45f3f52ef7ca0b4071523637dc3b0b24264dd3333518 # mise-v2026.9.16-linux-x64
           install_args: node pnpm
 
