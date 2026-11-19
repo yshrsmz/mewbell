@@ -81,7 +81,7 @@ jobs:
       - name: Validate OpenSpec
         run: pnpm exec openspec validate --all --strict
 
-      # .claude/ の OpenSpec のスキルとコマンドは CLI が生成する。Renovate が CLI だけを上げると生成物が古い版のまま残るので、
+      # OpenSpec のスキル（.agents/skills/ と、そこを指す .claude/skills/ のリンク）は CLI が生成する。Renovate が CLI だけを上げると生成物が古い版のまま残るので、
       # 固定した版で生成し直して差分が出ないことを確かめる。validate が落ちても回す
       - name: Check the generated OpenSpec files
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
@@ -90,7 +90,7 @@ jobs:
           DO_NOT_TRACK: "1"
         run: |
           pnpm exec openspec update --force
-          # CLI が .claude/ の外に書くようになっても拾えるよう、パスで絞らない
+          # CLI が書く場所が変わっても拾えるよう、パスで絞らない
           if [[ -n "$(git status --porcelain)" ]]; then
             git status --short
             # 未追跡のファイルも中身ごと出す
@@ -99,7 +99,8 @@ jobs:
             echo "::error::OpenSpec の生成物が CLI の出力と一致しません。手元で pnpm exec openspec update を実行してコミットします（生成物を手で直さない）"
             exit 1
           fi
-          # CLI が生成物を見つけられずに何も書かずに終わると、上の検査は通ってしまう。版でも確かめる（コマンドは版を持たない）
+          # CLI が生成物を見つけられずに何も書かずに終わると、上の検査は通ってしまう。版でも確かめる。
+          # .claude/skills/ のリンク越しに読み、リンクが実体に届いていることも合わせて確かめる
           shopt -s nullglob
           skills=(.claude/skills/openspec-*/SKILL.md)
           if [[ "${#skills[@]}" -eq 0 ]]; then

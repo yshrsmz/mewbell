@@ -12,10 +12,10 @@ macOS のメニューバーに常駐し、複数の GitHub アカウント（git
 
 この repo は OpenSpec（OPSX）準拠で進める。**コードを書く前に必ず `openspec/changes/<change>/` の proposal → specs → design → tasks を揃える。** 仕様の正本は `openspec/specs/`。
 
-- 新しい機能・設計変更・リファクタ → `/opsx:propose <change-name>` で変更を起こす。1 マイルストーン（M0〜M5）を 1〜数個の change に分ける
-- 実装 → `/opsx:apply <change-name>`。tasks.md のチェックボックスを進めながら実装し、完了ごとにチェックを付ける
-- 実装完了 → `/opsx:archive <change-name>`。delta spec が `openspec/specs/` にマージされる
-- 迷ったら `/opsx:explore` で先に考える。タイポ修正や 1 行の修正は change 不要。ただし `openspec/specs/` に書かれた振る舞い（大きさ・配置・読み上げなど）を変える修正は、行数にかかわらず change を起こす
+- 新しい機能・設計変更・リファクタ → `/openspec-propose <change-name>` で変更を起こす。1 マイルストーン（M0〜M5）を 1〜数個の change に分ける
+- 実装 → `/openspec-apply-change <change-name>`。tasks.md のチェックボックスを進めながら実装し、完了ごとにチェックを付ける
+- 実装完了 → `/openspec-archive-change <change-name>`。delta spec が `openspec/specs/` にマージされる
+- 迷ったら `/openspec-explore` で先に考える。タイポ修正や 1 行の修正は change 不要。ただし `openspec/specs/` に書かれた振る舞い（大きさ・配置・読み上げなど）を変える修正は、行数にかかわらず change を起こす
 - change 名は `add-`, `update-`, `fix-`, `remove-` 始まりの kebab-case（例: `add-gh-account-discovery`）
 - プロジェクト文脈と artifact ごとのルールは `openspec/config.yaml` にある。CLAUDE.md と重複させない
 
@@ -62,7 +62,7 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEW
 - `DerivedData`・`build/`・`xcuserdata/` はコミットしない
 - `SWIFT_APPROACHABLE_CONCURRENCY` が有効なので、nonisolated の async 関数は呼び出し元の actor の上で動く。テストの fake で同期的に待つと、その actor（`AccountPoller` など）が塞がり、テストが止まる（待たせ方は `docs/testing.md` の T6）
 - `openspec` は PATH に無い。プロジェクトの devDependency を `pnpm exec openspec ...` で動かす
-- `.claude/skills/openspec-*/` と `.claude/commands/opsx/` は OpenSpec の CLI の生成物で、手で直さない。CLI の版を上げたら（Renovate の PR も）`pnpm exec openspec update` を実行して生成物もコミットする。CI は固定した版で生成し直して差分が出ないことを確かめ、ずれていれば落ちる
+- `.agents/skills/openspec-*/` と、そこを指す `.claude/skills/openspec-*` のシンボリックリンクは OpenSpec の CLI の生成物で、手で直さない。CLI の版を上げたら（Renovate の PR も）`pnpm exec openspec update` を実行して生成物もコミットする。CI は固定した版で生成し直して差分が出ないことを確かめ、ずれていれば落ちる
 - `xcodebuild test -only-testing:MewbellTests/<名前>` にはファイル名ではなくスイートの型名を渡す（`ThreadActionPollingTests.swift` の中は `DonePollingTests` と `MarkAllReadPollingTests`）。無い名前を渡してもエラーにならずに飛ばすので、結果の「N tests in M suites」のスイート数を確かめる
 - SwiftUI の `Text` に `.font(.body)` を明示すると、既定の書体と同じ 13pt でも折り返し方が変わる（短い最後の行を避けるように折り返す）。スレッドの件名の `Text` には書体を付けない
 - ユニットテストの `NSHostingView` では SwiftUI のアクセシビリティの要素が作られず、`accessibilityLabel` や `accessibilityHidden` の効き目は確かめられない（読み上げの確かめ方は `docs/testing.md` の T7）
@@ -89,6 +89,6 @@ GitHub 以外のフォージ、Windows / Linux、コメント本文の表示や�
 ## コミットと PR
 
 - Conventional Commits（`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`）。1 change = 1 PR を基本にし、PR 本文に対応する `openspec/changes/<change>/` を書く
-- `/opsx:propose` で proposal / specs / design / tasks が揃い `openspec validate --strict` が通ったら、change 名のブランチを切って artifact をコミット・push し、**draft PR** を作る。実装（`/opsx:apply`）は同じブランチに積み、レビュー（`.claude/rules/review-process.md`）と archive を終えてから ready にする
+- `/openspec-propose` で proposal / specs / design / tasks が揃い `openspec validate --strict` が通ったら、change 名のブランチを切って artifact をコミット・push し、**draft PR** を作る。実装（`/openspec-apply-change`）は同じブランチに積み、レビュー（`.claude/rules/review-process.md`）と archive を終えてから ready にする
 - AI 生成コードを含む PR はその旨を書く
 - main への直接 push はしない

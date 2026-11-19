@@ -12,7 +12,7 @@ cp <このフォルダ>/package.json <このフォルダ>/pnpm-lock.yaml .
 
 # OpenSpec CLI はグローバルに入れず、package.json でバージョン固定してプロジェクトローカルに入れる
 pnpm install --frozen-lockfile --ignore-scripts
-pnpm exec openspec init --tools claude  # .claude/skills/openspec-* と openspec/specs, changes を生成。config.yaml は上書きされない
+pnpm exec openspec init --tools claude  # .agents/skills/openspec-*（.claude/skills/ からはリンク）と openspec/specs, changes を生成。config.yaml は上書きされない
 ```
 
 以降 `openspec` コマンドは `pnpm exec openspec` で呼ぶ。artifact を日本語で書く設定は `config.yaml` の `context` に入っている（`openspec init --language Japanese` が書き込むのと同じ行）。
@@ -24,7 +24,7 @@ pnpm exec openspec init --tools claude  # .claude/skills/openspec-* と openspec
 Claude Code を repo 直下で開き、まず探索せずに change を起こす：
 
 ```
-/opsx:propose add-project-skeleton
+/openspec-propose add-project-skeleton
 ```
 
 説明として次を渡す（そのまま貼ってよい）：
@@ -34,13 +34,13 @@ Claude Code を repo 直下で開き、まず探索せずに change を起こす
 生成された `proposal.md` / `specs/` / `design.md` / `tasks.md` を読み、違和感があれば直してから：
 
 ```
-/opsx:apply add-project-skeleton
+/openspec-apply-change add-project-skeleton
 ```
 
 ビルドが通って起動を確認し、`.claude/rules/review-process.md` の別コンテキストのレビューを終えたら：
 
 ```
-/opsx:archive add-project-skeleton
+/openspec-archive-change add-project-skeleton
 ```
 
 ## 3. 以降の change（目安）
