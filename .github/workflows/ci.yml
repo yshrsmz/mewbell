@@ -89,6 +89,9 @@ jobs:
           OPENSPEC_NO_UPDATE_CHECK: "1"
           DO_NOT_TRACK: "1"
         run: |
+          # CLI が生成物を見つけられずに何も書かずに終わっても差分で落ちるよう、実体を消してから書き直させる。
+          # スキルの frontmatter には版が残らない（2.1.1 は generatedBy を書かない）ので、版では確かめられない
+          rm -rf .agents/skills/openspec-*
           pnpm exec openspec update --force
           # CLI が書く場所が変わっても拾えるよう、パスで絞らない
           if [[ -n "$(git status --porcelain)" ]]; then
@@ -99,18 +102,10 @@ jobs:
             echo "::error::OpenSpec の生成物が CLI の出力と一致しません。手元で pnpm exec openspec update を実行してコミットします（生成物を手で直さない）"
             exit 1
           fi
-          # CLI が生成物を見つけられずに何も書かずに終わると、上の検査は通ってしまう。版でも確かめる。
-          # .claude/skills/ のリンク越しに読み、リンクが実体に届いていることも合わせて確かめる
+          # .claude/skills/ のリンク越しに読み、リンクが実体に届いていることを確かめる
           shopt -s nullglob
           skills=(.claude/skills/openspec-*/SKILL.md)
           if [[ "${#skills[@]}" -eq 0 ]]; then
             echo "::error::OpenSpec のスキルが .claude/skills/openspec-*/ に見つかりません"
-            exit 1
-          fi
-          version="$(pnpm exec openspec --version)"
-          stale="$(grep -L -F "generatedBy: \"$version\"" "${skills[@]}" || true)"
-          if [[ -n "$stale" ]]; then
-            echo "$stale"
-            echo "::error::OpenSpec のスキルが CLI $version で生成されていません。手元で pnpm exec openspec update を実行してコミットします"
             exit 1
           fi
