@@ -89,17 +89,16 @@ jobs:
           OPENSPEC_NO_UPDATE_CHECK: "1"
           DO_NOT_TRACK: "1"
         run: |
-          # CLI が生成物を見つけられずに何も書かずに終わっても差分で落ちるよう、実体を消してから書き直させる。
+          # 実体を消してから生成し直すので、CLI が何も書かずに終わっても差分で落ちる。
           # スキルの frontmatter には版が残らない（2.1.1 は generatedBy を書かない）ので、版では確かめられない
-          rm -rf .agents/skills/openspec-*
-          pnpm exec openspec update --force
+          bash scripts/update-openspec.sh
           # CLI が書く場所が変わっても拾えるよう、パスで絞らない
           if [[ -n "$(git status --porcelain)" ]]; then
             git status --short
             # 未追跡のファイルも中身ごと出す
             git add -N .
             git diff
-            echo "::error::OpenSpec の生成物が CLI の出力と一致しません。手元で pnpm exec openspec update を実行してコミットします（生成物を手で直さない）"
+            echo "::error::OpenSpec の生成物が CLI の出力と一致しません。手元で bash scripts/update-openspec.sh を実行してコミットします（生成物を手で直さない）"
             exit 1
           fi
           # .claude/skills/ のリンク越しに読み、リンクが実体に届いていることを確かめる
