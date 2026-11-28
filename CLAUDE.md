@@ -62,7 +62,7 @@ xcodebuild -project Mewbell.xcodeproj -scheme Mewbell -configuration Release MEW
 - `DerivedData`・`build/`・`xcuserdata/` はコミットしない
 - `SWIFT_APPROACHABLE_CONCURRENCY` が有効なので、nonisolated の async 関数は呼び出し元の actor の上で動く。テストの fake で同期的に待つと、その actor（`AccountPoller` など）が塞がり、テストが止まる（待たせ方は `docs/testing.md` の T6）
 - `openspec` は PATH に無い。プロジェクトの devDependency を `pnpm exec openspec ...` で動かす
-- `.agents/skills/openspec-*/` と、そこを指す `.claude/skills/openspec-*` のシンボリックリンクは OpenSpec の CLI の生成物で、手で直さない。CLI の版を上げたら（Renovate の PR も）`pnpm exec openspec update` を実行して生成物もコミットする。CI は固定した版で生成し直して差分が出ないことを確かめ、ずれていれば落ちる
+- `.agents/skills/openspec-*/` と、そこを指す `.claude/skills/openspec-*` のシンボリックリンクは OpenSpec の CLI の生成物で、手で直さない。コミットするのは `openspec-propose`・`openspec-explore`・`openspec-apply-change`・`openspec-update-change`・`openspec-sync-specs`・`openspec-archive-change`・`openspec-verify-change` の 7 つ。CLI が生成するスキルの組み合わせは global 設定（`~/.config/openspec/config.json` の profile と workflows）で決まり、設定が無いと verify を含まない `core` になるので、`pnpm exec openspec update` を直接実行せず、空の設定で 7 つに固定する `bash scripts/update-openspec.sh` で生成し直す。CLI の版を上げたら（Renovate の PR も）これを実行して生成物もコミットする。CI は固定した版で同じスクリプトを実行して差分が出ないことを確かめ、ずれていれば落ちる。組み合わせを変えるときはスクリプトの workflows とこの一覧を合わせて直す
 - `xcodebuild test -only-testing:MewbellTests/<名前>` にはファイル名ではなくスイートの型名を渡す（`ThreadActionPollingTests.swift` の中は `DonePollingTests` と `MarkAllReadPollingTests`）。無い名前を渡してもエラーにならずに飛ばすので、結果の「N tests in M suites」のスイート数を確かめる
 - SwiftUI の `Text` に `.font(.body)` を明示すると、既定の書体と同じ 13pt でも折り返し方が変わる（短い最後の行を避けるように折り返す）。スレッドの件名の `Text` には書体を付けない
 - ユニットテストの `NSHostingView` では SwiftUI のアクセシビリティの要素が作られず、`accessibilityLabel` や `accessibilityHidden` の効き目は確かめられない（読み上げの確かめ方は `docs/testing.md` の T7）
